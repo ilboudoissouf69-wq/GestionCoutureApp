@@ -1,0 +1,77 @@
+<Window x:Class="GestionCoutureApp.Views.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Gestion Couture - Connexion"
+        Height="450"
+        Width="400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#F5F6FA">
+
+    <Grid VerticalAlignment="Center"
+            HorizontalAlignment="Center">
+        <StackPanel Width="300"
+                Margin="20">
+
+            <TextBlock Text="Atelier de Couture"
+                    FontSize="26"
+                    FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                    Foreground="#2C3E50"
+                    Margin="0,0,0,5"/>
+            <TextBlock Text="Authentification"
+                    FontSize="14"
+                    Foreground="#7F8C8D"
+                       HorizontalAlignment="Center"
+                    Margin="0,0,0,30"/>
+
+            <TextBlock Text="Identifiant"
+                    FontWeight="SemiBold"
+                    Foreground="#34495E"
+                    Margin="0,0,0,5"/>
+            <TextBox x:Name="TxtIdentifiant"
+                     Height="35"
+                     VerticalContentAlignment="Center"
+                     Padding="5"
+                     Margin="0,0,0,15"
+                     Background="White"
+                     BorderBrush="Gray"
+                     BorderThickness="1"/>
+            <TextBlock Text="Mot de passe"
+                    FontWeight="SemiBold"
+                    Foreground="#34495E"
+                    Margin="0,0,0,5"/>
+            <PasswordBox x:Name="TxtPassword"
+                         Height="35"
+                         VerticalContentAlignment="Center"
+                         Padding="5"
+                         Margin="0,0,0,25"
+                         Background="White"
+                         BorderBrush="#BDC3C7"
+                         BorderThickness="1"/>
+
+            <Button Content="Se connecter"
+                    Height="40"
+                    Background="#2ECC71"
+                    Foreground="White"
+                    FontWeight="Bold"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="BtnConnexion_Click">
+                <Button.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius"
+                                Value="5"/>
+                    </Style>
+                </Button.Resources>
+            </Button>
+
+            <TextBlock x:Name="LblErreur"
+                    Foreground="#E74C3C"
+                    HorizontalAlignment="Center"
+                       Margin="0,15,0,0"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed"/>
+        </StackPanel>
+    </Grid>
+</Window>
