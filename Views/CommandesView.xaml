@@ -1,0 +1,287 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Page x:Class="GestionCoutureApp.Views.CommandesView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:converters="clr-namespace:GestionCoutureApp.Converters"
+      Background="{StaticResource BackgroundBrush}">
+
+    <Page.Resources>
+        <converters:ImagePathConverter x:Key="ImagePathConverter"/>
+    </Page.Resources>
+
+    <Grid Margin="28,24,28,28">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="20"/>
+            <ColumnDefinition Width="400"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- GAUCHE -->
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Gestion des Commandes"
+                       Style="{StaticResource SectionTitle}"/>
+
+            <TextBox Grid.Row="1" x:Name="TxtRecherche"
+                     Style="{StaticResource ModernTextBox}"
+                     Margin="0,0,0,14"
+                     TextChanged="TxtRecherche_TextChanged"/>
+
+            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+
+                <DataGrid x:Name="GridCommandes"
+                          Style="{StaticResource ModernGrid}"
+                          SelectionChanged="GridCommandes_SelectionChanged">
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Photo" Width="54">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="4" Background="#F1F5F9"
+                                            Width="36" Height="36" Margin="6,3">
+                                        <Image Source="{Binding CheminPhoto,
+                                               Converter={StaticResource ImagePathConverter}}"
+                                               Stretch="UniformToFill"/>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Client"   Binding="{Binding Client.Nom}"    Width="*"/>
+                        <DataGridTextColumn Header="Type"     Binding="{Binding TypeVetement}"  Width="*"/>
+                        <DataGridTextColumn Header="Statut"   Binding="{Binding Statut}"        Width="90"/>
+                        <DataGridTextColumn Header="Montant"  Binding="{Binding MontantTotal,   StringFormat={}{0:N0}}" Width="90"/>
+                        <DataGridTextColumn Header="Reste"    Binding="{Binding ResteAPayer,    StringFormat={}{0:N0}}" Width="90"/>
+                        <DataGridTextColumn Header="Date fin" Binding="{Binding DateFin,        StringFormat={}{0:dd/MM/yy}}" Width="82"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+
+        <!-- DROITE -->
+        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0"
+                VerticalAlignment="Top" MaxHeight="840">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" CornerRadius="10,10,0,0" Padding="20,14">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#1E3A5F" Offset="0"/>
+                            <GradientStop Color="#0D9488" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <TextBlock Text="Details de la commande"
+                               FontSize="14" FontWeight="Bold" Foreground="White"/>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              Padding="20,16,20,8">
+                    <StackPanel>
+
+                        <TextBlock Text="Client *" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CmbClient" Style="{StaticResource ModernComboBox}"
+                                  Margin="0,0,0,12" SelectedValuePath="IdClient">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0} {1}">
+                                                <Binding Path="Nom"/>
+                                                <Binding Path="Prenom"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <TextBlock Text="Couturier" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CmbCouturier" Style="{StaticResource ModernComboBox}"
+                                  Margin="0,0,0,12" SelectedValuePath="IdEmploye">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0} {1}">
+                                                <Binding Path="Nom"/>
+                                                <Binding Path="Prenom"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <TextBlock Text="Type de vetement *" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CmbTypeVetement" Style="{StaticResource ModernComboBox}"
+                                  Margin="0,0,0,12" DisplayMemberPath="DisplayText"
+                                  SelectionChanged="CmbTypeVetement_SelectionChanged"/>
+
+                        <Border Background="#F0FDF9" CornerRadius="8" Padding="14,10"
+                                Margin="0,0,0,12" BorderBrush="#CCFBF1" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtPrixBase" Text="Prix de base : -"
+                                           FontSize="12" Foreground="#0F766E"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <TextBlock Text="Ajustement :"
+                                               FontSize="12" Foreground="#0F766E"
+                                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="CmbAjustement" Width="110" Height="32"
+                                              FontSize="12"
+                                              SelectionChanged="CmbAjustement_SelectionChanged"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtPrixTotal" Text="Prix total : -"
+                                           FontSize="15" FontWeight="Bold"
+                                           Foreground="#0D9488" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Description" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CmbDescription" IsEditable="True"
+                                  IsTextSearchEnabled="True" Height="36" FontSize="13"
+                                  DisplayMemberPath="Texte"
+                                  Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Heure debut" Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtHeureDebut"
+                                         Style="{StaticResource ModernTextBox}"
+                                         IsReadOnly="True" Background="#F8FAFC"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Heure fin (HH:mm)" Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtHeureFin"
+                                         Style="{StaticResource ModernTextBox}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="Date de fin prevue *" Style="{StaticResource FieldLabel}"/>
+                        <DatePicker x:Name="DateFin" Height="36" FontSize="13"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Montant total (FCFA) *" Style="{StaticResource FieldLabel}"/>
+                        <TextBox x:Name="TxtMontant" Style="{StaticResource ModernTextBox}"
+                                 Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Statut *" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="CmbStatut" Style="{StaticResource ModernComboBox}"
+                                  Margin="0,0,0,14" SelectedIndex="0">
+                            <ComboBoxItem Content="A faire"/>
+                            <ComboBoxItem Content="En cours"/>
+                            <ComboBoxItem Content="Terminee"/>
+                            <ComboBoxItem Content="Livree"/>
+                        </ComboBox>
+
+                        <Separator Background="{StaticResource BorderBrush}" Margin="0,2,0,12"/>
+                        <TextBlock Text="Mesures requises" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="TxtIndicationMesures"
+                                   Text="Selectionnez un type de vetement"
+                                   FontSize="12" Foreground="#94A3B8" Margin="0,0,0,8"/>
+                        <StackPanel x:Name="PanelMesuresDynamiques" Margin="0,0,0,14"/>
+
+                        <Separator Background="{StaticResource BorderBrush}" Margin="0,2,0,12"/>
+                        <TextBlock Text="Photo de la commande" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,10"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button x:Name="BtnImporterPhoto" Content="Importer"
+                                    Style="{StaticResource BtnNavy}"
+                                    Height="34" Padding="12,0"
+                                    Click="BtnImporterPhoto_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnPrendrePhoto" Content="Webcam"
+                                    Style="{StaticResource BtnPrimary}"
+                                    Height="34" Padding="12,0"
+                                    Click="BtnPrendrePhoto_Click"/>
+                        </StackPanel>
+
+                        <Border Background="#F8FAFC" BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="8" Height="130"
+                                Margin="0,0,0,4">
+                            <Grid>
+                                <Image x:Name="ImgPhoto" Stretch="Uniform" Margin="8"/>
+                                <TextBlock x:Name="TxtPhotoPlaceholder"
+                                           Text="Aucune photo selectionnee"
+                                           FontSize="12" Foreground="#CBD5E1"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                                <Button x:Name="BtnSupprimerPhoto" Content="X"
+                                        Width="26" Height="26" FontSize="12"
+                                        FontWeight="Bold" Foreground="White"
+                                        Background="{StaticResource DangerBrush}"
+                                        BorderThickness="0" Cursor="Hand"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top" Margin="0,6,6,0"
+                                        Visibility="Collapsed"
+                                        Click="BtnSupprimerPhoto_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="13">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="2" Padding="20,12"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,1,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="BtnCreer"
+                                Grid.Column="0"
+                                Content="Creer"
+                                Style="{StaticResource BtnSuccess}"
+                                Click="BtnCreer_Click"/>
+                        <Button x:Name="BtnModifier"
+                                Grid.Column="2"
+                                Content="Modifier"
+                                Style="{StaticResource BtnNavy}"
+                                Click="BtnModifier_Click"/>
+                        <Button x:Name="BtnSupprimer"
+                                Grid.Column="4"
+                                Content="Supprimer"
+                                Style="{StaticResource BtnDanger}"
+                                Click="BtnSupprimer_Click"/>
+                        <Button x:Name="BtnVider"
+                                Grid.Column="6"
+                                Content="Vider"
+                                Style="{StaticResource BtnGhost}"
+                                Click="BtnVider_Click"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

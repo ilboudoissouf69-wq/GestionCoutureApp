@@ -1,24 +1,59 @@
-// Les "using" importent des boîtes à outils. Sans eux, C# ne comprendrait pas "DbContext" ou "DbSet".
 using Microsoft.EntityFrameworkCore;
-using GestionCoutureApp.Models; // Permet d'utiliser nos modèles (Employe, Client, Commande) définis dans l'autre dossier
+using GestionCoutureApp.Models;
 
 namespace GestionCoutureApp.Data
 {
-    // "public" : la classe est visible partout dans le projet.
-    // ": DbContext" : cela signifie que notre classe hérite des super-pouvoirs d'Entity Framework pour gérer les bases de données.
+    /// <summary>
+    /// Contexte de base de données SQLite pour l'application.
+    /// </summary>
     public class ApplicationDbContext : DbContext
     {
-        // Les "DbSet" représentent les futures tables dans ton fichier SQLite.
-        // C# va transformer la liste "Employes" en une table SQL nommée "Employes".
-        public DbSet<Employe> Employes { get; set; }
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+            : base(options)
+        {
+        }
+
+        // ====== DbSets (tables de la base) ======
         public DbSet<Client> Clients { get; set; }
         public DbSet<Commande> Commandes { get; set; }
+        public DbSet<Mesure> Mesures { get; set; }
+        public DbSet<Paiement> Paiements { get; set; }
+        public DbSet<Employe> Employes { get; set; }
+        // NOUVEAU Étape 6
+        public DbSet<TypeVetement> TypesVetements { get; set; }
+        public DbSet<MesureRequise> MesuresRequises { get; set; }
 
-        // Cette méthode configurationnelle s'exécute automatiquement pour connecter l'application au fichier physique.
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        public DbSet<DescriptionCourante> DescriptionsCourantes { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // On indique à Entity Framework qu'on utilise SQLite et que notre fichier s'appellera "couture.db"
-            optionsBuilder.UseSqlite("Data Source=couture.db");
+            base.OnModelCreating(modelBuilder);
+
+            // Relation Commande -> Mesures (cascade)
+            modelBuilder.Entity<Commande>()
+                .HasMany(c => c.Mesures)
+                .WithOne(m => m.Commande)
+                .HasForeignKey(m => m.IdCommande)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relation Commande -> Paiements (cascade)
+            modelBuilder.Entity<Commande>()
+                .HasMany(c => c.Paiements)
+                .WithOne(p => p.Commande)
+                .HasForeignKey(p => p.IdCommande)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NOUVEAU : Relation TypeVetement -> MesuresRequises (cascade)
+            modelBuilder.Entity<TypeVetement>()
+                .HasMany(t => t.MesuresRequises)
+                .WithOne(m => m.TypeVetement)
+                .HasForeignKey(m => m.IdTypeVetement)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Valeur par défaut pour le statut d'un employé
+            modelBuilder.Entity<Employe>()
+                .Property(e => e.Statut)
+                .HasDefaultValue("Actif");
         }
     }
 }

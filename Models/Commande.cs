@@ -10,25 +10,19 @@ namespace GestionCoutureApp.Models
 
         [Required]
         public int IdClient { get; set; }
-
         [ForeignKey("IdClient")]
-        public Client Client { get; set; }
+        public Client? Client { get; set; }
 
         public int? IdCouturier { get; set; }
-
         [ForeignKey("IdCouturier")]
-        public Employe Couturier { get; set; }
+        public Employe? Couturier { get; set; }
 
-        // --- NOUVEAUTÉ ICI ---
         [Required]
-        public string TypeVetement { get; set; } // "Pantalon", "Chemise", "Robe", etc.
+        public string TypeVetement { get; set; } = string.Empty;
 
-        // On stocke toutes les mesures spécifiques sous forme de texte structuré (ex: "Longueur:102, Taille:84")
-        // Cela permet de sauvegarder n'importe quelle mesure sans bloquer la base de données !
-        public string MesuresDetails { get; set; }
+        public string DescriptionPrecision { get; set; } = string.Empty;
 
-        public string DescriptionPrecision { get; set; }
-        public string CheminPhoto { get; set; }
+        public string CheminPhoto { get; set; } = string.Empty;
 
         [Required]
         public DateTime DateDebut { get; set; } = DateTime.Now;
@@ -41,8 +35,13 @@ namespace GestionCoutureApp.Models
         [Required]
         public double MontantTotal { get; set; }
 
-        public double AvancePayee { get; set; } = 0.0;
+        public List<Mesure> Mesures { get; set; } = new List<Mesure>();
+        public List<Paiement> Paiements { get; set; } = new List<Paiement>();
 
-        public double ResteAPayer => MontantTotal - AvancePayee;
+        [NotMapped]
+        public double ResteAPayer => MontantTotal - Paiements.Sum(p => p.MontantPaye);
+
+        public TimeSpan HeureDebut { get; set; }
+        public TimeSpan? HeureFin { get; set; }
     }
 }

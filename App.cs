@@ -1,51 +1,225 @@
-﻿using System.Windows; // Contient les bases de l'interface graphique WPF (comme Application et MessageBox)
+﻿using System.Windows;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
+using GestionCoutureApp.Services;
+using GestionCoutureApp.Views;
 
 namespace GestionCoutureApp
 {
     public partial class App : Application
     {
-        // "OnStartup" est la méthode déclenchée dès que l'application démarre
+        public static IServiceProvider Services { get; private set; } = null!;
+
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e); // Exécute le démarrage standard de WPF
+            base.OnStartup(e);
 
-            try // "try" veut dire : "Essaie de faire ce code, et s'il y a un bug, ne plante pas, va dans le bloc catch"
+            // ====== Configuration DI ======
+            var services = new ServiceCollection();
+
+            services.AddDbContext<ApplicationDbContext>(options =>
+                options.UseSqlite("Data Source=gestion_couture.db;Cache=Shared"),
+                ServiceLifetime.Singleton);
+
+            // Services
+            services.AddSingleton<IAuthService, AuthService>();
+            services.AddSingleton<IClientService, ClientService>();
+            services.AddSingleton<ICommandeService, CommandeService>();
+            services.AddSingleton<IPaiementService, PaiementService>();
+            services.AddSingleton<ITypeVetementService, TypeVetementService>();
+            services.AddSingleton<INavigationService, NavigationService>();
+
+            Services = services.BuildServiceProvider();
+
+            // ====== Créer la base ======
+            try
             {
-                // "using (var context...)" crée une connexion temporaire à la BDD et la referme proprement dès qu'on a fini
-                using (var context = new ApplicationDbContext())
+                var context = Services.GetRequiredService<ApplicationDbContext>();
+                context.Database.EnsureCreated();
+
+                // Compte Boss par défaut
+                var boss = context.Employes.FirstOrDefault(e => e.Identifiant == "boss");
+                if (boss == null)
                 {
-                    // LIGNE MAGIQUE : Elle vérifie si le fichier "couture.db" existe. 
-                    // S'il n'existe pas, elle crée le fichier et toutes les tables automatiquement !
-                    context.Database.EnsureCreated();
-
-                    // "if (!context.Employes.Any())" : Si la table des employés est complètement vide...
-                    if (!context.Employes.Any())
+                    boss = new Employe
                     {
-                        // ...alors on crée un compte "Boss" par défaut pour que tu ne restes pas bloqué dehors.
-                        context.Employes.Add(new Employe
-                        {
-                            Nom = "Super",
-                            Prenom = "Boss",
-                            Identifiant = "admin",
-                            MotDePasse = "admin123", // Tes identifiants de test
-                            Role = "Boss",
-                            Statut = "Actif"
-                        });
+                        Nom = "Admin",
+                        Prenom = "Boss",
+                        Identifiant = "boss",
+                        MotDePasse = HashMotDePasse("boss123"),
+                        Role = "Boss",
+                        Statut = "Actif"
+                    };
+                    context.Employes.Add(boss);
+                }
+                else
+                {
+                    boss.MotDePasse = HashMotDePasse("boss123");
+                    boss.Statut = "Actif";
+                }
+                context.SaveChanges();
 
-                        // IMPORTANT : .Add() prépare le compte, mais c'est .SaveChanges() qui l'écrit physiquement dans le fichier couture.db
-                        context.SaveChanges();
-                    }
+                // Types de vêtements initiaux avec descriptions
+                if (!context.TypesVetements.Any())
+                {
+                    var descriptionsPantalon = new List<DescriptionCourante>
+                    {
+                        new DescriptionCourante { Texte = "Coupe droite classique" },
+                        new DescriptionCourante { Texte = "Coupe slim / ajustée" },
+                        new DescriptionCourante { Texte = "Avec poches latérales" },
+                        new DescriptionCourante { Texte = "Avec pinces" }
+                    };
+
+                    var descriptionsChemise = new List<DescriptionCourante>
+                    {
+                        new DescriptionCourante { Texte = "Col chemise classique" },
+                        new DescriptionCourante { Texte = "Col V" },
+                        new DescriptionCourante { Texte = "Manches longues" },
+                        new DescriptionCourante { Texte = "Manches courtes" }
+                    };
+
+                    var descriptionsRobe = new List<DescriptionCourante>
+                    {
+                        new DescriptionCourante { Texte = "Robe longue" },
+                        new DescriptionCourante { Texte = "Robe midi" },
+                        new DescriptionCourante { Texte = "Robe courte" },
+                        new DescriptionCourante { Texte = "Avec ceinture" }
+                    };
+
+                    var descriptionsBoubou = new List<DescriptionCourante>
+                    {
+                        new DescriptionCourante { Texte = "Boubou classique" },
+                        new DescriptionCourante { Texte = "Boubou brodé" },
+                        new DescriptionCourante { Texte = "Boubou avec poche" }
+                    };
+
+                    var descriptionsVeste = new List<DescriptionCourante>
+                    {
+                        new DescriptionCourante { Texte = "Veste classique" },
+                        new DescriptionCourante { Texte = "Veste cintrée" },
+                        new DescriptionCourante { Texte = "Avec boutons" },
+                        new DescriptionCourante { Texte = "Sans manches" }
+                    };
+
+                    var typesInitiaux = new List<TypeVetement>
+                    {
+                        new TypeVetement
+                        {
+                            Nom = "Pantalon",
+                            PrixBase = 1000,
+                            MesuresRequises = new List<MesureRequise>
+                            {
+                                new MesureRequise { NomMesure = "Longueur" },
+                                new MesureRequise { NomMesure = "Tour de taille" },
+                                new MesureRequise { NomMesure = "Tour de cuisse" },
+                                new MesureRequise { NomMesure = "Entrejambe" },
+                                new MesureRequise { NomMesure = "Bas de patte" }
+                            },
+                            Descriptions = descriptionsPantalon
+                        },
+                        new TypeVetement
+                        {
+                            Nom = "Chemise",
+                            PrixBase = 1000,
+                            MesuresRequises = new List<MesureRequise>
+                            {
+                                new MesureRequise { NomMesure = "Longueur dos" },
+                                new MesureRequise { NomMesure = "Tour de poitrine" },
+                                new MesureRequise { NomMesure = "Tour d'épaule" },
+                                new MesureRequise { NomMesure = "Longueur manche" },
+                                new MesureRequise { NomMesure = "Tour de poignet" }
+                            },
+                            Descriptions = descriptionsChemise
+                        },
+                        new TypeVetement
+                        {
+                            Nom = "Robe",
+                            PrixBase = 1000,
+                            MesuresRequises = new List<MesureRequise>
+                            {
+                                new MesureRequise { NomMesure = "Longueur" },
+                                new MesureRequise { NomMesure = "Tour de poitrine" },
+                                new MesureRequise { NomMesure = "Tour de taille" },
+                                new MesureRequise { NomMesure = "Tour de hanches" },
+                                new MesureRequise { NomMesure = "Longueur épaule" }
+                            },
+                            Descriptions = descriptionsRobe
+                        },
+                        new TypeVetement
+                        {
+                            Nom = "Boubou",
+                            PrixBase = 1000,
+                            MesuresRequises = new List<MesureRequise>
+                            {
+                                new MesureRequise { NomMesure = "Longueur" },
+                                new MesureRequise { NomMesure = "Tour de poitrine" },
+                                new MesureRequise { NomMesure = "Longueur manche" },
+                                new MesureRequise { NomMesure = "Largeur col" }
+                            },
+                            Descriptions = descriptionsBoubou
+                        },
+                        new TypeVetement
+                        {
+                            Nom = "Veste",
+                            PrixBase = 1000,
+                            MesuresRequises = new List<MesureRequise>
+                            {
+                                new MesureRequise { NomMesure = "Longueur" },
+                                new MesureRequise { NomMesure = "Tour de poitrine" },
+                                new MesureRequise { NomMesure = "Tour de taille" },
+                                new MesureRequise { NomMesure = "Longueur manche" },
+                                new MesureRequise { NomMesure = "Épaisseur épaule" }
+                            },
+                            Descriptions = descriptionsVeste
+                        }
+                    };
+
+                    context.TypesVetements.AddRange(typesInitiaux);
+                    context.SaveChanges();
                 }
             }
-            catch (Exception ex) // Si un bug survient dans le bloc try, il est "attrapé" ici dans la variable "ex"
+            catch (Exception ex)
             {
-                // On affiche une jolie boîte de dialogue avec le message exact de l'erreur pour pouvoir déboguer
-                MessageBox.Show($"Erreur d'initialisation de la base de données : {ex.Message}",
-                                "Erreur critique",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Erreur lors de l'initialisation de la base :\n" + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+            var loginWindow = new LoginWindow();
+            loginWindow.Show();
+        }
+
+        private static string HashMotDePasse(string motDePasse)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(motDePasse);
+                var hash = sha.ComputeHash(bytes);
+                var builder = new System.Text.StringBuilder();
+                foreach (byte b in hash)
+                    builder.Append(b.ToString("x2"));
+                return builder.ToString();
+            }
+        }
+
+        private void Application_DispatcherUnhandledException(object sender,
+            System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+        {
+            MessageBox.Show(
+                "Erreur inattendue :\n" + e.Exception.Message,
+                "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            e.Handled = true;
+        }
+
+        private void AppDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            if (e.ExceptionObject is Exception ex)
+            {
+                MessageBox.Show(
+                    "Erreur critique :\n" + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
