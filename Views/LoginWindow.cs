@@ -1,4 +1,5 @@
 using System.Windows;
+using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,7 +27,18 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            var employe = _authService.Authentifier(identifiant, motDePasse);
+            Employe? employe;
+            try
+            {
+                employe = _authService.Authentifier(identifiant, motDePasse);
+            }
+            catch (CompteVerrouilleException ex)
+            {
+                TxtErreur.Text = $"Trop de tentatives échouées. Réessayez dans " +
+                                  $"{Math.Ceiling(ex.TempsRestant.TotalSeconds)} secondes.";
+                TxtErreur.Visibility = Visibility.Visible;
+                return;
+            }
 
             if (employe != null)
             {

@@ -72,12 +72,25 @@ namespace GestionCoutureApp.Services
 
         public void Supprimer(int id)
         {
-            var commande = _context.Commandes.Find(id);
-            if (commande != null)
+            var commande = _context.Commandes
+                .Include(c => c.Paiements)
+                .FirstOrDefault(c => c.IdCommande == id);
+
+            if (commande == null) return;
+
+            // Une commande ayant déjà reçu un paiement ne doit jamais être supprimée :
+            // cela effacerait silencieusement l'historique financier (voir PaiementService,
+            // conçu pour ne jamais supprimer un paiement, seulement l'annuler avec motif).
+            if (commande.Paiements.Any())
             {
-                _context.Commandes.Remove(commande);
-                _context.SaveChanges();
+                throw new InvalidOperationException(
+                    "Impossible de supprimer cette commande : des paiements y sont rattachés. " +
+                    "Annulez d'abord les paiements concernés (avec motif), ou changez le statut " +
+                    "de la commande à \"Annulée\" plutôt que de la supprimer.");
             }
+
+            _context.Commandes.Remove(commande);
+            _context.SaveChanges();
         }
 
         public List<Commande> Rechercher(string motCle)

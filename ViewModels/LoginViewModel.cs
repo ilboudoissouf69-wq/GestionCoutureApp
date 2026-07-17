@@ -1,5 +1,6 @@
 using System.Windows;
 using GestionCoutureApp.Helpers;
+using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 
 namespace GestionCoutureApp.ViewModels
@@ -54,7 +55,17 @@ namespace GestionCoutureApp.ViewModels
 
         private void ExecuterConnexion(object? param)
         {
-            var employe = _authService.Authentifier(Identifiant, MotDePasse);
+            Employe? employe;
+            try
+            {
+                employe = _authService.Authentifier(Identifiant, MotDePasse);
+            }
+            catch (CompteVerrouilleException ex)
+            {
+                MessageErreur = $"Compte temporairement verrouillé suite à trop de tentatives. " +
+                                 $"Réessayez dans {Math.Ceiling(ex.TempsRestant.TotalSeconds)} secondes.";
+                return;
+            }
 
             if (employe == null)
             {

@@ -1,12 +1,11 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
+using GestionCoutureApp.Services;
 
 namespace GestionCoutureApp.Views
 {
@@ -17,6 +16,12 @@ namespace GestionCoutureApp.Views
 
         public EmployesView()
         {
+            // Défense en profondeur : cette vue ne doit être accessible qu'au Boss,
+            // indépendamment du fait que MainWindow ait ou non déjà filtré l'accès.
+            var authService = App.Services.GetRequiredService<IAuthService>();
+            if (authService.UtilisateurConnecte?.Role != "Boss")
+                throw new UnauthorizedAccessException("Accès réservé au Boss.");
+
             InitializeComponent();
             _context = App.Services.GetRequiredService<ApplicationDbContext>();
             ChargerEmployes();
@@ -257,17 +262,9 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // Hash SHA-256 (même méthode que dans App.cs)
+        // Hachage sécurisé (PBKDF2 + sel) — logique centralisée dans Helpers/PasswordHasher.cs
         // ------------------------------------------------------------------
         private static string HashMotDePasse(string motDePasse)
-        {
-            using var sha = System.Security.Cryptography.SHA256.Create();
-            var bytes = System.Text.Encoding.UTF8.GetBytes(motDePasse);
-            var hash = sha.ComputeHash(bytes);
-            var builder = new System.Text.StringBuilder();
-            foreach (byte b in hash)
-                builder.Append(b.ToString("x2"));
-            return builder.ToString();
-        }
+            => GestionCoutureApp.Helpers.PasswordHasher.Hasher(motDePasse);
     }
 }

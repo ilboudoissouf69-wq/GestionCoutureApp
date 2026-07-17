@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -6,7 +5,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
-using GestionCoutureApp.Services;using Microsoft.EntityFrameworkCore;
+using GestionCoutureApp.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
@@ -230,7 +230,7 @@ namespace GestionCoutureApp.Views
                     mesures.Add(new Mesure
                     {
                         NomMesure = combo.Tag?.ToString() ?? "",
-                        Valeur    = valeur
+                        Valeur = valeur
                     });
                 }
             }
@@ -277,9 +277,9 @@ namespace GestionCoutureApp.Views
                 DateFin = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
                 HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
                 HeureFin = ParseHeure(TxtHeureFin.Text),
-                Statut     = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
+                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
                 MontantTotal = double.Parse(TxtMontant.Text),
-                CheminPhoto  = _cheminPhotoTemporaire
+                CheminPhoto = _cheminPhotoTemporaire
             };
 
             _commandeService.Ajouter(commande, CollecterMesures());
@@ -307,9 +307,9 @@ namespace GestionCoutureApp.Views
                 DateFin = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
                 HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
                 HeureFin = ParseHeure(TxtHeureFin.Text),
-                Statut     = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
+                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
                 MontantTotal = double.Parse(TxtMontant.Text),
-                CheminPhoto  = _cheminPhotoTemporaire
+                CheminPhoto = _cheminPhotoTemporaire
             };
 
             _commandeService.Modifier(commande, CollecterMesures());
@@ -327,11 +327,19 @@ namespace GestionCoutureApp.Views
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (r == MessageBoxResult.Yes)
             {
-                _commandeService.Supprimer(_commandeSelectionneeId);
-                ChargerCommandes();
-                ViderChamps();
-                MessageBox.Show("Commande supprimee.", "Succes",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    _commandeService.Supprimer(_commandeSelectionneeId);
+                    ChargerCommandes();
+                    ViderChamps();
+                    MessageBox.Show("Commande supprimee.", "Succes",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageBox.Show(ex.Message, "Suppression impossible",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
             }
         }
 
@@ -552,7 +560,11 @@ namespace GestionCoutureApp.Views
                 var authService = App.Services.GetRequiredService<IAuthService>();
                 string mdp = passwordBox.Password.Trim();
                 var user = authService.UtilisateurConnecte;
-                if (user != null && authService.HasherMotDePasse(mdp) == user.MotDePasse)
+                bool mdpValide = user != null &&
+                    (GestionCoutureApp.Helpers.PasswordHasher.EstAncienFormatSha256(user.MotDePasse)
+                        ? user.MotDePasse == GestionCoutureApp.Helpers.PasswordHasher.HasherAncienSha256(mdp)
+                        : GestionCoutureApp.Helpers.PasswordHasher.Verifier(mdp, user.MotDePasse));
+                if (mdpValide)
                 {
                     dialog.DialogResult = true;
                     dialog.Close();

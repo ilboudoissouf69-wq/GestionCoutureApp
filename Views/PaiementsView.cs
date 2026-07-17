@@ -12,12 +12,12 @@ namespace GestionCoutureApp.Views
 {
     public partial class PaiementsView : Page
     {
-        private readonly IPaiementService  _paiementService;
-        private readonly ICommandeService  _commandeService;
-        private readonly IAuthService      _authService;
+        private readonly IPaiementService _paiementService;
+        private readonly ICommandeService _commandeService;
+        private readonly IAuthService _authService;
         private readonly ApplicationDbContext _context;
         private Commande? _commandeSelectionnee;
-        private Employe?  _operateurConnecte;
+        private Employe? _operateurConnecte;
 
         public PaiementsView()
         {
@@ -25,8 +25,8 @@ namespace GestionCoutureApp.Views
 
             _paiementService = App.Services.GetRequiredService<IPaiementService>();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
-            _authService     = App.Services.GetRequiredService<IAuthService>();
-            _context         = App.Services.GetRequiredService<ApplicationDbContext>();
+            _authService = App.Services.GetRequiredService<IAuthService>();
+            _context = App.Services.GetRequiredService<ApplicationDbContext>();
 
             _operateurConnecte = _authService.UtilisateurConnecte;
 
@@ -79,11 +79,11 @@ namespace GestionCoutureApp.Views
                 + (_commandeSelectionnee.Client?.Prenom ?? "");
 
             double totalValide = _paiementService.TotalValideParCommande(idCmd);
-            double reste       = _commandeSelectionnee.MontantTotal - totalValide;
+            double reste = _commandeSelectionnee.MontantTotal - totalValide;
 
-            TxtInfoMontant.Text  = "Montant total : "  + _commandeSelectionnee.MontantTotal.ToString("N0") + " FCFA";
-            TxtInfoDejaPaye.Text = "Deja paye : "      + totalValide.ToString("N0") + " FCFA";
-            TxtInfoReste.Text    = "Reste : "           + Math.Max(0, reste).ToString("N0") + " FCFA";
+            TxtInfoMontant.Text = "Montant total : " + _commandeSelectionnee.MontantTotal.ToString("N0") + " FCFA";
+            TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
+            TxtInfoReste.Text = "Reste : " + Math.Max(0, reste).ToString("N0") + " FCFA";
 
             // Historique detaille
             var historique = _paiementService.ObtenirParCommande(idCmd);
@@ -127,7 +127,7 @@ namespace GestionCoutureApp.Views
 
             // Verification solde en temps reel
             double totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
-            double reste       = _commandeSelectionnee.MontantTotal - totalValide;
+            double reste = _commandeSelectionnee.MontantTotal - totalValide;
 
             if (reste <= 0.01)
             { Alerte("Cette commande est deja entierement payee."); return; }
@@ -140,7 +140,7 @@ namespace GestionCoutureApp.Views
 
             // Confirmation avant enregistrement
             string modeChoisi = ((ComboBoxItem)CmbModePaiement.SelectedItem).Content?.ToString() ?? "Especes";
-            var confirmation  = MessageBox.Show(
+            var confirmation = MessageBox.Show(
                 $"Confirmer l'enregistrement du paiement ?\n\n" +
                 $"Client  : {_commandeSelectionnee.Client?.Nom} {_commandeSelectionnee.Client?.Prenom}\n" +
                 $"Montant : {montant:N0} FCFA\n" +
@@ -157,8 +157,8 @@ namespace GestionCoutureApp.Views
             {
                 var paiement = new Paiement
                 {
-                    IdCommande   = _commandeSelectionnee.IdCommande,
-                    MontantPaye  = montant,
+                    IdCommande = _commandeSelectionnee.IdCommande,
+                    MontantPaye = montant,
                     ModePaiement = modeChoisi
                 };
 
@@ -279,7 +279,7 @@ namespace GestionCoutureApp.Views
 
             if (commande == null) { Alerte("Commande introuvable."); return; }
 
-            var mesures  = _context.Mesures
+            var mesures = _context.Mesures
                 .Where(m => m.IdCommande == commande.IdCommande)
                 .ToList();
 
@@ -296,13 +296,13 @@ namespace GestionCoutureApp.Views
         {
             var dialog = new Window
             {
-                Title                 = "Motif d'annulation",
-                Width                 = 440,
-                SizeToContent         = SizeToContent.Height,
+                Title = "Motif d'annulation",
+                Width = 440,
+                SizeToContent = SizeToContent.Height,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode            = ResizeMode.NoResize,
-                Background            = Brushes.White,
-                Owner                 = Window.GetWindow(this)
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.White,
+                Owner = Window.GetWindow(this)
             };
 
             var panel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
@@ -310,109 +310,109 @@ namespace GestionCoutureApp.Views
             // Info paiement
             panel.Children.Add(new TextBlock
             {
-                Text       = $"Paiement : {paiement.RecuNumero}",
-                FontSize   = 13,
+                Text = $"Paiement : {paiement.RecuNumero}",
+                FontSize = 13,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x5F)),
-                Margin     = new Thickness(0, 0, 0, 4)
+                Margin = new Thickness(0, 0, 0, 4)
             });
             panel.Children.Add(new TextBlock
             {
-                Text     = $"Montant : {paiement.MontantPaye:N0} FCFA  |  Operateur : {paiement.NomOperateur}",
+                Text = $"Montant : {paiement.MontantPaye:N0} FCFA  |  Operateur : {paiement.NomOperateur}",
                 FontSize = 12,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
-                Margin   = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 16)
             });
 
             // Champ motif
             panel.Children.Add(new TextBlock
             {
-                Text       = "Motif d'annulation * (obligatoire)",
-                FontSize   = 12,
+                Text = "Motif d'annulation * (obligatoire)",
+                FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
-                Margin     = new Thickness(0, 0, 0, 5)
+                Margin = new Thickness(0, 0, 0, 5)
             });
 
             var txMotif = new TextBox
             {
-                Height         = 80,
-                FontSize       = 13,
-                Padding        = new Thickness(8),
-                TextWrapping   = TextWrapping.Wrap,
-                AcceptsReturn  = true,
+                Height = 80,
+                FontSize = 13,
+                Padding = new Thickness(8),
+                TextWrapping = TextWrapping.Wrap,
+                AcceptsReturn = true,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Margin         = new Thickness(0, 0, 0, 6)
+                Margin = new Thickness(0, 0, 0, 6)
             };
             panel.Children.Add(txMotif);
 
             var msgErreur = new TextBlock
             {
-                Text       = "",
-                FontSize   = 12,
+                Text = "",
+                FontSize = 12,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
-                Margin     = new Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 0, 10)
             };
             panel.Children.Add(msgErreur);
 
             // Mot de passe Boss
             panel.Children.Add(new TextBlock
             {
-                Text       = "Mot de passe Boss (confirmation)",
-                FontSize   = 12,
+                Text = "Mot de passe Boss (confirmation)",
+                FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
-                Margin     = new Thickness(0, 0, 0, 5)
+                Margin = new Thickness(0, 0, 0, 5)
             });
 
             var pwBox = new PasswordBox
             {
-                Height   = 38,
+                Height = 38,
                 FontSize = 13,
-                Padding  = new Thickness(10, 0, 10, 0),
+                Padding = new Thickness(10, 0, 10, 0),
                 VerticalContentAlignment = VerticalAlignment.Center,
-                Margin   = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 16)
             };
             panel.Children.Add(pwBox);
 
             panel.Children.Add(new Separator
             {
                 Background = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
-                Margin     = new Thickness(0, 0, 0, 14)
+                Margin = new Thickness(0, 0, 0, 14)
             });
 
             // Boutons
             var btnPanel = new StackPanel
             {
-                Orientation         = Orientation.Horizontal,
+                Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
 
             var btnConfirmer = new Button
             {
-                Content         = "Confirmer",
-                Width           = 120,
-                Height          = 38,
-                FontSize        = 13,
-                FontWeight      = FontWeights.Bold,
-                Foreground      = Brushes.White,
-                Background      = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                Content = "Confirmer",
+                Width = 120,
+                Height = 38,
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
                 BorderThickness = new Thickness(0),
-                Margin          = new Thickness(0, 0, 10, 0),
-                Cursor          = Cursors.Hand
+                Margin = new Thickness(0, 0, 10, 0),
+                Cursor = Cursors.Hand
             };
 
             var btnAnnulerDialog = new Button
             {
-                Content         = "Annuler",
-                Width           = 100,
-                Height          = 38,
-                FontSize        = 13,
-                Foreground      = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
-                Background      = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                Content = "Annuler",
+                Width = 100,
+                Height = 38,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
                 BorderThickness = new Thickness(1),
-                BorderBrush     = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
-                Cursor          = Cursors.Hand
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Cursor = Cursors.Hand
             };
 
             btnConfirmer.Click += (s, ev) =>
@@ -439,9 +439,15 @@ namespace GestionCoutureApp.Views
                     return;
                 }
 
-                string mdpHash = _authService.HasherMotDePasse(mdpSaisi);
+                // Avec un hachage salé, on ne peut plus comparer les hash directement en SQL :
+                // on charge les comptes Boss puis on vérifie le mot de passe en mémoire.
                 var boss = _context.Employes
-                    .FirstOrDefault(emp => emp.Role == "Boss" && emp.MotDePasse == mdpHash);
+                    .Where(emp => emp.Role == "Boss" && emp.Statut == "Actif")
+                    .AsEnumerable()
+                    .FirstOrDefault(emp =>
+                        GestionCoutureApp.Helpers.PasswordHasher.EstAncienFormatSha256(emp.MotDePasse)
+                            ? emp.MotDePasse == GestionCoutureApp.Helpers.PasswordHasher.HasherAncienSha256(mdpSaisi)
+                            : GestionCoutureApp.Helpers.PasswordHasher.Verifier(mdpSaisi, emp.MotDePasse));
 
                 if (boss == null)
                 {
@@ -451,7 +457,7 @@ namespace GestionCoutureApp.Views
                     return;
                 }
 
-                dialog.Tag          = txMotif.Text.Trim();
+                dialog.Tag = txMotif.Text.Trim();
                 dialog.DialogResult = true;
                 dialog.Close();
             };

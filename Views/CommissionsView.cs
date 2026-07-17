@@ -1,10 +1,10 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Services;
 
 namespace GestionCoutureApp.Views
 {
@@ -15,6 +15,10 @@ namespace GestionCoutureApp.Views
 
         public CommissionsView()
         {
+            var authService = App.Services.GetRequiredService<IAuthService>();
+            if (authService.UtilisateurConnecte?.Role != "Boss")
+                throw new UnauthorizedAccessException("Accès réservé au Boss.");
+
             InitializeComponent();
             _context = App.Services.GetRequiredService<ApplicationDbContext>();
 

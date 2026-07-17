@@ -36,12 +36,17 @@ namespace GestionCoutureApp.Data
                 .HasForeignKey(m => m.IdCommande)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Relation Commande -> Paiements (cascade)
+            // Relation Commande -> Paiements : Restrict (et NON Cascade).
+            // Le système de paiement est conçu pour ne JAMAIS supprimer un paiement
+            // (annulation avec motif obligatoire, traçabilité complète — voir PaiementService).
+            // Un cascade delete sur la commande contournerait cette règle en effaçant
+            // silencieusement tout l'historique financier. On bloque donc la suppression
+            // d'une commande tant qu'elle a des paiements (voir CommandeService.Supprimer).
             modelBuilder.Entity<Commande>()
                 .HasMany(c => c.Paiements)
                 .WithOne(p => p.Commande)
                 .HasForeignKey(p => p.IdCommande)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             // NOUVEAU : Relation TypeVetement -> MesuresRequises (cascade)
             modelBuilder.Entity<TypeVetement>()

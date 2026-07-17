@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using GestionCoutureApp.Views;
@@ -39,27 +40,30 @@ namespace GestionCoutureApp
                 var context = Services.GetRequiredService<ApplicationDbContext>();
                 context.Database.EnsureCreated();
 
-                // Compte Boss par défaut
-                var boss = context.Employes.FirstOrDefault(e => e.Identifiant == "boss");
-                if (boss == null)
+                // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.
+                // On ne touche plus jamais à son mot de passe ensuite (sinon un Boss qui a
+                // changé son mot de passe se le voit réinitialisé à "boss123" à chaque démarrage,
+                // ce qui est à la fois une faille de sécurité et un bug fonctionnel).
+                bool aucunEmploye = !context.Employes.Any();
+                if (aucunEmploye)
                 {
-                    boss = new Employe
+                    var boss = new Employe
                     {
                         Nom = "Admin",
                         Prenom = "Boss",
                         Identifiant = "boss",
-                        MotDePasse = HashMotDePasse("boss123"),
+                        MotDePasse = PasswordHasher.Hasher("boss123"),
                         Role = "Boss",
                         Statut = "Actif"
                     };
                     context.Employes.Add(boss);
+                    context.SaveChanges();
+
+                    MessageBox.Show(
+                        "Compte administrateur créé.\nIdentifiant : boss\nMot de passe : boss123\n\n" +
+                        "IMPORTANT : changez ce mot de passe immédiatement après votre première connexion.",
+                        "Premier démarrage", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                else
-                {
-                    boss.MotDePasse = HashMotDePasse("boss123");
-                    boss.Statut = "Actif";
-                }
-                context.SaveChanges();
 
                 // Types de vêtements initiaux avec descriptions
                 if (!context.TypesVetements.Any())
@@ -189,19 +193,6 @@ namespace GestionCoutureApp
 
             var loginWindow = new LoginWindow();
             loginWindow.Show();
-        }
-
-        private static string HashMotDePasse(string motDePasse)
-        {
-            using (var sha = System.Security.Cryptography.SHA256.Create())
-            {
-                var bytes = System.Text.Encoding.UTF8.GetBytes(motDePasse);
-                var hash = sha.ComputeHash(bytes);
-                var builder = new System.Text.StringBuilder();
-                foreach (byte b in hash)
-                    builder.Append(b.ToString("x2"));
-                return builder.ToString();
-            }
         }
 
         private void Application_DispatcherUnhandledException(object sender,
