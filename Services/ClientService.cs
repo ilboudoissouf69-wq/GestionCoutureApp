@@ -42,12 +42,25 @@ namespace GestionCoutureApp.Services
         public void Supprimer(int id)
         {
             using var context = _contextFactory.CreateDbContext();
-            var client = context.Clients.Find(id);
-            if (client != null)
+
+            var client = context.Clients
+                .Include(c => c.Commandes)
+                .FirstOrDefault(c => c.IdClient == id);
+
+            if (client == null) return;
+
+            // Un client ayant des commandes (meme sans paiement) ne doit jamais etre
+            // supprime directement : cela effacerait silencieusement son historique
+            // (nom du client sur les recus, mesures, etc.). On bloque avec un message clair.
+            if (client.Commandes.Any())
             {
-                context.Clients.Remove(client);
-                context.SaveChanges();
+                throw new InvalidOperationException(
+                    "Impossible de supprimer ce client : il a des commandes enregistrées. " +
+                    "Supprimez ou réattribuez d'abord ses commandes si nécessaire.");
             }
+
+            context.Clients.Remove(client);
+            context.SaveChanges();
         }
 
         public List<Client> Rechercher(string motCle)

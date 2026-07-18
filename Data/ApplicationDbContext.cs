@@ -47,6 +47,17 @@ namespace GestionCoutureApp.Data
                 .HasForeignKey(c => c.IdCommission)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Relation Client -> Commandes : Restrict (et NON cascade, qui est le
+            // comportement par defaut d'EF Core pour une FK obligatoire non-nullable).
+            // Sans cette ligne, supprimer un client efface silencieusement tout son
+            // historique de commandes (ou plante si des paiements y sont rattaches,
+            // via la contrainte Restrict sur Commande->Paiements). Voir ClientService.Supprimer.
+            modelBuilder.Entity<Client>()
+                .HasMany(cl => cl.Commandes)
+                .WithOne(c => c.Client)
+                .HasForeignKey(c => c.IdClient)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Relation Commande -> Mesures (cascade)
             modelBuilder.Entity<Commande>()
                 .HasMany(c => c.Mesures)

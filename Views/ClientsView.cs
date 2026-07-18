@@ -105,11 +105,19 @@ namespace GestionCoutureApp.Views
 
             if (resultat == MessageBoxResult.Yes)
             {
-                _clientService.Supprimer(_clientSelectionneId);
-                ChargerClients();
-                ViderChamps();
-                MessageBox.Show("Client supprime.", "Succes",
-                                MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    _clientService.Supprimer(_clientSelectionneId);
+                    ChargerClients();
+                    ViderChamps();
+                    MessageBox.Show("Client supprime.", "Succes",
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageBox.Show(ex.Message, "Suppression impossible",
+                                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
             }
         }
 

@@ -40,7 +40,15 @@ namespace GestionCoutureApp
             services.AddSingleton<IPaiementService, PaiementService>();
             services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
-            services.AddSingleton<INavigationService, NavigationService>();
+            // NavigationService non enregistré : son constructeur exige un Frame,
+            // qui n'existe qu'une fois MainWindow ouverte (pas au démarrage de l'app),
+            // et n'est pas lui-même enregistré dans ce conteneur DI. Tel quel,
+            // GetRequiredService<INavigationService>() planterait avec un message
+            // DI peu clair. Ce service semble prévu pour une future vraie migration
+            // MVVM (voir NavigationService.cs) — à enregistrer proprement (probablement
+            // en résolvant/assignant le Frame après la construction de MainWindow)
+            // le jour où il sera effectivement utilisé quelque part.
+            // services.AddSingleton<INavigationService, NavigationService>();
 
             Services = services.BuildServiceProvider();
 
