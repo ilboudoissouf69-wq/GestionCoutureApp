@@ -8,9 +8,9 @@
 
             <TextBlock Text="Commissions des Couturiers"
                        FontSize="22"
-                    FontWeight="Bold"
+                       FontWeight="Bold"
                        Foreground="#1E3A5F"
-                    Margin="0,0,0,20"/>
+                       Margin="0,0,0,20"/>
 
             <!-- Parametres -->
             <Border Background="White"
@@ -22,11 +22,11 @@
                 <StackPanel>
                     <TextBlock Text="Parametres de calcul"
                                FontSize="14"
-                            FontWeight="Bold"
+                               FontWeight="Bold"
                                Foreground="#1E3A5F"
-                            Margin="0,0,0,15"/>
+                               Margin="0,0,0,15"/>
 
-                    <Grid>
+                    <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="16"/>
@@ -39,42 +39,42 @@
 
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="Commission (%)"
-                                    FontSize="12"
+                                       FontSize="12"
                                        Foreground="#7F8C8D"
-                                    Margin="0,0,0,4"/>
+                                       Margin="0,0,0,4"/>
                             <TextBox x:Name="TxtPourcentage"
-                                    Text="40"
+                                     Text="40"
                                      Height="38"
-                                    FontSize="13"
+                                     FontSize="13"
                                      VerticalContentAlignment="Center"
                                      Padding="8,0,8,0"
-                                    BorderBrush="#D5D8DC"/>
+                                     BorderBrush="#D5D8DC"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="Date debut"
-                                    FontSize="12"
+                                       FontSize="12"
                                        Foreground="#7F8C8D"
-                                    Margin="0,0,0,4"/>
+                                       Margin="0,0,0,4"/>
                             <DatePicker x:Name="DateDebut"
-                                    Height="38"
+                                        Height="38"
                                         FontSize="13"
-                                    BorderBrush="#D5D8DC"/>
+                                        BorderBrush="#D5D8DC"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="4">
                             <TextBlock Text="Date fin"
-                                    FontSize="12"
+                                       FontSize="12"
                                        Foreground="#7F8C8D"
-                                    Margin="0,0,0,4"/>
+                                       Margin="0,0,0,4"/>
                             <DatePicker x:Name="DateFin"
-                                    Height="38"
+                                        Height="38"
                                         FontSize="13"
-                                    BorderBrush="#D5D8DC"/>
+                                        BorderBrush="#D5D8DC"/>
                         </StackPanel>
 
                         <Button Grid.Column="6"
-                                Content="Calculer"
+                                Content="Aperçu"
                                 Height="38"
                                 FontSize="13"
                                 FontWeight="Bold"
@@ -92,6 +92,30 @@
                             </Button.Resources>
                         </Button>
                     </Grid>
+
+                    <StackPanel>
+                        <TextBlock Text="Base de calcul"
+                                   FontSize="12"
+                                   Foreground="#7F8C8D"
+                                   Margin="0,0,0,4"/>
+                        <ComboBox x:Name="CmbBaseCalcul"
+                                  Height="36"
+                                  FontSize="13"
+                                  Padding="8,0,8,0"
+                                  BorderBrush="#D5D8DC"
+                                  SelectionChanged="CmbBaseCalcul_SelectionChanged">
+                            <ComboBoxItem Content="Montant réellement encaissé (recommandé)"
+                                    Tag="Encaisse"/>
+                            <ComboBoxItem Content="Montant total de la commande (même si non soldée)"
+                                    Tag="Total"/>
+                        </ComboBox>
+                        <TextBlock x:Name="TxtAvertissementBase"
+                                   FontSize="11"
+                                   Foreground="#D97706"
+                                   TextWrapping="Wrap"
+                                   Margin="0,6,0,0"
+                                   Visibility="Collapsed"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
@@ -105,27 +129,27 @@
                 <StackPanel>
                     <TextBlock Text="Filtrer par couturier (optionnel)"
                                FontSize="14"
-                            FontWeight="Bold"
+                               FontWeight="Bold"
                                Foreground="#1E3A5F"
-                            Margin="0,0,0,10"/>
+                               Margin="0,0,0,10"/>
                     <ComboBox x:Name="CmbCouturier"
-                            Height="36"
-                            FontSize="13"
+                              Height="36"
+                              FontSize="13"
                               Padding="8,0,8,0"
-                            BorderBrush="#D5D8DC"
+                              BorderBrush="#D5D8DC"
                               SelectionChanged="CmbCouturier_SelectionChanged"/>
                 </StackPanel>
             </Border>
 
             <!-- Cartes stats -->
             <UniformGrid Columns="3"
-                    Margin="0,0,0,20">
+                    Margin="0,0,0,10">
                 <Border Background="#3498DB"
                         CornerRadius="8"
                         Padding="15"
                         Margin="0,0,8,0">
                     <StackPanel>
-                        <TextBlock Text="CA TOTAL"
+                        <TextBlock Text="CA (base retenue)"
                                 FontSize="11"
                                 FontWeight="Bold"
                                 Foreground="#D6EAF8"/>
@@ -133,7 +157,7 @@
                                 Text="0"
                                 FontSize="26"
                                 FontWeight="Bold"
-                                   Foreground="White"
+                                Foreground="White"
                                 Margin="0,4,0,2"/>
                         <TextBlock Text="FCFA"
                                 FontSize="11"
@@ -153,7 +177,7 @@
                                 Text="0"
                                 FontSize="26"
                                 FontWeight="Bold"
-                                   Foreground="White"
+                                Foreground="White"
                                 Margin="0,4,0,2"/>
                         <TextBlock Text="FCFA a reverser"
                                 FontSize="11"
@@ -172,7 +196,7 @@
                                 Text="0"
                                 FontSize="26"
                                 FontWeight="Bold"
-                                   Foreground="White"
+                                Foreground="White"
                                 Margin="0,4,0,2"/>
                         <TextBlock Text="FCFA pour l'atelier"
                                 FontSize="11"
@@ -181,18 +205,25 @@
                 </Border>
             </UniformGrid>
 
+            <TextBlock Text="Cet aperçu ne porte que sur les commandes pas encore rattachées à une commission déjà enregistrée. Une fois «Enregistrer» cliqué, ces commandes sont verrouillées et ne réapparaîtront plus dans un futur calcul."
+                       FontSize="11"
+                    Foreground="#7F8C8D"
+                    TextWrapping="Wrap"
+                    Margin="0,0,0,14"/>
+
             <!-- Detail par couturier -->
             <Border Background="White"
                     CornerRadius="8"
                     Padding="20"
                     BorderBrush="#E0E0E0"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Detail par Couturier"
+                    <TextBlock Text="Detail par Couturier (aperçu, pas encore enregistré)"
                                FontSize="14"
-                            FontWeight="Bold"
+                               FontWeight="Bold"
                                Foreground="#1E3A5F"
-                            Margin="0,0,0,10"/>
+                               Margin="0,0,0,10"/>
                     <DataGrid x:Name="GridCommissions"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
@@ -200,22 +231,134 @@
                               BorderBrush="#E0E0E0"
                               BorderThickness="1"
                               AlternatingRowBackground="#F8F9FA"
-                              FontSize="12">
+                              FontSize="12"
+                              Margin="0,0,0,14">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Couturier"
-                                                Binding="{Binding Nom}"
+                                    Binding="{Binding Nom}"
                                     Width="*"/>
-                            <DataGridTextColumn Header="Commandes terminees"
-                                                Binding="{Binding NbCommandes}"
-                                    Width="160"/>
-                            <DataGridTextColumn Header="CA (FCFA)"
-                                                Binding="{Binding CaTotal}"
+                            <DataGridTextColumn Header="Commandes"
+                                    Binding="{Binding NbCommandes}"
+                                    Width="100"/>
+                            <DataGridTextColumn Header="CA total (FCFA)"
+                                    Binding="{Binding CaTotalAffiche}"
                                     Width="130"/>
+                            <DataGridTextColumn Header="CA encaissé (FCFA)"
+                                    Binding="{Binding CaEncaisseAffiche}"
+                                    Width="140"/>
+                            <DataGridTextColumn Header="Base retenue (FCFA)"
+                                    Binding="{Binding BaseAffichee}"
+                                    Width="140"/>
                             <DataGridTextColumn Header="Commission (FCFA)"
-                                                Binding="{Binding Commission}"
+                                    Binding="{Binding CommissionAffichee}"
                                     Width="150"/>
                         </DataGrid.Columns>
                     </DataGrid>
+
+                    <Button x:Name="BtnEnregistrer"
+                            Content="Enregistrer ces commissions (verrouille les commandes concernées)"
+                            Height="42"
+                            FontSize="13"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Background="#1E3A5F"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            IsEnabled="False"
+                            Click="BtnEnregistrer_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius"
+                                        Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Historique -->
+            <Border Background="White"
+                    CornerRadius="8"
+                    Padding="20"
+                    BorderBrush="#E0E0E0"
+                    BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="Historique des commissions enregistrées"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="#1E3A5F"
+                               Margin="0,0,0,10"/>
+                    <DataGrid x:Name="GridHistorique"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              Background="White"
+                              BorderBrush="#E0E0E0"
+                              BorderThickness="1"
+                              AlternatingRowBackground="#F8F9FA"
+                              FontSize="12"
+                              SelectionChanged="GridHistorique_SelectionChanged"
+                              Margin="0,0,0,10">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Date"
+                                    Binding="{Binding DateCalculAffichee}"
+                                    Width="140"/>
+                            <DataGridTextColumn Header="Employé"
+                                    Binding="{Binding NomEmployeSnapshot}"
+                                    Width="*"/>
+                            <DataGridTextColumn Header="Période"
+                                    Binding="{Binding PeriodeAffichee}"
+                                    Width="180"/>
+                            <DataGridTextColumn Header="Base"
+                                    Binding="{Binding BaseCalcul}"
+                                    Width="90"/>
+                            <DataGridTextColumn Header="Montant (FCFA)"
+                                    Binding="{Binding MontantAffiche}"
+                                    Width="130"/>
+                            <DataGridTextColumn Header="Statut"
+                                    Binding="{Binding StatutAffichage}"
+                                    Width="90"/>
+                            <DataGridTextColumn Header="Enregistré par"
+                                    Binding="{Binding NomOperateur}"
+                                    Width="130"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="160"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtMotifAnnulation"
+                                 Grid.Column="0"
+                                 Height="36"
+                                 FontSize="12"
+                                 Padding="8,0,8,0"
+                                 BorderBrush="#D5D8DC"
+                                 Tag="Motif de l'annulation (obligatoire)"/>
+                        <Button x:Name="BtnAnnulerCommission"
+                                Grid.Column="2"
+                                Content="Annuler la sélection"
+                                Height="36"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="White"
+                                Background="#DC2626"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Click="BtnAnnulerCommission_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius"
+                                            Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </Grid>
+                    <TextBlock x:Name="TxtMessageHistorique"
+                               FontSize="11"
+                               Margin="0,6,0,0"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 

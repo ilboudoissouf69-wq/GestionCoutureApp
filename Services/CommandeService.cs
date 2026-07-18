@@ -6,16 +6,17 @@ namespace GestionCoutureApp.Services
 {
     public class CommandeService : ICommandeService
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
 
-        public CommandeService(ApplicationDbContext context)
+        public CommandeService(IDbContextFactory<ApplicationDbContext> contextFactory)
         {
-            _context = context;
+            _contextFactory = contextFactory;
         }
 
         public List<Commande> ObtenirTous()
         {
-            return _context.Commandes
+            using var context = _contextFactory.CreateDbContext();
+            return context.Commandes
                 .Include(c => c.Client)
                 .Include(c => c.Couturier)
                 .Include(c => c.Paiements)
@@ -25,28 +26,31 @@ namespace GestionCoutureApp.Services
 
         public Commande? ObtenirParId(int id)
         {
-            return _context.Commandes
+            using var context = _contextFactory.CreateDbContext();
+            return context.Commandes
                 .Include(c => c.Mesures)
                 .FirstOrDefault(c => c.IdCommande == id);
         }
 
         public void Ajouter(Commande commande, List<Mesure> mesures)
         {
+            using var context = _contextFactory.CreateDbContext();
             commande.DateDebut = DateTime.Now;
-            _context.Commandes.Add(commande);
-            _context.SaveChanges();
+            context.Commandes.Add(commande);
+            context.SaveChanges();
 
             foreach (var mesure in mesures)
             {
                 mesure.IdCommande = commande.IdCommande;
-                _context.Mesures.Add(mesure);
+                context.Mesures.Add(mesure);
             }
-            _context.SaveChanges();
+            context.SaveChanges();
         }
 
         public void Modifier(Commande commande, List<Mesure> mesures)
         {
-            var existant = _context.Commandes
+            using var context = _contextFactory.CreateDbContext();
+            var existant = context.Commandes
                 .Include(c => c.Mesures)
                 .FirstOrDefault(c => c.IdCommande == commande.IdCommande);
 
@@ -60,19 +64,20 @@ namespace GestionCoutureApp.Services
                 existant.Statut = commande.Statut;
                 existant.MontantTotal = commande.MontantTotal;
 
-                _context.Mesures.RemoveRange(existant.Mesures);
+                context.Mesures.RemoveRange(existant.Mesures);
                 foreach (var mesure in mesures)
                 {
                     mesure.IdCommande = commande.IdCommande;
-                    _context.Mesures.Add(mesure);
+                    context.Mesures.Add(mesure);
                 }
-                _context.SaveChanges();
+                context.SaveChanges();
             }
         }
 
         public void Supprimer(int id)
         {
-            var commande = _context.Commandes
+            using var context = _contextFactory.CreateDbContext();
+            var commande = context.Commandes
                 .Include(c => c.Paiements)
                 .FirstOrDefault(c => c.IdCommande == id);
 
@@ -89,13 +94,22 @@ namespace GestionCoutureApp.Services
                     "de la commande à \"Annulée\" plutôt que de la supprimer.");
             }
 
-            _context.Commandes.Remove(commande);
-            _context.SaveChanges();
+            // Une commande deja incluse dans une commission enregistree ne doit pas
+            // etre supprimee non plus, sinon le calcul de commission deviendrait incoherent.
+            if (commande.IdCommission.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "Impossible de supprimer cette commande : elle est rattachée à une commission déjà enregistrée.");
+            }
+
+            context.Commandes.Remove(commande);
+            context.SaveChanges();
         }
 
         public List<Commande> Rechercher(string motCle)
         {
-            return _context.Commandes
+            using var context = _contextFactory.CreateDbContext();
+            return context.Commandes
                 .Include(c => c.Client)
                 .Include(c => c.Couturier)
                 .Include(c => c.Paiements)
@@ -110,7 +124,8 @@ namespace GestionCoutureApp.Services
 
         public List<Mesure> ObtenirMesures(int idCommande)
         {
-            return _context.Mesures
+            using var context = _contextFactory.CreateDbContext();
+            return context.Mesures
                 .Where(m => m.IdCommande == idCommande)
                 .ToList();
         }

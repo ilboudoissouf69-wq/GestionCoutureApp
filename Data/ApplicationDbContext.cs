@@ -24,10 +24,28 @@ namespace GestionCoutureApp.Data
         public DbSet<MesureRequise> MesuresRequises { get; set; }
 
         public DbSet<DescriptionCourante> DescriptionsCourantes { get; set; }
+        public DbSet<Commission> Commissions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Securite/robustesse : un identifiant de connexion ne peut exister
+            // qu'une seule fois, applique au niveau de la base (et plus
+            // seulement verifie cote application, qui reste sujet a une
+            // course en cas d'acces quasi simultane).
+            modelBuilder.Entity<Employe>()
+                .HasIndex(e => e.Identifiant)
+                .IsUnique();
+
+            // Relation Commission -> Commandes : Restrict (jamais de cascade).
+            // Une commande "verrouillee" par une commission ne doit jamais
+            // disparaitre silencieusement si la commission est modifiee.
+            modelBuilder.Entity<Commission>()
+                .HasMany(co => co.Commandes)
+                .WithOne(c => c.Commission)
+                .HasForeignKey(c => c.IdCommission)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Relation Commande -> Mesures (cascade)
             modelBuilder.Entity<Commande>()

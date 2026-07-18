@@ -26,7 +26,10 @@ namespace GestionCoutureApp.Views
             _paiementService = App.Services.GetRequiredService<IPaiementService>();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _authService = App.Services.GetRequiredService<IAuthService>();
-            _context = App.Services.GetRequiredService<ApplicationDbContext>();
+
+            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _context = contextFactory.CreateDbContext();
+            Unloaded += (s, e) => _context.Dispose();
 
             _operateurConnecte = _authService.UtilisateurConnecte;
 

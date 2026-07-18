@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
@@ -7,7 +8,10 @@ namespace GestionCoutureApp.Services
 {
     public class AuthService : IAuthService
     {
-        private readonly ApplicationDbContext _context;
+        // Cree un DbContext frais a chaque operation plutot que de garder une
+        // instance partagee sur toute la duree de vie de l'application
+        // (voir remarque generale sur IDbContextFactory dans App.cs).
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
 
         public Employe? UtilisateurConnecte { get; private set; }
 
@@ -28,9 +32,9 @@ namespace GestionCoutureApp.Services
 
         private static readonly ConcurrentDictionary<string, SuiviTentatives> _tentatives = new();
 
-        public AuthService(ApplicationDbContext context)
+        public AuthService(IDbContextFactory<ApplicationDbContext> contextFactory)
         {
-            _context = context;
+            _contextFactory = contextFactory;
         }
 
         /// <summary>Hache un mot de passe avec l'algorithme sécurisé actuel (PBKDF2 + sel).</summary>
@@ -80,9 +84,11 @@ namespace GestionCoutureApp.Services
 
         private Employe? AuthentifierInterne(string identifiant, string motDePasse)
         {
+            using var context = _contextFactory.CreateDbContext();
+
             // On récupère l'employé par identifiant seul (le hash n'est plus comparable
             // directement en SQL puisqu'il dépend d'un sel unique par utilisateur).
-            var employe = _context.Employes.FirstOrDefault(e => e.Identifiant == identifiant);
+            var employe = context.Employes.FirstOrDefault(e => e.Identifiant == identifiant);
 
             if (employe == null || employe.Statut != "Actif")
                 return null;
@@ -98,7 +104,7 @@ namespace GestionCoutureApp.Services
                 {
                     // Migration transparente vers le hachage sécurisé, à la prochaine connexion réussie.
                     employe.MotDePasse = PasswordHasher.Hasher(motDePasse);
-                    _context.SaveChanges();
+                    context.SaveChanges();
                 }
             }
             else

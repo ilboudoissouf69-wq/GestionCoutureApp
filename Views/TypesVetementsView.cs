@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,7 +22,11 @@ namespace GestionCoutureApp.Views
                 throw new UnauthorizedAccessException("Accès réservé au Boss.");
 
             InitializeComponent();
-            _context = App.Services.GetRequiredService<ApplicationDbContext>();
+
+            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _context = contextFactory.CreateDbContext();
+            Unloaded += (s, e) => _context.Dispose();
+
             ChargerTypes();
         }
 

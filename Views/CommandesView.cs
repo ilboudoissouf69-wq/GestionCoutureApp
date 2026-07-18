@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -27,7 +26,10 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _clientService = App.Services.GetRequiredService<IClientService>();
-            _context = App.Services.GetRequiredService<ApplicationDbContext>();
+
+            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _context = contextFactory.CreateDbContext();
+            Unloaded += (s, e) => _context.Dispose();
 
             // ===== RECUPERER LE ROLE =====
             var authService = App.Services.GetRequiredService<IAuthService>();

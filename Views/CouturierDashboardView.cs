@@ -1,8 +1,6 @@
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using GestionCoutureApp.Data;
-using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,7 +15,10 @@ namespace GestionCoutureApp.Views
         {
             InitializeComponent();
             _couturier = couturier;
-            _context = App.Services.GetRequiredService<ApplicationDbContext>();
+
+            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _context = contextFactory.CreateDbContext();
+            Unloaded += (s, e) => _context.Dispose();
 
             TxtNomCouturier.Text = $"Bienvenue, {couturier.Prenom} {couturier.Nom}";
 

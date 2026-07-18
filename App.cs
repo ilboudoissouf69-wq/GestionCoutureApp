@@ -20,15 +20,25 @@ namespace GestionCoutureApp
             // ====== Configuration DI ======
             var services = new ServiceCollection();
 
-            services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseSqlite("Data Source=gestion_couture.db;Cache=Shared"),
-                ServiceLifetime.Singleton);
+            // ------------------------------------------------------------------
+            // IMPORTANT : on utilise une FACTORY plutot qu'un DbContext Singleton.
+            // Un DbContext EF Core n'est pas concu pour vivre pendant toute une
+            // session applicative (fuite memoire progressive : le "change
+            // tracker" accumule toutes les entites chargees depuis le demarrage,
+            // et deux operations concurrentes sur le meme DbContext levent une
+            // exception). Chaque ecran / operation cree desormais son propre
+            // DbContext de courte duree via IDbContextFactory, puis le "dispose".
+            // C'est le pattern recommande par Microsoft pour les apps WPF/WinForms.
+            // ------------------------------------------------------------------
+            services.AddDbContextFactory<ApplicationDbContext>(options =>
+                options.UseSqlite("Data Source=gestion_couture.db;Cache=Shared"));
 
             // Services
             services.AddSingleton<IAuthService, AuthService>();
             services.AddSingleton<IClientService, ClientService>();
             services.AddSingleton<ICommandeService, CommandeService>();
             services.AddSingleton<IPaiementService, PaiementService>();
+            services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
             services.AddSingleton<INavigationService, NavigationService>();
 
@@ -37,7 +47,8 @@ namespace GestionCoutureApp
             // ====== Créer la base ======
             try
             {
-                var context = Services.GetRequiredService<ApplicationDbContext>();
+                var contextFactory = Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                using var context = contextFactory.CreateDbContext();
                 context.Database.EnsureCreated();
 
                 // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.

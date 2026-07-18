@@ -14,7 +14,11 @@ namespace GestionCoutureApp.Views
         public DashboardView()
         {
             InitializeComponent();
-            _context = App.Services.GetRequiredService<ApplicationDbContext>();
+
+            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _context = contextFactory.CreateDbContext();
+            Unloaded += (s, e) => _context.Dispose();
+
             Loaded += DashboardView_Loaded;
         }
 

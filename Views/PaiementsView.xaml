@@ -11,11 +11,17 @@
         </Grid.RowDefinitions>
 
         <!-- BANDEAU OPERATEUR -->
-        <Border Grid.Row="0" CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
+        <Border Grid.Row="0"
+                CornerRadius="8"
+                Padding="14,10"
+                Margin="0,0,0,16">
             <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="#1E3A5F" Offset="0"/>
-                    <GradientStop Color="#0D9488" Offset="1"/>
+                <LinearGradientBrush StartPoint="0,0"
+                        EndPoint="1,0">
+                    <GradientStop Color="#1E3A5F"
+                            Offset="0"/>
+                    <GradientStop Color="#0D9488"
+                            Offset="1"/>
                 </LinearGradientBrush>
             </Border.Background>
             <Grid>
@@ -25,13 +31,18 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="Gestion des Paiements"
-                           FontSize="20" FontWeight="Bold"
-                           Foreground="White" VerticalAlignment="Center"/>
-                <Border Grid.Column="1" CornerRadius="14" Padding="10,4"
+                           FontSize="20"
+                        FontWeight="Bold"
+                           Foreground="White"
+                        VerticalAlignment="Center"/>
+                <Border Grid.Column="1"
+                        CornerRadius="14"
+                        Padding="10,4"
                         Background="#1A5C50">
                     <TextBlock x:Name="TxtOperateurConnecte"
                                Text="Operateur : -"
-                               FontSize="12" FontWeight="SemiBold"
+                               FontSize="12"
+                            FontWeight="SemiBold"
                                Foreground="White"/>
                 </Border>
             </Grid>
@@ -52,46 +63,64 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource Card}" Padding="0">
+                <Border Grid.Row="0"
+                        Style="{StaticResource Card}"
+                        Padding="0">
                     <DataGrid x:Name="GridPaiements"
                               Style="{StaticResource ModernGrid}"
                               SelectionChanged="GridPaiements_SelectionChanged">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="N. Recu"
-                                    Binding="{Binding RecuNumero}" Width="155"/>
+                                                Binding="{Binding RecuNumero}"
+                                    Width="155"/>
                             <DataGridTextColumn Header="Client"
-                                    Binding="{Binding Commande.Client.Nom}" Width="*"/>
+                                                Binding="{Binding Commande.Client.Nom}"
+                                    Width="*"/>
                             <DataGridTextColumn Header="Montant (FCFA)"
-                                    Binding="{Binding MontantPaye, StringFormat={}{0:N0}}" Width="120"/>
+                                                Binding="{Binding MontantPaye, StringFormat={}{0:N0}}"
+                                    Width="120"/>
                             <DataGridTextColumn Header="Mode"
-                                    Binding="{Binding ModePaiement}" Width="110"/>
+                                                Binding="{Binding ModePaiement}"
+                                    Width="110"/>
                             <DataGridTextColumn Header="Operateur"
-                                    Binding="{Binding NomOperateur}" Width="130"/>
+                                                Binding="{Binding NomOperateur}"
+                                    Width="130"/>
                             <DataGridTextColumn Header="Date / Heure"
-                                    Binding="{Binding DatePaiement, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Width="130"/>
-                            <DataGridTemplateColumn Header="Statut" Width="90">
+                                                Binding="{Binding DatePaiement, StringFormat={}{0:dd/MM/yyyy HH:mm}}"
+                                    Width="130"/>
+                            <DataGridTemplateColumn Header="Statut"
+                                    Width="90">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Border CornerRadius="12" Padding="8,3"
-                                                HorizontalAlignment="Center" Margin="4">
+                                        <Border CornerRadius="12"
+                                                Padding="8,3"
+                                                HorizontalAlignment="Center"
+                                                Margin="4">
                                             <Border.Style>
                                                 <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#DCFCE7"/>
+                                                    <Setter Property="Background"
+                                                            Value="#DCFCE7"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding EstAnnule}" Value="True">
-                                                            <Setter Property="Background" Value="#FEE2E2"/>
+                                                        <DataTrigger Binding="{Binding EstAnnule}"
+                                                                Value="True">
+                                                            <Setter Property="Background"
+                                                                    Value="#FEE2E2"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
                                             <TextBlock Text="{Binding StatutAffichage}"
-                                                       FontSize="11" FontWeight="Bold">
+                                                       FontSize="11"
+                                                    FontWeight="Bold">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="#059669"/>
+                                                        <Setter Property="Foreground"
+                                                                Value="#059669"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding EstAnnule}" Value="True">
-                                                                <Setter Property="Foreground" Value="#DC2626"/>
+                                                            <DataTrigger Binding="{Binding EstAnnule}"
+                                                                    Value="True">
+                                                                <Setter Property="Foreground"
+                                                                        Value="#DC2626"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -105,39 +134,52 @@
                     </DataGrid>
                 </Border>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
+                <StackPanel Grid.Row="1"
+                        Orientation="Horizontal"
+                        Margin="0,12,0,0">
                     <Button x:Name="BtnGenererRecu"
                             Content="Imprimer le recu"
                             Style="{StaticResource BtnNavy}"
-                            Height="38" Padding="16,0"
+                            Height="38"
+                            Padding="16,0"
                             Click="BtnGenererRecu_Click"
                             Margin="0,0,10,0"/>
                     <Button x:Name="BtnAnnuler"
                             Content="Annuler ce paiement"
                             Style="{StaticResource BtnDanger}"
-                            Height="38" Padding="16,0"
+                            Height="38"
+                            Padding="16,0"
                             Click="BtnAnnuler_Click"/>
                 </StackPanel>
             </Grid>
 
             <!-- DROITE : Formulaire -->
-            <Border Grid.Column="2" Style="{StaticResource Card}"
-                    Padding="0" VerticalAlignment="Top">
+            <Border Grid.Column="2"
+                    Style="{StaticResource Card}"
+                    Padding="0"
+                    VerticalAlignment="Top">
                 <StackPanel>
-                    <Border CornerRadius="10,10,0,0" Padding="20,14">
+                    <Border CornerRadius="10,10,0,0"
+                            Padding="20,14">
                         <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="#1E3A5F" Offset="0"/>
-                                <GradientStop Color="#0D9488" Offset="1"/>
+                            <LinearGradientBrush StartPoint="0,0"
+                                    EndPoint="1,0">
+                                <GradientStop Color="#1E3A5F"
+                                        Offset="0"/>
+                                <GradientStop Color="#0D9488"
+                                        Offset="1"/>
                             </LinearGradientBrush>
                         </Border.Background>
                         <TextBlock Text="Enregistrer un paiement"
-                                   FontSize="14" FontWeight="Bold" Foreground="White"/>
+                                   FontSize="14"
+                                FontWeight="Bold"
+                                Foreground="White"/>
                     </Border>
 
                     <StackPanel Margin="20,16,20,20">
 
-                        <TextBlock Text="Commande *" Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="Commande *"
+                                Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="CmbCommande"
                                   Style="{StaticResource ModernComboBox}"
                                   DisplayMemberPath="DisplayText"
@@ -145,32 +187,46 @@
                                   SelectionChanged="CmbCommande_SelectionChanged"/>
 
                         <!-- Resume commande -->
-                        <Border CornerRadius="8" Padding="14,12" Margin="0,0,0,16"
-                                Background="#F0FDF9" BorderBrush="#CCFBF1" BorderThickness="1">
+                        <Border CornerRadius="8"
+                                Padding="14,12"
+                                Margin="0,0,0,16"
+                                Background="#F0FDF9"
+                                BorderBrush="#CCFBF1"
+                                BorderThickness="1">
                             <StackPanel>
                                 <TextBlock x:Name="TxtInfoClient"
                                            Text="Client : -"
-                                           FontSize="13" FontWeight="SemiBold"
+                                           FontSize="13"
+                                        FontWeight="SemiBold"
                                            Foreground="{StaticResource PrimaryBrush}"/>
-                                <Separator Background="#CCFBF1" Margin="0,8"/>
+                                <Separator Background="#CCFBF1"
+                                        Margin="0,8"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="TOTAL" FontSize="10"
-                                                   FontWeight="Bold" Foreground="#64748B"/>
-                                        <TextBlock x:Name="TxtInfoMontant" Text="- FCFA"
-                                                   FontSize="15" FontWeight="Bold"
+                                        <TextBlock Text="TOTAL"
+                                                FontSize="10"
+                                                   FontWeight="Bold"
+                                                Foreground="#64748B"/>
+                                        <TextBlock x:Name="TxtInfoMontant"
+                                                Text="- FCFA"
+                                                   FontSize="15"
+                                                FontWeight="Bold"
                                                    Foreground="{StaticResource PrimaryBrush}"
                                                    Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="RESTE" FontSize="10"
-                                                   FontWeight="Bold" Foreground="#64748B"/>
-                                        <TextBlock x:Name="TxtInfoReste" Text="- FCFA"
-                                                   FontSize="15" FontWeight="Bold"
+                                        <TextBlock Text="RESTE"
+                                                FontSize="10"
+                                                   FontWeight="Bold"
+                                                Foreground="#64748B"/>
+                                        <TextBlock x:Name="TxtInfoReste"
+                                                Text="- FCFA"
+                                                   FontSize="15"
+                                                FontWeight="Bold"
                                                    Foreground="{StaticResource DangerBrush}"
                                                    Margin="0,2,0,0"/>
                                     </StackPanel>
@@ -193,7 +249,8 @@
                                    Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="CmbModePaiement"
                                   Style="{StaticResource ModernComboBox}"
-                                  Margin="0,0,0,20" SelectedIndex="0">
+                                  Margin="0,0,0,20"
+                                SelectedIndex="0">
                             <ComboBoxItem Content="Especes"/>
                             <ComboBoxItem Content="Mobile Money"/>
                             <ComboBoxItem Content="Virement"/>
@@ -203,28 +260,37 @@
                         <Button x:Name="BtnEnregistrer"
                                 Content="Enregistrer le paiement"
                                 Style="{StaticResource BtnSuccess}"
-                                Height="42" FontSize="13" FontWeight="Bold"
+                                Height="42"
+                                FontSize="13"
+                                FontWeight="Bold"
                                 Click="BtnEnregistrer_Click"
                                 Margin="0,0,0,16"/>
 
-                        <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,12"/>
+                        <Separator Background="{StaticResource BorderBrush}"
+                                Margin="0,0,0,12"/>
 
                         <TextBlock Text="Historique des paiements"
-                                   FontSize="13" FontWeight="SemiBold"
+                                   FontSize="13"
+                                FontWeight="SemiBold"
                                    Foreground="{StaticResource PrimaryBrush}"
                                    Margin="0,0,0,8"/>
                         <Border BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1" CornerRadius="7">
+                                BorderThickness="1"
+                                CornerRadius="7">
                             <ListBox x:Name="ListeHistorique"
-                                     MaxHeight="160" FontSize="11"
+                                     MaxHeight="160"
+                                    FontSize="11"
                                      FontFamily="Consolas"
                                      BorderThickness="0"
                                      Background="Transparent">
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem">
-                                        <Setter Property="Padding"          Value="10,7"/>
-                                        <Setter Property="BorderBrush"      Value="{StaticResource BorderBrush}"/>
-                                        <Setter Property="BorderThickness"   Value="0,0,0,1"/>
+                                        <Setter Property="Padding"
+                                                Value="10,7"/>
+                                        <Setter Property="BorderBrush"
+                                                Value="{StaticResource BorderBrush}"/>
+                                        <Setter Property="BorderThickness"
+                                                Value="0,0,0,1"/>
                                     </Style>
                                 </ListBox.ItemContainerStyle>
                             </ListBox>

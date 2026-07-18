@@ -8,11 +8,16 @@
         <StackPanel Margin="28,24,28,28">
 
             <!-- EN-TETE -->
-            <Border CornerRadius="12" Padding="24,20" Margin="0,0,0,24">
+            <Border CornerRadius="12"
+                    Padding="24,20"
+                    Margin="0,0,0,24">
                 <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#1E3A5F" Offset="0"/>
-                        <GradientStop Color="#0D9488" Offset="1"/>
+                    <LinearGradientBrush StartPoint="0,0"
+                            EndPoint="1,1">
+                        <GradientStop Color="#1E3A5F"
+                                Offset="0"/>
+                        <GradientStop Color="#0D9488"
+                                Offset="1"/>
                     </LinearGradientBrush>
                 </Border.Background>
 
@@ -23,13 +28,23 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
                         <TextBlock Text="Mon Espace Couturier"
-                                   FontSize="22" FontWeight="Bold" Foreground="White"/>
+                                   FontSize="22"
+                                FontWeight="Bold"
+                                Foreground="White"/>
                         <TextBlock x:Name="TxtNomCouturier"
-                                   FontSize="14" Foreground="#B2D8D0" Margin="0,4,0,0"/>
+                                   FontSize="14"
+                                Foreground="#B2D8D0"
+                                Margin="0,4,0,0"/>
                     </StackPanel>
-                    <Border Grid.Column="1" Width="56" Height="56" CornerRadius="28"
-                            Background="#1A5C50" VerticalAlignment="Center">
-                        <TextBlock Text="GC" FontSize="20" FontWeight="Bold"
+                    <Border Grid.Column="1"
+                            Width="56"
+                            Height="56"
+                            CornerRadius="28"
+                            Background="#1A5C50"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="GC"
+                                FontSize="20"
+                                FontWeight="Bold"
                                    Foreground="White"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
@@ -38,40 +53,65 @@
             </Border>
 
             <!-- 4 CARTES -->
-            <UniformGrid Columns="4" Margin="0,0,0,22">
+            <UniformGrid Columns="4"
+                    Margin="0,0,0,22">
 
-                <Border Style="{StaticResource Card}" Margin="0,0,12,0">
+                <Border Style="{StaticResource Card}"
+                        Margin="0,0,12,0">
 
                     <StackPanel>
-                        <TextBlock Text="EN COURS" FontSize="10" FontWeight="Bold"
+                        <TextBlock Text="EN COURS"
+                                FontSize="10"
+                                FontWeight="Bold"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <TextBlock x:Name="TxtEnCours" Text="0" FontSize="30" FontWeight="Bold"
-                                   Foreground="#2563EB" Margin="0,4,0,2"/>
-                        <TextBlock Text="commandes actives" FontSize="11"
+                        <TextBlock x:Name="TxtEnCours"
+                                Text="0"
+                                FontSize="30"
+                                FontWeight="Bold"
+                                   Foreground="#2563EB"
+                                Margin="0,4,0,2"/>
+                        <TextBlock Text="commandes actives"
+                                FontSize="11"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource Card}" Margin="0,0,12,0">
+                <Border Style="{StaticResource Card}"
+                        Margin="0,0,12,0">
 
                     <StackPanel>
-                        <TextBlock Text="TERMINEES" FontSize="10" FontWeight="Bold"
+                        <TextBlock Text="TERMINEES"
+                                FontSize="10"
+                                FontWeight="Bold"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <TextBlock x:Name="TxtTerminees" Text="0" FontSize="30" FontWeight="Bold"
-                                   Foreground="{StaticResource SuccessBrush}" Margin="0,4,0,2"/>
-                        <TextBlock Text="pretes a livrer" FontSize="11"
+                        <TextBlock x:Name="TxtTerminees"
+                                Text="0"
+                                FontSize="30"
+                                FontWeight="Bold"
+                                   Foreground="{StaticResource SuccessBrush}"
+                                Margin="0,4,0,2"/>
+                        <TextBlock Text="pretes a livrer"
+                                FontSize="11"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource Card}" Margin="0,0,12,0">
+                <Border Style="{StaticResource Card}"
+                        Margin="0,0,12,0">
 
                     <StackPanel>
-                        <TextBlock Text="LIVREES" FontSize="10" FontWeight="Bold"
+                        <TextBlock Text="LIVREES"
+                                FontSize="10"
+                                FontWeight="Bold"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <TextBlock x:Name="TxtLivrees" Text="0" FontSize="30" FontWeight="Bold"
-                                   Foreground="{StaticResource WarningBrush}" Margin="0,4,0,2"/>
-                        <TextBlock Text="au client" FontSize="11"
+                        <TextBlock x:Name="TxtLivrees"
+                                Text="0"
+                                FontSize="30"
+                                FontWeight="Bold"
+                                   Foreground="{StaticResource WarningBrush}"
+                                Margin="0,4,0,2"/>
+                        <TextBlock Text="au client"
+                                FontSize="11"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </Border>
@@ -79,11 +119,18 @@
                 <Border Style="{StaticResource Card}">
 
                     <StackPanel>
-                        <TextBlock Text="REVENUS" FontSize="10" FontWeight="Bold"
+                        <TextBlock Text="REVENUS"
+                                FontSize="10"
+                                FontWeight="Bold"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <TextBlock x:Name="TxtRevenus" Text="0" FontSize="30" FontWeight="Bold"
-                                   Foreground="{StaticResource AccentBrush}" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA generes" FontSize="11"
+                        <TextBlock x:Name="TxtRevenus"
+                                Text="0"
+                                FontSize="30"
+                                FontWeight="Bold"
+                                   Foreground="{StaticResource AccentBrush}"
+                                Margin="0,4,0,2"/>
+                        <TextBlock Text="FCFA generes"
+                                FontSize="11"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </Border>
@@ -98,12 +145,24 @@
                     <DataGrid x:Name="GridMesCommandes"
                               Style="{StaticResource ModernGrid}">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Client"      Binding="{Binding Client.Nom}"          Width="*"/>
-                            <DataGridTextColumn Header="Type"        Binding="{Binding TypeVetement}"        Width="*"/>
-                            <DataGridTextColumn Header="Description" Binding="{Binding DescriptionPrecision}" Width="*"/>
-                            <DataGridTextColumn Header="Statut"      Binding="{Binding Statut}"              Width="100"/>
-                            <DataGridTextColumn Header="Montant"     Binding="{Binding MontantTotal, StringFormat={}{0:N0}}" Width="110"/>
-                            <DataGridTextColumn Header="Date fin"    Binding="{Binding DateFin, StringFormat={}{0:dd/MM/yyyy}}" Width="100"/>
+                            <DataGridTextColumn Header="Client"
+                                    Binding="{Binding Client.Nom}"
+                                    Width="*"/>
+                            <DataGridTextColumn Header="Type"
+                                    Binding="{Binding TypeVetement}"
+                                    Width="*"/>
+                            <DataGridTextColumn Header="Description"
+                                    Binding="{Binding DescriptionPrecision}"
+                                    Width="*"/>
+                            <DataGridTextColumn Header="Statut"
+                                    Binding="{Binding Statut}"
+                                    Width="100"/>
+                            <DataGridTextColumn Header="Montant"
+                                    Binding="{Binding MontantTotal, StringFormat={}{0:N0}}"
+                                    Width="110"/>
+                            <DataGridTextColumn Header="Date fin"
+                                    Binding="{Binding DateFin, StringFormat={}{0:dd/MM/yyyy}}"
+                                    Width="100"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </StackPanel>

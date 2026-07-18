@@ -1,7 +1,7 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
@@ -23,7 +23,14 @@ namespace GestionCoutureApp.Views
                 throw new UnauthorizedAccessException("Accès réservé au Boss.");
 
             InitializeComponent();
-            _context = App.Services.GetRequiredService<ApplicationDbContext>();
+
+            // Contexte propre à cet écran, cree via la factory et libere quand
+            // on quitte l'ecran (voir Unloaded ci-dessous). Corrige l'ancien
+            // DbContext partage "Singleton" sur toute l'application.
+            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _context = contextFactory.CreateDbContext();
+            Unloaded += (s, e) => _context.Dispose();
+
             ChargerEmployes();
         }
 
@@ -119,23 +126,20 @@ namespace GestionCoutureApp.Views
                 string.IsNullOrWhiteSpace(TxtIdentifiant.Text) ||
                 string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
             {
-                TxtMessage.Text = "Tous les champs sont requis.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Tous les champs sont requis.", succes: false);
                 return;
             }
 
             // Vérifier si l'identifiant existe déjà
             if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()))
             {
-                TxtMessage.Text = "Cet identifiant existe déjà.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Cet identifiant existe déjà.", succes: false);
                 return;
             }
 
             if (CmbRole.SelectedIndex < 0)
             {
-                TxtMessage.Text = "Sélectionnez un rôle.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Sélectionnez un rôle.", succes: false);
                 return;
             }
 
@@ -149,14 +153,21 @@ namespace GestionCoutureApp.Views
                 Statut = "Actif"
             };
 
-            _context.Employes.Add(employe);
-            _context.SaveChanges();
+            try
+            {
+                _context.Employes.Add(employe);
+                _context.SaveChanges();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Filet de securite : meme si la verification applicative ci-dessus
+                // n'a rien trouve (course rare), l'index unique en base (voir
+                // ApplicationDbContext) refusera un identifiant en double.
+                AfficherMessage("Impossible d'enregistrer : " + (ex.InnerException?.Message ?? ex.Message), succes: false);
+                return;
+            }
 
-            TxtMessage.Text = "Employé ajouté avec succès.";
-            TxtMessage.Foreground = System.Windows.Media.Brushes.Green;
-            BorderMessage.Background = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(236, 253, 245));
-            BorderMessage.Visibility = System.Windows.Visibility.Visible;
+            AfficherMessage("Employé ajouté avec succès.", succes: true);
             ChargerEmployes();
             ViderFormulaire();
         }
@@ -168,15 +179,30 @@ namespace GestionCoutureApp.Views
         {
             if (_employeSelectionne == null)
             {
-                TxtMessage.Text = "Sélectionnez un employé à modifier.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Sélectionnez un employé à modifier.", succes: false);
                 return;
             }
 
             if (CmbRole.SelectedIndex < 0)
             {
-                TxtMessage.Text = "Sélectionnez un rôle.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Sélectionnez un rôle.", succes: false);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(TxtNom.Text) ||
+                string.IsNullOrWhiteSpace(TxtPrenom.Text) ||
+                string.IsNullOrWhiteSpace(TxtIdentifiant.Text))
+            {
+                AfficherMessage("Le nom, le prénom et l'identifiant sont requis.", succes: false);
+                return;
+            }
+
+            // Un autre employe (different de celui en cours de modification)
+            // ne doit pas deja utiliser cet identifiant.
+            if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()
+                                           && emp.IdEmploye != _employeSelectionne.IdEmploye))
+            {
+                AfficherMessage("Cet identifiant est déjà utilisé par un autre employé.", succes: false);
                 return;
             }
 
@@ -191,13 +217,17 @@ namespace GestionCoutureApp.Views
                 _employeSelectionne.MotDePasse = HashMotDePasse(TxtMotDePasse.Password);
             }
 
-            _context.SaveChanges();
+            try
+            {
+                _context.SaveChanges();
+            }
+            catch (DbUpdateException ex)
+            {
+                AfficherMessage("Impossible d'enregistrer : " + (ex.InnerException?.Message ?? ex.Message), succes: false);
+                return;
+            }
 
-            TxtMessage.Text = "Employé modifié avec succès.";
-            TxtMessage.Foreground = System.Windows.Media.Brushes.Green;
-            BorderMessage.Background = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(236, 253, 245));
-            BorderMessage.Visibility = System.Windows.Visibility.Visible;
+            AfficherMessage("Employé modifié avec succès.", succes: true);
             ChargerEmployes();
             ViderFormulaire();
         }
@@ -209,32 +239,32 @@ namespace GestionCoutureApp.Views
         {
             if (_employeSelectionne == null)
             {
-                TxtMessage.Text = "Sélectionnez un employé.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Sélectionnez un employé.", succes: false);
                 return;
             }
 
             // Ne pas suspendre le Boss
             if (_employeSelectionne.Role == "Boss")
             {
-                TxtMessage.Text = "Impossible de suspendre le Boss.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                AfficherMessage("Impossible de suspendre le Boss.", succes: false);
                 return;
             }
+
+            string nomComplet = _employeSelectionne.Prenom + " " + _employeSelectionne.Nom;
 
             if (_employeSelectionne.Statut == "Actif")
             {
                 _employeSelectionne.Statut = "Suspendu";
-                TxtMessage.Text = _employeSelectionne.Prenom + " " + _employeSelectionne.Nom + " suspendu.";
+                _context.SaveChanges();
+                AfficherMessage(nomComplet + " suspendu.", succes: true);
             }
             else
             {
                 _employeSelectionne.Statut = "Actif";
-                TxtMessage.Text = _employeSelectionne.Prenom + " " + _employeSelectionne.Nom + " réactivé.";
+                _context.SaveChanges();
+                AfficherMessage(nomComplet + " réactivé.", succes: true);
             }
 
-            TxtMessage.Foreground = System.Windows.Media.Brushes.Orange;
-            _context.SaveChanges();
             ChargerEmployes();
             ViderFormulaire();
         }
@@ -256,9 +286,29 @@ namespace GestionCoutureApp.Views
             TxtMotDePasse.Clear();
             CmbRole.SelectedIndex = -1;
             BtnSuspendre.Content = "Suspendre";
-            TxtMessage.Text = string.Empty;
-            BorderMessage.Visibility = System.Windows.Visibility.Collapsed;
             GridEmployes.SelectedItem = null;
+        }
+
+        // ------------------------------------------------------------------
+        // Affichage du message de retour — CORRECTIF DU BUG :
+        // avant, seul le chemin de succes rendait BorderMessage visible ;
+        // toutes les erreurs de validation restaient invisibles a l'ecran.
+        // Desormais un seul point de sortie rend TOUJOURS le message visible,
+        // qu'il s'agisse d'un succes ou d'une erreur.
+        // ------------------------------------------------------------------
+        private void AfficherMessage(string texte, bool succes)
+        {
+            TxtMessage.Text = texte;
+            TxtMessage.Foreground = succes
+                ? System.Windows.Media.Brushes.Green
+                : System.Windows.Media.Brushes.Red;
+
+            BorderMessage.Background = new System.Windows.Media.SolidColorBrush(
+                succes
+                    ? System.Windows.Media.Color.FromRgb(236, 253, 245)   // vert clair
+                    : System.Windows.Media.Color.FromRgb(254, 242, 242)); // rouge clair
+
+            BorderMessage.Visibility = System.Windows.Visibility.Visible;
         }
 
         // ------------------------------------------------------------------

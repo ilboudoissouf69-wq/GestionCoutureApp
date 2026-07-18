@@ -1,53 +1,59 @@
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace GestionCoutureApp.Services
 {
     public class ClientService : IClientService
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
 
-        public ClientService(ApplicationDbContext context)
+        public ClientService(IDbContextFactory<ApplicationDbContext> contextFactory)
         {
-            _context = context;
+            _contextFactory = contextFactory;
         }
 
         public List<Client> ObtenirTous()
         {
-            return _context.Clients.ToList();
+            using var context = _contextFactory.CreateDbContext();
+            return context.Clients.ToList();
         }
 
         public void Ajouter(Client client)
         {
-            _context.Clients.Add(client);
-            _context.SaveChanges();
+            using var context = _contextFactory.CreateDbContext();
+            context.Clients.Add(client);
+            context.SaveChanges();
         }
 
         public void Modifier(Client client)
         {
-            var existant = _context.Clients.Find(client.IdClient);
+            using var context = _contextFactory.CreateDbContext();
+            var existant = context.Clients.Find(client.IdClient);
             if (existant != null)
             {
                 existant.Nom = client.Nom;
                 existant.Prenom = client.Prenom;
                 existant.Telephone = client.Telephone;
-                _context.SaveChanges();
+                context.SaveChanges();
             }
         }
 
         public void Supprimer(int id)
         {
-            var client = _context.Clients.Find(id);
+            using var context = _contextFactory.CreateDbContext();
+            var client = context.Clients.Find(id);
             if (client != null)
             {
-                _context.Clients.Remove(client);
-                _context.SaveChanges();
+                context.Clients.Remove(client);
+                context.SaveChanges();
             }
         }
 
         public List<Client> Rechercher(string motCle)
         {
-            return _context.Clients
+            using var context = _contextFactory.CreateDbContext();
+            return context.Clients
                 .Where(c => c.Nom.Contains(motCle)
                          || c.Prenom.Contains(motCle)
                          || c.Telephone.Contains(motCle))

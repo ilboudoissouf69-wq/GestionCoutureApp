@@ -19,56 +19,83 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="Types de Vetements"
+            <TextBlock Grid.Row="0"
+                    Text="Types de Vetements"
                        Style="{StaticResource SectionTitle}"/>
 
-            <TextBox Grid.Row="1" x:Name="TxtRecherche"
+            <TextBox Grid.Row="1"
+                    x:Name="TxtRecherche"
                      Style="{StaticResource ModernTextBox}"
                      Margin="0,0,0,14"
                      TextChanged="TxtRecherche_TextChanged"/>
 
-            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+            <Border Grid.Row="2"
+                    Style="{StaticResource Card}"
+                    Padding="0">
 
                 <DataGrid x:Name="GridTypes"
                           Style="{StaticResource ModernGrid}"
                           SelectionChanged="GridTypes_SelectionChanged">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Nom du type"         Binding="{Binding Nom}"       Width="*"/>
-                        <DataGridTextColumn Header="Prix de base (FCFA)" Binding="{Binding PrixBase}"  Width="160"/>
-                        <DataGridTextColumn Header="Nb mesures"          Binding="{Binding NbMesures}" Width="110"/>
+                        <DataGridTextColumn Header="Nom du type"
+                                Binding="{Binding Nom}"
+                                Width="*"/>
+                        <DataGridTextColumn Header="Prix de base (FCFA)"
+                                Binding="{Binding PrixBase}"
+                                Width="160"/>
+                        <DataGridTextColumn Header="Nb mesures"
+                                Binding="{Binding NbMesures}"
+                                Width="110"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
         </Grid>
 
         <!-- DROITE -->
-        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0" VerticalAlignment="Top">
+        <Border Grid.Column="2"
+                Style="{StaticResource Card}"
+                Padding="0"
+                VerticalAlignment="Top">
 
             <StackPanel>
-                <Border CornerRadius="10,10,0,0" Padding="20,14">
+                <Border CornerRadius="10,10,0,0"
+                        Padding="20,14">
                     <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                            <GradientStop Color="#1E3A5F" Offset="0"/>
-                            <GradientStop Color="#0D9488" Offset="1"/>
+                        <LinearGradientBrush StartPoint="0,0"
+                                EndPoint="1,0">
+                            <GradientStop Color="#1E3A5F"
+                                    Offset="0"/>
+                            <GradientStop Color="#0D9488"
+                                    Offset="1"/>
                         </LinearGradientBrush>
                     </Border.Background>
-                    <TextBlock Text="Details du type" FontSize="14"
-                               FontWeight="Bold" Foreground="White"/>
+                    <TextBlock Text="Details du type"
+                            FontSize="14"
+                               FontWeight="Bold"
+                            Foreground="White"/>
                 </Border>
 
                 <StackPanel Margin="20,16,20,20">
-                    <TextBlock Text="Nom *" Style="{StaticResource FieldLabel}"/>
-                    <TextBox x:Name="TxtNom" Style="{StaticResource ModernTextBox}"
+                    <TextBlock Text="Nom *"
+                            Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TxtNom"
+                            Style="{StaticResource ModernTextBox}"
                              Margin="0,0,0,12"/>
 
-                    <TextBlock Text="Prix de base (FCFA) *" Style="{StaticResource FieldLabel}"/>
-                    <TextBox x:Name="TxtPrixBase" Style="{StaticResource ModernTextBox}"
+                    <TextBlock Text="Prix de base (FCFA) *"
+                            Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TxtPrixBase"
+                            Style="{StaticResource ModernTextBox}"
                              Margin="0,0,0,18"/>
 
-                    <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,14"/>
+                    <Separator Background="{StaticResource BorderBrush}"
+                            Margin="0,0,0,14"/>
 
-                    <TextBlock Text="Mesures requises" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,10"/>
+                    <TextBlock Text="Mesures requises"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                               Foreground="{StaticResource PrimaryBrush}"
+                            Margin="0,0,0,10"/>
 
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
@@ -76,43 +103,63 @@
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="44"/>
                         </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtNomMesure" Grid.Column="0"
-                                 Style="{StaticResource ModernTextBox}" Height="36"/>
-                        <Button Grid.Column="2" x:Name="BtnAjouterMesure"
-                                Content="+" Height="36"
+                        <TextBox x:Name="TxtNomMesure"
+                                Grid.Column="0"
+                                 Style="{StaticResource ModernTextBox}"
+                                Height="36"/>
+                        <Button Grid.Column="2"
+                                x:Name="BtnAjouterMesure"
+                                Content="+"
+                                Height="36"
                                 Style="{StaticResource BtnPrimary}"
-                                Padding="0" FontSize="18" FontWeight="Bold"
+                                Padding="0"
+                                FontSize="18"
+                                FontWeight="Bold"
                                 Click="BtnAjouterMesure_Click"/>
                     </Grid>
 
                     <Border BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1" CornerRadius="7" Margin="0,0,0,16">
-                        <ListBox x:Name="ListeMesures" MaxHeight="140"
-                                 BorderThickness="0" Background="Transparent" FontSize="13">
+                            BorderThickness="1"
+                            CornerRadius="7"
+                            Margin="0,0,0,16">
+                        <ListBox x:Name="ListeMesures"
+                                MaxHeight="140"
+                                 BorderThickness="0"
+                                Background="Transparent"
+                                FontSize="13">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
-                                    <Setter Property="Padding"         Value="12,8"/>
-                                    <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
-                                    <Setter Property="BorderThickness"  Value="0,0,0,1"/>
+                                    <Setter Property="Padding"
+                                            Value="12,8"/>
+                                    <Setter Property="BorderBrush"
+                                            Value="{StaticResource BorderBrush}"/>
+                                    <Setter Property="BorderThickness"
+                                            Value="0,0,0,1"/>
                                 </Style>
                             </ListBox.ItemContainerStyle>
                         </ListBox>
                     </Border>
 
-                    <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,14"/>
+                    <Separator Background="{StaticResource BorderBrush}"
+                            Margin="0,0,0,14"/>
 
                     <Button Content="Enregistrer"
                             Style="{StaticResource BtnSuccess}"
-                            Click="BtnEnregistrer_Click" Margin="0,0,0,8"/>
+                            Click="BtnEnregistrer_Click"
+                            Margin="0,0,0,8"/>
                     <Button Content="Supprimer"
                             Style="{StaticResource BtnDanger}"
-                            Click="BtnSupprimer_Click" Margin="0,0,0,8"/>
+                            Click="BtnSupprimer_Click"
+                            Margin="0,0,0,8"/>
                     <Button Content="Vider"
                             Style="{StaticResource BtnGhost}"
-                            Click="BtnVider_Click" Margin="0,0,0,8"/>
+                            Click="BtnVider_Click"
+                            Margin="0,0,0,8"/>
 
-                    <TextBlock x:Name="TxtMessage" FontSize="12"
-                               TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    <TextBlock x:Name="TxtMessage"
+                            FontSize="12"
+                               TextWrapping="Wrap"
+                            Margin="0,6,0,0"/>
                 </StackPanel>
             </StackPanel>
         </Border>
