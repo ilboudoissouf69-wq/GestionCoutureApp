@@ -136,6 +136,26 @@ namespace GestionCoutureApp.Views
                 Espace(p, 8);
             }
 
+            // ===== LOGO =====
+            Espace(p, 8);
+            try
+            {
+                var logo = new System.Windows.Controls.Image
+                {
+                    Source = new System.Windows.Media.Imaging.BitmapImage(
+                        new Uri("pack://application:,,,/Resources/logo_retouche_choco.png")),
+                    Width = 100,
+                    Height = 100,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                    Stretch = System.Windows.Media.Stretch.Uniform,
+                    Margin = new Thickness(0, 0, 0, 6)
+                };
+                System.Windows.Media.RenderOptions.SetBitmapScalingMode(
+                    logo, System.Windows.Media.BitmapScalingMode.HighQuality);
+                p.Children.Add(logo);
+            }
+            catch { /* si le logo est absent, on continue sans planter */ }
+
             // ===== EN-TETE BOUTIQUE =====
             Espace(p, 8);
             Ligne(p, "RETOUCHE CHOCO", 14, TextAlignment.Center, Marque, FontWeights.Bold);

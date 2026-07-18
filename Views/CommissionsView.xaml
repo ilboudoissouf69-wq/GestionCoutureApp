@@ -1,31 +1,28 @@
 ﻿<Page x:Class="GestionCoutureApp.Views.CommissionsView"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="#F0F2F5">
+      Background="{StaticResource BackgroundBrush}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="28,24,28,28">
 
-            <TextBlock Text="Commissions des Couturiers"
-                       FontSize="22"
-                       FontWeight="Bold"
-                       Foreground="#1E3A5F"
-                       Margin="0,0,0,20"/>
+            <!-- TITRE -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Commissions des Couturiers"
+                           FontSize="22" FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryBrush}"/>
+                <Border Height="3" Width="48" CornerRadius="2"
+                        Background="#CC0000" HorizontalAlignment="Left"
+                        Margin="0,6,0,0"/>
+            </StackPanel>
 
             <!-- Parametres -->
-            <Border Background="White"
-                    CornerRadius="8"
-                    Padding="20"
-                    BorderBrush="#E0E0E0"
-                    BorderThickness="1"
-                    Margin="0,0,0,20">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
                     <TextBlock Text="Parametres de calcul"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="#1E3A5F"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"
                                Margin="0,0,0,15"/>
-
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -38,288 +35,150 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Commission (%)"
-                                       FontSize="12"
-                                       Foreground="#7F8C8D"
-                                       Margin="0,0,0,4"/>
-                            <TextBox x:Name="TxtPourcentage"
-                                     Text="40"
-                                     Height="38"
-                                     FontSize="13"
-                                     VerticalContentAlignment="Center"
-                                     Padding="8,0,8,0"
-                                     BorderBrush="#D5D8DC"/>
+                            <TextBlock Text="Commission (%)" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtPourcentage" Text="40"
+                                     Style="{StaticResource ModernTextBox}"/>
                         </StackPanel>
-
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="Date debut"
-                                       FontSize="12"
-                                       Foreground="#7F8C8D"
-                                       Margin="0,0,0,4"/>
-                            <DatePicker x:Name="DateDebut"
-                                        Height="38"
-                                        FontSize="13"
-                                        BorderBrush="#D5D8DC"/>
+                            <TextBlock Text="Date debut" Style="{StaticResource FieldLabel}"/>
+                            <DatePicker x:Name="DateDebut" Height="38" FontSize="13"
+                                        BorderBrush="{StaticResource BorderBrush}"/>
                         </StackPanel>
-
                         <StackPanel Grid.Column="4">
-                            <TextBlock Text="Date fin"
-                                       FontSize="12"
-                                       Foreground="#7F8C8D"
-                                       Margin="0,0,0,4"/>
-                            <DatePicker x:Name="DateFin"
-                                        Height="38"
-                                        FontSize="13"
-                                        BorderBrush="#D5D8DC"/>
+                            <TextBlock Text="Date fin" Style="{StaticResource FieldLabel}"/>
+                            <DatePicker x:Name="DateFin" Height="38" FontSize="13"
+                                        BorderBrush="{StaticResource BorderBrush}"/>
                         </StackPanel>
-
                         <Button Grid.Column="6"
                                 Content="Aperçu"
-                                Height="38"
-                                FontSize="13"
-                                FontWeight="Bold"
-                                Foreground="White"
-                                Background="#2E86C1"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                VerticalAlignment="Bottom"
-                                Click="BtnCalculer_Click">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius"
-                                            Value="6"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                                Style="{StaticResource BtnPrimary}"
+                                Height="38" VerticalAlignment="Bottom"
+                                Click="BtnCalculer_Click"/>
                     </Grid>
 
                     <StackPanel>
-                        <TextBlock Text="Base de calcul"
-                                   FontSize="12"
-                                   Foreground="#7F8C8D"
-                                   Margin="0,0,0,4"/>
+                        <TextBlock Text="Base de calcul" Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="CmbBaseCalcul"
-                                  Height="36"
-                                  FontSize="13"
-                                  Padding="8,0,8,0"
-                                  BorderBrush="#D5D8DC"
+                                  Style="{StaticResource ModernComboBox}"
                                   SelectionChanged="CmbBaseCalcul_SelectionChanged">
-                            <ComboBoxItem Content="Montant réellement encaissé (recommandé)"
-                                    Tag="Encaisse"/>
-                            <ComboBoxItem Content="Montant total de la commande (même si non soldée)"
-                                    Tag="Total"/>
+                            <ComboBoxItem Content="Montant réellement encaissé (recommandé)" Tag="Encaisse"/>
+                            <ComboBoxItem Content="Montant total de la commande (même si non soldée)" Tag="Total"/>
                         </ComboBox>
                         <TextBlock x:Name="TxtAvertissementBase"
-                                   FontSize="11"
-                                   Foreground="#D97706"
-                                   TextWrapping="Wrap"
-                                   Margin="0,6,0,0"
-                                   Visibility="Collapsed"/>
+                                   FontSize="11" Foreground="{StaticResource WarningBrush}"
+                                   TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
 
             <!-- Filtre couturier -->
-            <Border Background="White"
-                    CornerRadius="8"
-                    Padding="20"
-                    BorderBrush="#E0E0E0"
-                    BorderThickness="1"
-                    Margin="0,0,0,20">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
                     <TextBlock Text="Filtrer par couturier (optionnel)"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="#1E3A5F"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"
                                Margin="0,0,0,10"/>
                     <ComboBox x:Name="CmbCouturier"
-                              Height="36"
-                              FontSize="13"
-                              Padding="8,0,8,0"
-                              BorderBrush="#D5D8DC"
+                              Style="{StaticResource ModernComboBox}"
                               SelectionChanged="CmbCouturier_SelectionChanged"/>
                 </StackPanel>
             </Border>
 
-            <!-- Cartes stats -->
-            <UniformGrid Columns="3"
-                    Margin="0,0,0,10">
-                <Border Background="#3498DB"
-                        CornerRadius="8"
-                        Padding="15"
-                        Margin="0,0,8,0">
+            <!-- 3 Cartes stats — palette sobre -->
+            <UniformGrid Columns="3" Margin="0,0,0,10">
+
+                <!-- CA — noir charbon -->
+                <Border CornerRadius="8" Padding="18,14" Margin="0,0,8,0"
+                        Background="#1A1A1A">
                     <StackPanel>
-                        <TextBlock Text="CA (base retenue)"
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#D6EAF8"/>
-                        <TextBlock x:Name="TxtCaTotal"
-                                Text="0"
-                                FontSize="26"
-                                FontWeight="Bold"
-                                Foreground="White"
-                                Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA"
-                                FontSize="11"
-                                Foreground="#D6EAF8"/>
+                        <TextBlock Text="CA (BASE RETENUE)"
+                                   FontSize="10" FontWeight="Bold" Foreground="#B0A8A4"/>
+                        <TextBlock x:Name="TxtCaTotal" Text="0"
+                                   FontSize="28" FontWeight="Bold" Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="FCFA" FontSize="11" Foreground="#B0A8A4"/>
                     </StackPanel>
                 </Border>
-                <Border Background="#E67E22"
-                        CornerRadius="8"
-                        Padding="15"
-                        Margin="0,0,8,0">
+
+                <!-- Commissions — rouge marque -->
+                <Border CornerRadius="8" Padding="18,14" Margin="0,0,8,0"
+                        Background="#CC0000">
                     <StackPanel>
                         <TextBlock Text="COMMISSIONS"
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#FDEBD0"/>
-                        <TextBlock x:Name="TxtTotalCommissions"
-                                Text="0"
-                                FontSize="26"
-                                FontWeight="Bold"
-                                Foreground="White"
-                                Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA a reverser"
-                                FontSize="11"
-                                Foreground="#FDEBD0"/>
+                                   FontSize="10" FontWeight="Bold" Foreground="#FFCCCC"/>
+                        <TextBlock x:Name="TxtTotalCommissions" Text="0"
+                                   FontSize="28" FontWeight="Bold" Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="FCFA a reverser" FontSize="11" Foreground="#FFCCCC"/>
                     </StackPanel>
                 </Border>
-                <Border Background="#2ECC71"
-                        CornerRadius="8"
-                        Padding="15">
+
+                <!-- Reste atelier — gris chaud foncé -->
+                <Border CornerRadius="8" Padding="18,14"
+                        Background="#3D3530">
                     <StackPanel>
                         <TextBlock Text="RESTE ATELIER"
-                                FontSize="11"
-                                FontWeight="Bold"
-                                Foreground="#D5F5E3"/>
-                        <TextBlock x:Name="TxtResteAtelier"
-                                Text="0"
-                                FontSize="26"
-                                FontWeight="Bold"
-                                Foreground="White"
-                                Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA pour l'atelier"
-                                FontSize="11"
-                                Foreground="#D5F5E3"/>
+                                   FontSize="10" FontWeight="Bold" Foreground="#C8B8B0"/>
+                        <TextBlock x:Name="TxtResteAtelier" Text="0"
+                                   FontSize="28" FontWeight="Bold" Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="FCFA pour l'atelier" FontSize="11" Foreground="#C8B8B0"/>
                     </StackPanel>
                 </Border>
             </UniformGrid>
 
             <TextBlock Text="Cet aperçu ne porte que sur les commandes pas encore rattachées à une commission déjà enregistrée. Une fois «Enregistrer» cliqué, ces commandes sont verrouillées et ne réapparaîtront plus dans un futur calcul."
-                       FontSize="11"
-                    Foreground="#7F8C8D"
-                    TextWrapping="Wrap"
-                    Margin="0,0,0,14"/>
+                       FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap" Margin="0,0,0,14"/>
 
             <!-- Detail par couturier -->
-            <Border Background="White"
-                    CornerRadius="8"
-                    Padding="20"
-                    BorderBrush="#E0E0E0"
-                    BorderThickness="1"
-                    Margin="0,0,0,20">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
                     <TextBlock Text="Detail par Couturier (aperçu, pas encore enregistré)"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="#1E3A5F"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"
                                Margin="0,0,0,10"/>
                     <DataGrid x:Name="GridCommissions"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              Background="White"
-                              BorderBrush="#E0E0E0"
-                              BorderThickness="1"
-                              AlternatingRowBackground="#F8F9FA"
-                              FontSize="12"
+                              Style="{StaticResource ModernGrid}"
                               Margin="0,0,0,14">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Couturier"
-                                    Binding="{Binding Nom}"
-                                    Width="*"/>
-                            <DataGridTextColumn Header="Commandes"
-                                    Binding="{Binding NbCommandes}"
-                                    Width="100"/>
-                            <DataGridTextColumn Header="CA total (FCFA)"
-                                    Binding="{Binding CaTotalAffiche}"
-                                    Width="130"/>
-                            <DataGridTextColumn Header="CA encaissé (FCFA)"
-                                    Binding="{Binding CaEncaisseAffiche}"
-                                    Width="140"/>
-                            <DataGridTextColumn Header="Base retenue (FCFA)"
-                                    Binding="{Binding BaseAffichee}"
-                                    Width="140"/>
-                            <DataGridTextColumn Header="Commission (FCFA)"
-                                    Binding="{Binding CommissionAffichee}"
-                                    Width="150"/>
+                            <DataGridTextColumn Header="Couturier"            Binding="{Binding Nom}"               Width="*"/>
+                            <DataGridTextColumn Header="Commandes"            Binding="{Binding NbCommandes}"       Width="100"/>
+                            <DataGridTextColumn Header="CA total (FCFA)"      Binding="{Binding CaTotalAffiche}"    Width="130"/>
+                            <DataGridTextColumn Header="CA encaissé (FCFA)"   Binding="{Binding CaEncaisseAffiche}" Width="140"/>
+                            <DataGridTextColumn Header="Base retenue (FCFA)"  Binding="{Binding BaseAffichee}"      Width="140"/>
+                            <DataGridTextColumn Header="Commission (FCFA)"    Binding="{Binding CommissionAffichee}" Width="150"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
                     <Button x:Name="BtnEnregistrer"
                             Content="Enregistrer ces commissions (verrouille les commandes concernées)"
-                            Height="42"
-                            FontSize="13"
-                            FontWeight="Bold"
-                            Foreground="White"
-                            Background="#1E3A5F"
-                            BorderThickness="0"
-                            Cursor="Hand"
+                            Style="{StaticResource BtnPrimary}"
+                            Height="42" FontSize="13" FontWeight="Bold"
                             IsEnabled="False"
-                            Click="BtnEnregistrer_Click">
-                        <Button.Resources>
-                            <Style TargetType="Border">
-                                <Setter Property="CornerRadius"
-                                        Value="6"/>
-                            </Style>
-                        </Button.Resources>
-                    </Button>
+                            Click="BtnEnregistrer_Click"/>
                 </StackPanel>
             </Border>
 
             <!-- Historique -->
-            <Border Background="White"
-                    CornerRadius="8"
-                    Padding="20"
-                    BorderBrush="#E0E0E0"
-                    BorderThickness="1">
+            <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="Historique des commissions enregistrées"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="#1E3A5F"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"
                                Margin="0,0,0,10"/>
                     <DataGrid x:Name="GridHistorique"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              Background="White"
-                              BorderBrush="#E0E0E0"
-                              BorderThickness="1"
-                              AlternatingRowBackground="#F8F9FA"
-                              FontSize="12"
+                              Style="{StaticResource ModernGrid}"
                               SelectionChanged="GridHistorique_SelectionChanged"
                               Margin="0,0,0,10">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Date"
-                                    Binding="{Binding DateCalculAffichee}"
-                                    Width="140"/>
-                            <DataGridTextColumn Header="Employé"
-                                    Binding="{Binding NomEmployeSnapshot}"
-                                    Width="*"/>
-                            <DataGridTextColumn Header="Période"
-                                    Binding="{Binding PeriodeAffichee}"
-                                    Width="180"/>
-                            <DataGridTextColumn Header="Base"
-                                    Binding="{Binding BaseCalcul}"
-                                    Width="90"/>
-                            <DataGridTextColumn Header="Montant (FCFA)"
-                                    Binding="{Binding MontantAffiche}"
-                                    Width="130"/>
-                            <DataGridTextColumn Header="Statut"
-                                    Binding="{Binding StatutAffichage}"
-                                    Width="90"/>
-                            <DataGridTextColumn Header="Enregistré par"
-                                    Binding="{Binding NomOperateur}"
-                                    Width="130"/>
+                            <DataGridTextColumn Header="Date"          Binding="{Binding DateCalculAffichee}"    Width="140"/>
+                            <DataGridTextColumn Header="Employé"       Binding="{Binding NomEmployeSnapshot}"    Width="*"/>
+                            <DataGridTextColumn Header="Période"       Binding="{Binding PeriodeAffichee}"       Width="180"/>
+                            <DataGridTextColumn Header="Base"          Binding="{Binding BaseCalcul}"            Width="90"/>
+                            <DataGridTextColumn Header="Montant (FCFA)" Binding="{Binding MontantAffiche}"       Width="130"/>
+                            <DataGridTextColumn Header="Statut"        Binding="{Binding StatutAffichage}"       Width="90"/>
+                            <DataGridTextColumn Header="Enregistré par" Binding="{Binding NomOperateur}"         Width="130"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -331,34 +190,17 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="TxtMotifAnnulation"
                                  Grid.Column="0"
-                                 Height="36"
-                                 FontSize="12"
-                                 Padding="8,0,8,0"
-                                 BorderBrush="#D5D8DC"
+                                 Style="{StaticResource ModernTextBox}"
                                  Tag="Motif de l'annulation (obligatoire)"/>
                         <Button x:Name="BtnAnnulerCommission"
                                 Grid.Column="2"
                                 Content="Annuler la sélection"
-                                Height="36"
-                                FontSize="12"
-                                FontWeight="Bold"
-                                Foreground="White"
-                                Background="#DC2626"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Click="BtnAnnulerCommission_Click">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius"
-                                            Value="6"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                                Style="{StaticResource BtnDanger}"
+                                Height="36" FontSize="12"
+                                Click="BtnAnnulerCommission_Click"/>
                     </Grid>
                     <TextBlock x:Name="TxtMessageHistorique"
-                               FontSize="11"
-                               Margin="0,6,0,0"
-                               TextWrapping="Wrap"/>
+                               FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 

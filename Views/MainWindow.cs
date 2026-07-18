@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 
 namespace GestionCoutureApp.Views
 {
@@ -6,11 +7,13 @@ namespace GestionCoutureApp.Views
     {
         private readonly Models.Employe _employeConnecte;
 
+        // Garde la référence du bouton actuellement actif
+        private Button? _boutonActif;
+
         public MainWindow(Models.Employe employe)
         {
             InitializeComponent();
             _employeConnecte = employe;
-            // Nom complet + role dans la sidebar
             TxtUtilisateur.Text = $"{employe.Prenom} {employe.Nom} ({employe.Role})";
 
             string role = employe.Role;
@@ -27,6 +30,7 @@ namespace GestionCoutureApp.Views
                     BtnEmployes.Visibility = Visibility.Visible;
                     BtnCommissions.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
+                    SetBoutonActif(BtnTableauDeBord);
                 }
                 else if (role == "Secretaire")
                 {
@@ -38,6 +42,7 @@ namespace GestionCoutureApp.Views
                     BtnEmployes.Visibility = Visibility.Collapsed;
                     BtnCommissions.Visibility = Visibility.Collapsed;
                     ContentFrame.Navigate(new DashboardView());
+                    SetBoutonActif(BtnTableauDeBord);
                 }
                 else if (role == "Couturier")
                 {
@@ -55,10 +60,19 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // Défense en profondeur : le masquage des boutons (voir Loaded ci-dessus)
-        // gère l'ergonomie, mais chaque handler de clic revérifie lui-même le rôle
-        // avant de naviguer. Ainsi, même si un bouton redevenait visible par erreur
-        // (bug futur, mauvaise config XAML...), l'accès reste bloqué ici.
+        // Active visuellement un bouton de nav et désactive l'ancien
+        // ------------------------------------------------------------------
+        private void SetBoutonActif(Button bouton)
+        {
+            // Remet l'ancien bouton au style normal
+            if (_boutonActif != null)
+                _boutonActif.Style = (Style)Resources["NavBtn"];
+
+            // Applique le style actif au nouveau bouton
+            bouton.Style = (Style)Resources["NavBtnActif"];
+            _boutonActif = bouton;
+        }
+
         // ------------------------------------------------------------------
         private bool RoleAutorise(params string[] rolesAutorises)
         {
@@ -73,24 +87,28 @@ namespace GestionCoutureApp.Views
         {
             if (!RoleAutorise("Boss", "Secretaire")) return;
             ContentFrame.Navigate(new DashboardView());
+            SetBoutonActif(BtnTableauDeBord);
         }
 
         private void BtnClients_Click(object sender, RoutedEventArgs e)
         {
             if (!RoleAutorise("Boss", "Secretaire")) return;
             ContentFrame.Navigate(new ClientsView());
+            SetBoutonActif(BtnClients);
         }
 
         private void BtnCommandes_Click(object sender, RoutedEventArgs e)
         {
             if (!RoleAutorise("Boss", "Secretaire")) return;
             ContentFrame.Navigate(new CommandesView());
+            SetBoutonActif(BtnCommandes);
         }
 
         private void BtnPaiements_Click(object sender, RoutedEventArgs e)
         {
             if (!RoleAutorise("Boss", "Secretaire")) return;
             ContentFrame.Navigate(new PaiementsView());
+            SetBoutonActif(BtnPaiements);
         }
 
         private void BtnTypesVetements_Click(object sender, RoutedEventArgs e)
@@ -99,6 +117,7 @@ namespace GestionCoutureApp.Views
             try
             {
                 ContentFrame.Navigate(new TypesVetementsView());
+                SetBoutonActif(BtnTypesVetements);
             }
             catch (UnauthorizedAccessException)
             {
@@ -112,6 +131,7 @@ namespace GestionCoutureApp.Views
             try
             {
                 ContentFrame.Navigate(new EmployesView());
+                SetBoutonActif(BtnEmployes);
             }
             catch (UnauthorizedAccessException)
             {
@@ -132,6 +152,7 @@ namespace GestionCoutureApp.Views
             try
             {
                 ContentFrame.Navigate(new CommissionsView());
+                SetBoutonActif(BtnCommissions);
             }
             catch (UnauthorizedAccessException)
             {

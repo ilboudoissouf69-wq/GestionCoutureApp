@@ -19,8 +19,15 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="Gestion des Clients"
-                       Style="{StaticResource SectionTitle}"/>
+            <!-- Titre avec trait rouge -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock Text="Gestion des Clients"
+                           FontSize="22" FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryBrush}"/>
+                <Border Height="3" Width="40" CornerRadius="2"
+                        Background="#CC0000" HorizontalAlignment="Left"
+                        Margin="0,6,0,0"/>
+            </StackPanel>
 
             <TextBox Grid.Row="1" x:Name="TxtRecherche"
                      Style="{StaticResource ModernTextBox}"
@@ -28,7 +35,6 @@
                      TextChanged="TxtRecherche_TextChanged"/>
 
             <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
-
                 <DataGrid x:Name="GridClients"
                           Style="{StaticResource ModernGrid}"
                           SelectionChanged="GridClients_SelectionChanged">
@@ -42,46 +48,36 @@
         </Grid>
 
         <!-- DROITE -->
-        <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
-
+        <Border Grid.Column="2" Style="{StaticResource Card}"
+                Padding="0" VerticalAlignment="Top">
             <StackPanel>
-                <Border CornerRadius="8" Padding="14,10" Margin="0,0,0,18">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                            <GradientStop Color="#1E3A5F" Offset="0"/>
-                            <GradientStop Color="#0D9488" Offset="1"/>
-                        </LinearGradientBrush>
-                    </Border.Background>
+                <!-- En-tête panel — noir -->
+                <Border CornerRadius="10,10,0,0" Padding="20,14"
+                        Background="#1A1A1A">
                     <TextBlock Text="Details du client"
                                FontSize="14" FontWeight="Bold" Foreground="White"/>
                 </Border>
 
-                <TextBlock Text="Nom *" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="TxtNom" Style="{StaticResource ModernTextBox}"
-                         Margin="0,0,0,12"/>
+                <StackPanel Margin="20,16,20,20">
+                    <TextBlock Text="Nom *" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TxtNom" Style="{StaticResource ModernTextBox}"
+                             Margin="0,0,0,12"/>
 
-                <TextBlock Text="Prenom *" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="TxtPrenom" Style="{StaticResource ModernTextBox}"
-                         Margin="0,0,0,12"/>
+                    <TextBlock Text="Prenom *" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TxtPrenom" Style="{StaticResource ModernTextBox}"
+                             Margin="0,0,0,12"/>
 
-                <TextBlock Text="Telephone" Style="{StaticResource FieldLabel}"/>
-                <TextBox x:Name="TxtTelephone" Style="{StaticResource ModernTextBox}"
-                         Margin="0,0,0,22"/>
+                    <TextBlock Text="Telephone" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="TxtTelephone" Style="{StaticResource ModernTextBox}"
+                             Margin="0,0,0,22"/>
 
-                <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,16"/>
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,16"/>
 
-                <Button Content="Ajouter"
-                        Style="{StaticResource BtnSuccess}"
-                        Click="BtnAjouter_Click" Margin="0,0,0,8"/>
-                <Button Content="Modifier"
-                        Style="{StaticResource BtnNavy}"
-                        Click="BtnModifier_Click" Margin="0,0,0,8"/>
-                <Button Content="Supprimer"
-                        Style="{StaticResource BtnDanger}"
-                        Click="BtnSupprimer_Click" Margin="0,0,0,8"/>
-                <Button Content="Vider les champs"
-                        Style="{StaticResource BtnGhost}"
-                        Click="BtnVider_Click"/>
+                    <Button Content="Ajouter"      Style="{StaticResource BtnSuccess}" Click="BtnAjouter_Click"  Margin="0,0,0,8"/>
+                    <Button Content="Modifier"     Style="{StaticResource BtnNavy}"   Click="BtnModifier_Click" Margin="0,0,0,8"/>
+                    <Button Content="Supprimer"    Style="{StaticResource BtnDanger}" Click="BtnSupprimer_Click" Margin="0,0,0,8"/>
+                    <Button Content="Vider les champs" Style="{StaticResource BtnGhost}" Click="BtnVider_Click"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>
