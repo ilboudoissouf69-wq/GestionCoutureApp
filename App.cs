@@ -1,6 +1,8 @@
 ﻿using System.Windows;
+using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
@@ -30,6 +32,13 @@ namespace GestionCoutureApp
             // DbContext de courte duree via IDbContextFactory, puis le "dispose".
             // C'est le pattern recommande par Microsoft pour les apps WPF/WinForms.
             // ------------------------------------------------------------------
+            // Logs structurés (sortie debug VS + Event Log Windows)
+            services.AddLogging(logging =>
+            {
+                logging.AddDebug();
+                logging.SetMinimumLevel(LogLevel.Information);
+            });
+
             services.AddDbContextFactory<ApplicationDbContext>(options =>
                 options.UseSqlite("Data Source=gestion_couture.db;Cache=Shared"));
 
@@ -40,6 +49,8 @@ namespace GestionCoutureApp
             services.AddSingleton<IPaiementService, PaiementService>();
             services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
+            // Sauvegarde automatique
+            services.AddSingleton<BackupService>();
             // NavigationService non enregistré : son constructeur exige un Frame,
             // qui n'existe qu'une fois MainWindow ouverte (pas au démarrage de l'app),
             // et n'est pas lui-même enregistré dans ce conteneur DI. Tel quel,
@@ -52,12 +63,18 @@ namespace GestionCoutureApp
 
             Services = services.BuildServiceProvider();
 
+            // Démarre la sauvegarde automatique dès le lancement
+            Services.GetRequiredService<BackupService>();
+
             // ====== Créer la base ======
             try
             {
                 var contextFactory = Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
                 using var context = contextFactory.CreateDbContext();
-                context.Database.EnsureCreated();
+                // Migrate() applique toutes les migrations en attente (crée la base
+                // si elle n'existe pas encore, sinon la met à jour sans perte de données).
+                // Remplace EnsureCreated() qui ne gérait jamais les évolutions de schéma.
+                context.Database.Migrate();
 
                 // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.
                 // On ne touche plus jamais à son mot de passe ensuite (sinon un Boss qui a

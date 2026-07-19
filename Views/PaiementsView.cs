@@ -81,12 +81,12 @@ namespace GestionCoutureApp.Views
                 + (_commandeSelectionnee.Client?.Nom ?? "") + " "
                 + (_commandeSelectionnee.Client?.Prenom ?? "");
 
-            double totalValide = _paiementService.TotalValideParCommande(idCmd);
-            double reste = _commandeSelectionnee.MontantTotal - totalValide;
+            decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
+            decimal reste = _commandeSelectionnee.MontantTotal - totalValide;
 
             TxtInfoMontant.Text = "Montant total : " + _commandeSelectionnee.MontantTotal.ToString("N0") + " FCFA";
             TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
-            TxtInfoReste.Text = "Reste : " + Math.Max(0, reste).ToString("N0") + " FCFA";
+            TxtInfoReste.Text = "Reste : " + Math.Max(0m, reste).ToString("N0") + " FCFA";
 
             // Historique detaille
             var historique = _paiementService.ObtenirParCommande(idCmd);
@@ -95,8 +95,8 @@ namespace GestionCoutureApp.Views
                 .ToList();
 
             // Desactive le champ montant si tout est paye
-            TxtMontant.IsEnabled = reste > 0.01;
-            BtnEnregistrer.IsEnabled = reste > 0.01;
+            TxtMontant.IsEnabled    = reste > 0.01m;
+            BtnEnregistrer.IsEnabled = reste > 0.01m;
         }
 
         // ----------------------------------------------------------------
@@ -119,7 +119,7 @@ namespace GestionCoutureApp.Views
             if (CmbCommande.SelectedValue == null)
             { Alerte("Selectionnez une commande."); return; }
 
-            if (!double.TryParse(TxtMontant.Text.Replace(" ", ""), out double montant) || montant <= 0)
+            if (!decimal.TryParse(TxtMontant.Text.Replace(" ", ""), out decimal montant) || montant <= 0)
             { Alerte("Le montant doit etre un nombre positif."); return; }
 
             if (_commandeSelectionnee == null)
@@ -129,13 +129,13 @@ namespace GestionCoutureApp.Views
             { Alerte("Aucun operateur connecte."); return; }
 
             // Verification solde en temps reel
-            double totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
-            double reste = _commandeSelectionnee.MontantTotal - totalValide;
+            decimal totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
+            decimal reste = _commandeSelectionnee.MontantTotal - totalValide;
 
-            if (reste <= 0.01)
+            if (reste <= 0.01m)
             { Alerte("Cette commande est deja entierement payee."); return; }
 
-            if (montant > reste + 0.01)
+            if (montant > reste + 0.01m)
             {
                 Alerte($"Le montant saisi ({montant:N0} FCFA) depasse\nle reste a payer ({reste:N0} FCFA).");
                 return;
@@ -160,8 +160,8 @@ namespace GestionCoutureApp.Views
             {
                 var paiement = new Paiement
                 {
-                    IdCommande = _commandeSelectionnee.IdCommande,
-                    MontantPaye = montant,
+                    IdCommande   = _commandeSelectionnee.IdCommande,
+                    MontantPaye  = montant,
                     ModePaiement = modeChoisi
                 };
 

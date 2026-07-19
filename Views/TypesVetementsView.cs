@@ -132,7 +132,7 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            if (!double.TryParse(TxtPrixBase.Text, out double prixBase) || prixBase <= 0)
+            if (!decimal.TryParse(TxtPrixBase.Text, out decimal prixBase) || prixBase <= 0)
             {
                 TxtMessage.Text = "Saisissez un prix valide.";
                 TxtMessage.Foreground = System.Windows.Media.Brushes.Red;

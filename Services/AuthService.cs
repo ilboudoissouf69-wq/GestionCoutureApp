@@ -1,26 +1,21 @@
 using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
+using Microsoft.Extensions.Logging;
 
 namespace GestionCoutureApp.Services
 {
     public class AuthService : IAuthService
     {
-        // Cree un DbContext frais a chaque operation plutot que de garder une
-        // instance partagee sur toute la duree de vie de l'application
-        // (voir remarque generale sur IDbContextFactory dans App.cs).
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly ILogger<AuthService> _logger;
 
         public Employe? UtilisateurConnecte { get; private set; }
 
-        // ------------------------------------------------------------------
-        // Protection anti brute-force (en mémoire, par identifiant).
-        // Suffisant pour une appli mono-poste : un redémarrage de l'appli
-        // réinitialise les compteurs, ce qui est un compromis acceptable ici
-        // (contrairement à une appli web exposée sur Internet).
-        // ------------------------------------------------------------------
+        // Protection anti brute-force (en mémoire, par identifiant)
         private const int MaxTentatives = 5;
         private static readonly TimeSpan DureeVerrouillage = TimeSpan.FromMinutes(2);
 
@@ -32,12 +27,14 @@ namespace GestionCoutureApp.Services
 
         private static readonly ConcurrentDictionary<string, SuiviTentatives> _tentatives = new();
 
-        public AuthService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        public AuthService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            ILogger<AuthService> logger)
         {
             _contextFactory = contextFactory;
+            _logger = logger;
         }
 
-        /// <summary>Hache un mot de passe avec l'algorithme sécurisé actuel (PBKDF2 + sel).</summary>
         public string HasherMotDePasse(string motDePasse) => PasswordHasher.Hasher(motDePasse);
 
         public Employe? Authentifier(string identifiant, string motDePasse)
@@ -51,9 +48,12 @@ namespace GestionCoutureApp.Services
                 {
                     var restant = suivi.VerrouJusqua.Value - DateTime.Now;
                     if (restant > TimeSpan.Zero)
+                    {
+                        _logger.LogWarning(
+                            "Connexion bloquée pour '{Id}' — compte verrouillé encore {Sec}s",
+                            identifiant, (int)restant.TotalSeconds);
                         throw new CompteVerrouilleException(restant);
-
-                    // Le verrou a expiré : on repart sur un compteur propre.
+                    }
                     suivi.Echecs = 0;
                     suivi.VerrouJusqua = null;
                 }
@@ -66,16 +66,25 @@ namespace GestionCoutureApp.Services
                 if (employe == null)
                 {
                     suivi.Echecs++;
+                    _logger.LogWarning(
+                        "Echec connexion '{Id}' — tentative {N}/{Max}",
+                        identifiant, suivi.Echecs, MaxTentatives);
+
                     if (suivi.Echecs >= MaxTentatives)
                     {
                         suivi.VerrouJusqua = DateTime.Now + DureeVerrouillage;
+                        _logger.LogWarning(
+                            "Compte '{Id}' verrouillé pour {Min} min après {Max} échecs",
+                            identifiant, DureeVerrouillage.TotalMinutes, MaxTentatives);
                     }
                 }
                 else
                 {
-                    // Connexion réussie : on remet le compteur à zéro.
                     suivi.Echecs = 0;
                     suivi.VerrouJusqua = null;
+                    _logger.LogInformation(
+                        "Connexion réussie — {Id} (rôle : {Role})",
+                        identifiant, employe.Role);
                 }
             }
 
@@ -85,9 +94,6 @@ namespace GestionCoutureApp.Services
         private Employe? AuthentifierInterne(string identifiant, string motDePasse)
         {
             using var context = _contextFactory.CreateDbContext();
-
-            // On récupère l'employé par identifiant seul (le hash n'est plus comparable
-            // directement en SQL puisqu'il dépend d'un sel unique par utilisateur).
             var employe = context.Employes.FirstOrDefault(e => e.Identifiant == identifiant);
 
             if (employe == null || employe.Statut != "Actif")
@@ -97,14 +103,14 @@ namespace GestionCoutureApp.Services
 
             if (PasswordHasher.EstAncienFormatSha256(employe.MotDePasse))
             {
-                // Compatibilité : compte pas encore migré vers PBKDF2.
                 motDePasseValide = employe.MotDePasse == PasswordHasher.HasherAncienSha256(motDePasse);
-
                 if (motDePasseValide)
                 {
-                    // Migration transparente vers le hachage sécurisé, à la prochaine connexion réussie.
+                    // Migration transparente vers PBKDF2
                     employe.MotDePasse = PasswordHasher.Hasher(motDePasse);
                     context.SaveChanges();
+                    _logger.LogInformation(
+                        "Mot de passe migré SHA-256→PBKDF2 pour '{Id}'", identifiant);
                 }
             }
             else
@@ -112,11 +118,24 @@ namespace GestionCoutureApp.Services
                 motDePasseValide = PasswordHasher.Verifier(motDePasse, employe.MotDePasse);
             }
 
-            if (!motDePasseValide)
-                return null;
+            if (!motDePasseValide) return null;
 
             UtilisateurConnecte = employe;
             return employe;
+        }
+
+        // ----------------------------------------------------------------
+        // Validation d'un employé (utilisée par EmployesView)
+        // ----------------------------------------------------------------
+        public static void ValiderEmploye(Employe employe)
+        {
+            var ctx = new ValidationContext(employe);
+            var errors = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(employe, ctx, errors, validateAllProperties: true))
+            {
+                var msg = string.Join("\n", errors.Select(e => e.ErrorMessage));
+                throw new InvalidOperationException(msg);
+            }
         }
     }
 }

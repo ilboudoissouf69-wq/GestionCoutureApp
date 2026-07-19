@@ -226,13 +226,13 @@ namespace GestionCoutureApp.Views
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 6);
 
-            // ===== MONTANTS =====
-            double montantTotal = _paiement.MontantTotalCommande > 0
+            // Montants financiers en decimal
+            decimal montantTotal = _paiement.MontantTotalCommande > 0
                 ? _paiement.MontantTotalCommande : _commande.MontantTotal;
-            double resteAvant = _paiement.ResteAvantPaiement;
-            double montantCePai = _paiement.MontantPaye;
-            double resteApres = Math.Max(0, resteAvant - montantCePai);
-            double totalPaye = montantTotal - resteApres;
+            decimal resteAvant     = _paiement.ResteAvantPaiement;
+            decimal montantCePai   = _paiement.MontantPaye;
+            decimal resteApres     = Math.Max(0m, resteAvant - montantCePai);
+            decimal totalPaye      = montantTotal - resteApres;
 
             LigneMontant(p, "Montant commande", Fcfa(montantTotal), 10, Noir);
             LigneMontant(p, "Reste avant paiement", Fcfa(resteAvant), 10, Orange);
@@ -335,7 +335,7 @@ namespace GestionCoutureApp.Views
                   gras ? FontWeights.Bold : FontWeights.Normal);
         }
 
-        private static string Fcfa(double montant)
+        private static string Fcfa(decimal montant)
         {
             return montant.ToString("N0", new CultureInfo("fr-FR")) + " FCFA";
         }

@@ -1,7 +1,5 @@
-// Models/TypeVetement.cs
-// Représente un type de vêtement (ex: Pantalon, Chemise)
-// avec son prix de base, les mesures requises et les descriptions courantes.
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GestionCoutureApp.Models
 {
@@ -9,9 +7,22 @@ namespace GestionCoutureApp.Models
     {
         [Key]
         public int IdTypeVetement { get; set; }
-        public string Nom { get; set; } = string.Empty;         // "Pantalon", "Robe"...
-        public double PrixBase { get; set; }                    // Prix par défaut en FCFA
+
+        [Required]
+        [MaxLength(100)]
+        public string Nom { get; set; } = string.Empty;
+
+        // decimal : type exact pour l'argent
+        [Column(TypeName = "TEXT")]
+        public decimal PrixBase { get; set; }
+
         public List<MesureRequise> MesuresRequises { get; set; } = new();
         public List<DescriptionCourante> Descriptions { get; set; } = new();
+
+        [NotMapped]
+        public int NbMesures => MesuresRequises?.Count ?? 0;
+
+        [NotMapped]
+        public string DisplayText => $"{Nom}  —  {PrixBase:N0} FCFA";
     }
 }

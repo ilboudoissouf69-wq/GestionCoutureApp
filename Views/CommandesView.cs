@@ -16,7 +16,7 @@ namespace GestionCoutureApp.Views
         private readonly IClientService _clientService;
         private readonly ApplicationDbContext _context;
         private int _commandeSelectionneeId;
-        private double _prixBaseActuel;
+        private decimal _prixBaseActuel;
         private List<TypeVetement> _typesVetement;
         private string _cheminPhotoTemporaire = string.Empty;
         private string _roleUtilisateur;
@@ -138,8 +138,8 @@ namespace GestionCoutureApp.Views
         private void CalculerPrixTotal()
         {
             if (CmbAjustement.SelectedItem == null) return;
-            double ajustement = (int)CmbAjustement.SelectedItem;
-            double total = _prixBaseActuel + ajustement;
+            decimal ajustement = (int)CmbAjustement.SelectedItem;
+            decimal total = _prixBaseActuel + ajustement;
             TxtPrixTotal.Text = "Prix total : " + total + " FCFA";
             TxtMontant.Text = total.ToString();
         }
@@ -280,7 +280,7 @@ namespace GestionCoutureApp.Views
                 HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
                 HeureFin = ParseHeure(TxtHeureFin.Text),
                 Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
-                MontantTotal = double.Parse(TxtMontant.Text),
+                MontantTotal = decimal.Parse(TxtMontant.Text),
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
@@ -310,7 +310,7 @@ namespace GestionCoutureApp.Views
                 HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
                 HeureFin = ParseHeure(TxtHeureFin.Text),
                 Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
-                MontantTotal = double.Parse(TxtMontant.Text),
+                MontantTotal = decimal.Parse(TxtMontant.Text),
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
@@ -353,47 +353,106 @@ namespace GestionCoutureApp.Views
             { MessageBox.Show("Selectionnez un client.", "Champs manquants", MessageBoxButton.OK, MessageBoxImage.Warning); return true; }
             if (CmbTypeVetement.SelectedValue == null)
             { MessageBox.Show("Selectionnez un type de vetement.", "Champs manquants", MessageBoxButton.OK, MessageBoxImage.Warning); return true; }
-            if (!double.TryParse(TxtMontant.Text, out double m) || m <= 0)
+            if (!decimal.TryParse(TxtMontant.Text, out decimal m) || m <= 0)
             { MessageBox.Show("Le montant doit etre positif.", "Montant invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return true; }
             return false;
         }
 
         // ------------------------------------------------------------------
-        // Import photo depuis le disque
+        // Import photo depuis le disque — avec validation
         // ------------------------------------------------------------------
+        private static readonly string[] ExtensionsAutorisees = { ".jpg", ".jpeg", ".png", ".bmp" };
+        private const long TailleMaxOctets = 5 * 1024 * 1024; // 5 Mo
+
         private void BtnImporterPhoto_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog();
-            dialog.Title = "Selectionner une photo";
-            dialog.Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp|Tous les fichiers|*.*";
-
-            if (dialog.ShowDialog() == true)
+            var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                try
+                Title  = "Selectionner une photo",
+                Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                var info = new System.IO.FileInfo(dialog.FileName);
+
+                // --- Validation extension ---
+                string ext = info.Extension.ToLowerInvariant();
+                if (!ExtensionsAutorisees.Contains(ext))
                 {
-                    string dossierPhotos = System.IO.Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory, "photos");
-                    if (!System.IO.Directory.Exists(dossierPhotos))
-                        System.IO.Directory.CreateDirectory(dossierPhotos);
-
-                    string extension = System.IO.Path.GetExtension(dialog.FileName);
-                    string nomFichier = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}{extension}";
-                    string cheminDestination = System.IO.Path.Combine(dossierPhotos, nomFichier);
-
-                    System.IO.File.Copy(dialog.FileName, cheminDestination, true);
-
-                    _cheminPhotoTemporaire = cheminDestination;
-                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(
-                        new Uri(cheminDestination));
-                    TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
-                    BtnSupprimerPhoto.Visibility = Visibility.Visible;
+                    MessageBox.Show(
+                        $"Format non autorisé : {ext}\nFormats acceptés : JPG, PNG, BMP.",
+                        "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
-                catch (Exception ex)
+
+                // --- Validation taille (max 5 Mo) ---
+                if (info.Length > TailleMaxOctets)
                 {
-                    MessageBox.Show("Erreur lors de l'import : " + ex.Message,
-                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(
+                        $"L'image est trop volumineuse ({info.Length / 1024 / 1024:N1} Mo).\nTaille maximum autorisée : 5 Mo.",
+                        "Fichier trop grand", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
+
+                // --- Validation signature binaire (magic bytes) ---
+                if (!EstImageValide(dialog.FileName))
+                {
+                    MessageBox.Show(
+                        "Le fichier sélectionné n'est pas une image valide.",
+                        "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // --- Copie vers le dossier photos ---
+                string dossierPhotos = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "photos");
+                System.IO.Directory.CreateDirectory(dossierPhotos);
+
+                string nomFichier       = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}{ext}";
+                string cheminDestination = System.IO.Path.Combine(dossierPhotos, nomFichier);
+
+                System.IO.File.Copy(dialog.FileName, cheminDestination, overwrite: true);
+
+                _cheminPhotoTemporaire = cheminDestination;
+                ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(
+                    new Uri(cheminDestination));
+                TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
+                BtnSupprimerPhoto.Visibility   = Visibility.Visible;
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de l'import : " + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Vérifie les magic bytes du fichier pour confirmer qu'il s'agit bien
+        /// d'une image (protection contre un .exe renommé en .jpg, etc.).
+        /// </summary>
+        private static bool EstImageValide(string chemin)
+        {
+            try
+            {
+                using var fs = System.IO.File.OpenRead(chemin);
+                var header = new byte[8];
+                int lu = fs.Read(header, 0, header.Length);
+                if (lu < 3) return false;
+
+                // JPEG : FF D8 FF
+                if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
+                // PNG  : 89 50 4E 47 0D 0A 1A 0A
+                if (lu >= 8 && header[0] == 0x89 && header[1] == 0x50 &&
+                    header[2] == 0x4E && header[3] == 0x47) return true;
+                // BMP  : 42 4D
+                if (header[0] == 0x42 && header[1] == 0x4D) return true;
+
+                return false;
+            }
+            catch { return false; }
         }
 
         // ------------------------------------------------------------------

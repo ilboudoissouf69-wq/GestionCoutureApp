@@ -50,11 +50,13 @@ namespace GestionCoutureApp.Views
                 .Count(c => c.Statut != "Livree");
             TxtCommandesEnCours.Text = enCours.ToString();
 
-            // CA du jour — uniquement les paiements NON annules
+            // CA du jour — uniquement les paiements NON annulés
+            // AsEnumerable() : Sum sur decimal non supporté par SQLite côté SQL
             var aujourdhui = DateTime.Today;
-            double caJour = _context.Paiements
+            decimal caJour = _context.Paiements
                 .Where(p => p.DatePaiement.Date == aujourdhui && !p.EstAnnule)
-                .Sum(p => (double?)p.MontantPaye) ?? 0;
+                .AsEnumerable()
+                .Sum(p => p.MontantPaye);
             TxtCaJour.Text = caJour.ToString("N0");
 
             // Retards
@@ -72,20 +74,20 @@ namespace GestionCoutureApp.Views
         {
             GridGraphique.Children.Clear();
 
-            var revenus = new List<(string Jour, double Montant)>();
+            var revenus = new List<(string Jour, decimal Montant)>();
             for (int i = 6; i >= 0; i--)
             {
                 var date = DateTime.Today.AddDays(-i);
-                // Uniquement les paiements valides (non annules)
-                double total = _context.Paiements
+                // AsEnumerable() : Sum sur decimal non supporté par SQLite côté SQL
+                decimal total = _context.Paiements
                     .Where(p => p.DatePaiement.Date == date && !p.EstAnnule)
-                    .Sum(p => (double?)p.MontantPaye) ?? 0;
-
+                    .AsEnumerable()
+                    .Sum(p => p.MontantPaye);
                 string nomJour = date.ToString("ddd dd");
                 revenus.Add((nomJour, total));
             }
 
-            double maxMontant = revenus.Max(r => r.Montant);
+            decimal maxMontant = revenus.Max(r => r.Montant);
             if (maxMontant == 0) maxMontant = 1;
 
             // Créer la grille du graphique
@@ -114,14 +116,14 @@ namespace GestionCoutureApp.Views
                 grille.Children.Add(label);
 
                 // Barre
-                double proportion = (double)(montant / maxMontant);
+                double proportion = (double)montant / (double)maxMontant;
                 if (proportion < 0.05 && montant > 0) proportion = 0.05;
 
                 var barre = new Border
                 {
                     CornerRadius = new CornerRadius(4),
                     Background = montant > 0
-                        ? new SolidColorBrush(Color.FromRgb(46, 134, 193))
+                        ? new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))
                         : new SolidColorBrush(Color.FromRgb(220, 220, 220)),
                     Margin = new Thickness(0, 6, 0, 6),
                     VerticalAlignment = VerticalAlignment.Center,
@@ -181,6 +183,7 @@ namespace GestionCoutureApp.Views
                     cmd.DateFin.Date < aujourdhui),
                 CaTotal = _context.Commandes
                     .Where(cmd => cmd.IdCouturier == c.IdEmploye)
+                    .AsEnumerable()
                     .Sum(cmd => cmd.MontantTotal)
             }).ToList();
 
@@ -200,7 +203,7 @@ namespace GestionCoutureApp.Views
                 {
                     Client = c.Client != null ? c.Client.Nom + " " + c.Client.Prenom : "-",
                     Type = c.TypeVetement,
-                    Montant = c.MontantTotal,
+                    Montant = c.MontantTotal.ToString("N0") + " FCFA",
                     Statut = c.Statut,
                     DateFin = c.DateFin != default(DateTime)
                         ? c.DateFin.ToString("dd/MM/yyyy") : "-"

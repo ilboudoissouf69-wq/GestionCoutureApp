@@ -1,30 +1,31 @@
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GestionCoutureApp.Services
 {
     public class CommissionService : ICommissionService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly ILogger<CommissionService> _logger;
 
-        // Meme logique de verrou que PaiementService : evite qu'un double-clic
-        // n'enregistre deux fois la meme commission.
-        private static readonly object _verrou = new object();
+        private static readonly object _verrou = new();
 
-        public CommissionService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        public CommissionService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            ILogger<CommissionService> logger)
         {
             _contextFactory = contextFactory;
+            _logger = logger;
         }
 
         public List<ApercuCommission> CalculerApercu(
-            DateTime dateDebut, DateTime dateFin, double pourcentage,
+            DateTime dateDebut, DateTime dateFin, decimal pourcentage,
             bool surMontantEncaisse, int? idCouturierFiltre)
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // IMPORTANT : IdCommission == null => commande pas encore rattachee
-            // a une commission enregistree => eligible a un nouveau calcul.
             var query = context.Commandes
                 .Include(c => c.Paiements)
                 .Where(c => (c.Statut == "Terminee" || c.Statut == "Livree") &&
@@ -46,39 +47,45 @@ namespace GestionCoutureApp.Services
 
             foreach (var couturier in couturiers)
             {
-                var commandesDuCouturier = commandes
+                var cmdsCouturier = commandes
                     .Where(c => c.IdCouturier == couturier.IdEmploye)
                     .ToList();
 
-                if (commandesDuCouturier.Count == 0) continue;
+                if (cmdsCouturier.Count == 0) continue;
 
-                double caTotal = commandesDuCouturier.Sum(c => c.MontantTotal);
-                double caEncaisse = commandesDuCouturier.Sum(c => c.MontantEncaisse);
-                double base_ = surMontantEncaisse ? caEncaisse : caTotal;
-                double commission = base_ * (pourcentage / 100);
+                // AsEnumerable() : SQLite ne supporte pas Sum() sur decimal côté SQL
+                decimal caTotal    = cmdsCouturier.Sum(c => c.MontantTotal);
+                decimal caEncaisse = cmdsCouturier.Sum(c => c.MontantEncaisse);
+                decimal base_      = surMontantEncaisse ? caEncaisse : caTotal;
+                decimal commission = Math.Round(base_ * (pourcentage / 100m), 0);
 
                 resultat.Add(new ApercuCommission
                 {
-                    IdEmploye = couturier.IdEmploye,
-                    Nom = couturier.Prenom + " " + couturier.Nom,
-                    NbCommandes = commandesDuCouturier.Count,
-                    CaTotal = caTotal,
-                    CaEncaisse = caEncaisse,
-                    BaseCalcul = base_,
-                    Commission = commission,
-                    IdsCommandes = commandesDuCouturier.Select(c => c.IdCommande).ToList()
+                    IdEmploye     = couturier.IdEmploye,
+                    Nom           = couturier.Prenom + " " + couturier.Nom,
+                    NbCommandes   = cmdsCouturier.Count,
+                    CaTotal       = caTotal,
+                    CaEncaisse    = caEncaisse,
+                    BaseCalcul    = base_,
+                    Commission    = commission,
+                    IdsCommandes  = cmdsCouturier.Select(c => c.IdCommande).ToList()
                 });
             }
+
+            _logger.LogInformation(
+                "Aperçu commission calculé — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy} " +
+                "— {Pct}% — {NbCouturiers} couturier(s)",
+                dateDebut, dateFin, pourcentage, resultat.Count);
 
             return resultat;
         }
 
         public void EnregistrerCommissions(
             List<ApercuCommission> apercu, DateTime dateDebut, DateTime dateFin,
-            double pourcentage, bool surMontantEncaisse, int idOperateur, string nomOperateur)
+            decimal pourcentage, bool surMontantEncaisse, int idOperateur, string nomOperateur)
         {
             if (apercu == null || apercu.Count == 0)
-                throw new InvalidOperationException("Aucune commission a enregistrer pour cette periode.");
+                throw new InvalidOperationException("Aucune commission à enregistrer pour cette période.");
 
             lock (_verrou)
             {
@@ -89,9 +96,6 @@ namespace GestionCoutureApp.Services
                 {
                     if (ligne.IdsCommandes.Count == 0) continue;
 
-                    // Revalider en base que ces commandes ne sont toujours pas
-                    // deja verrouillees par une autre commission (protege contre
-                    // une double validation presque simultanee).
                     var commandes = context.Commandes
                         .Where(c => ligne.IdsCommandes.Contains(c.IdCommande) && c.IdCommission == null)
                         .ToList();
@@ -102,28 +106,39 @@ namespace GestionCoutureApp.Services
 
                     var commission = new Commission
                     {
-                        IdEmploye = ligne.IdEmploye,
-                        NomEmployeSnapshot = employe != null ? employe.Prenom + " " + employe.Nom : ligne.Nom,
-                        DateDebutPeriode = dateDebut.Date,
-                        DateFinPeriode = dateFin.Date,
-                        BaseCalcul = surMontantEncaisse ? "Encaisse" : "Total",
-                        Pourcentage = pourcentage,
-                        BaseMontant = commandes.Sum(c => surMontantEncaisse ? c.MontantEncaisse : c.MontantTotal),
-                        NbCommandes = commandes.Count,
-                        DateCalcul = DateTime.Now,
-                        IdOperateur = idOperateur,
-                        NomOperateur = nomOperateur,
-                        EstAnnulee = false
+                        IdEmploye         = ligne.IdEmploye,
+                        NomEmployeSnapshot = employe != null
+                            ? employe.Prenom + " " + employe.Nom
+                            : ligne.Nom,
+                        DateDebutPeriode  = dateDebut.Date,
+                        DateFinPeriode    = dateFin.Date,
+                        BaseCalcul        = surMontantEncaisse ? "Encaisse" : "Total",
+                        Pourcentage       = pourcentage,
+                        NbCommandes       = commandes.Count,
+                        DateCalcul        = DateTime.Now,
+                        IdOperateur       = idOperateur,
+                        NomOperateur      = nomOperateur,
+                        EstAnnulee        = false
                     };
-                    commission.MontantCommission = commission.BaseMontant * (pourcentage / 100);
+
+                    // AsEnumerable() déjà appliqué (commandes est une List<> en mémoire)
+                    commission.BaseMontant = commandes.Sum(c =>
+                        surMontantEncaisse ? c.MontantEncaisse : c.MontantTotal);
+                    commission.MontantCommission =
+                        Math.Round(commission.BaseMontant * (pourcentage / 100m), 0);
 
                     context.Commissions.Add(commission);
-                    context.SaveChanges(); // pour obtenir l'IdCommission genere
+                    context.SaveChanges();
 
                     foreach (var cmd in commandes)
                         cmd.IdCommission = commission.IdCommission;
 
                     context.SaveChanges();
+
+                    _logger.LogInformation(
+                        "Commission enregistrée — {Nom} — {NbCmd} commandes — {Montant:N0} FCFA — opérateur {Op}",
+                        commission.NomEmployeSnapshot, commission.NbCommandes,
+                        commission.MontantCommission, nomOperateur);
                 }
 
                 transaction.Commit();
@@ -152,18 +167,21 @@ namespace GestionCoutureApp.Services
                 ?? throw new InvalidOperationException("Commission introuvable.");
 
             if (commission.EstAnnulee)
-                throw new InvalidOperationException("Cette commission est deja annulee.");
+                throw new InvalidOperationException("Cette commission est déjà annulée.");
 
-            commission.EstAnnulee = true;
+            commission.EstAnnulee      = true;
             commission.MotifAnnulation = motif.Trim();
-            commission.DateAnnulation = DateTime.Now;
-            commission.NomAnnulateur = nomAnnulateur;
+            commission.DateAnnulation  = DateTime.Now;
+            commission.NomAnnulateur   = nomAnnulateur;
 
-            // Deverrouille les commandes : elles redeviennent eligibles a un futur calcul.
             foreach (var cmd in commission.Commandes)
                 cmd.IdCommission = null;
 
             context.SaveChanges();
+
+            _logger.LogWarning(
+                "Commission {Id} ANNULÉE par {Annulateur} — {NbCmd} commandes déverrouillées — motif : {Motif}",
+                idCommission, nomAnnulateur, commission.Commandes.Count, motif);
         }
     }
 }

@@ -120,7 +120,7 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void BtnCalculer_Click(object sender, RoutedEventArgs e)
         {
-            if (!double.TryParse(TxtPourcentage.Text, out double pourcentage) || pourcentage <= 0)
+            if (!decimal.TryParse(TxtPourcentage.Text, out decimal pourcentage) || pourcentage <= 0)
             {
                 MessageBox.Show("Saisissez un pourcentage valide.", "Erreur",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -134,24 +134,14 @@ namespace GestionCoutureApp.Views
             _dernierApercu = _commissionService.CalculerApercu(
                 dateDebut, dateFin, pourcentage, _surMontantEncaisse, _idCouturierSelectionne);
 
-            double caTotalRetenu = _dernierApercu.Sum(a => a.BaseCalcul);
-            double totalCommissions = _dernierApercu.Sum(a => a.Commission);
+            decimal caTotalRetenu = _dernierApercu.Sum(a => a.BaseCalcul);
+            decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);
 
             TxtCaTotal.Text = caTotalRetenu.ToString("N0");
             TxtTotalCommissions.Text = totalCommissions.ToString("N0");
             TxtResteAtelier.Text = (caTotalRetenu - totalCommissions).ToString("N0");
 
-            var affichage = _dernierApercu.Select(a => new
-            {
-                a.Nom,
-                a.NbCommandes,
-                CaTotalAffiche = a.CaTotal.ToString("N0"),
-                CaEncaisseAffiche = a.CaEncaisse.ToString("N0"),
-                BaseAffichee = a.BaseCalcul.ToString("N0"),
-                CommissionAffichee = a.Commission.ToString("N0")
-            }).ToList();
-
-            GridCommissions.ItemsSource = affichage;
+            GridCommissions.ItemsSource = _dernierApercu;
 
             BtnEnregistrer.IsEnabled = _dernierApercu.Count > 0;
         }
@@ -168,7 +158,7 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            double totalCommissions = _dernierApercu.Sum(a => a.Commission);
+            decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);
             var confirmation = MessageBox.Show(
                 $"Vous allez enregistrer {totalCommissions:N0} FCFA de commissions pour " +
                 $"{_dernierApercu.Count} couturier(s).\n\n" +
@@ -179,7 +169,7 @@ namespace GestionCoutureApp.Views
 
             if (confirmation != MessageBoxResult.Yes) return;
 
-            double.TryParse(TxtPourcentage.Text, out double pourcentage);
+            decimal.TryParse(TxtPourcentage.Text, out decimal pourcentage);
             DateTime dateDebut = DateDebut.SelectedDate ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             DateTime dateFin = DateFin.SelectedDate ?? DateTime.Today;
 

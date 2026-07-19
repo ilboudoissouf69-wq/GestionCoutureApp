@@ -1,16 +1,22 @@
+using System.ComponentModel.DataAnnotations;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GestionCoutureApp.Services
 {
     public class ClientService : IClientService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly ILogger<ClientService> _logger;
 
-        public ClientService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        public ClientService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            ILogger<ClientService> logger)
         {
             _contextFactory = contextFactory;
+            _logger = logger;
         }
 
         public List<Client> ObtenirTous()
@@ -21,46 +27,43 @@ namespace GestionCoutureApp.Services
 
         public void Ajouter(Client client)
         {
+            ValiderClient(client);
             using var context = _contextFactory.CreateDbContext();
             context.Clients.Add(client);
             context.SaveChanges();
+            _logger.LogInformation("Client ajouté — {Prenom} {Nom}", client.Prenom, client.Nom);
         }
 
         public void Modifier(Client client)
         {
+            ValiderClient(client);
             using var context = _contextFactory.CreateDbContext();
             var existant = context.Clients.Find(client.IdClient);
-            if (existant != null)
-            {
-                existant.Nom = client.Nom;
-                existant.Prenom = client.Prenom;
-                existant.Telephone = client.Telephone;
-                context.SaveChanges();
-            }
+            if (existant == null) return;
+            existant.Nom       = client.Nom;
+            existant.Prenom    = client.Prenom;
+            existant.Telephone = client.Telephone;
+            context.SaveChanges();
+            _logger.LogInformation("Client modifié — {Id} {Prenom} {Nom}", client.IdClient, client.Prenom, client.Nom);
         }
 
         public void Supprimer(int id)
         {
             using var context = _contextFactory.CreateDbContext();
-
             var client = context.Clients
                 .Include(c => c.Commandes)
                 .FirstOrDefault(c => c.IdClient == id);
 
             if (client == null) return;
 
-            // Un client ayant des commandes (meme sans paiement) ne doit jamais etre
-            // supprime directement : cela effacerait silencieusement son historique
-            // (nom du client sur les recus, mesures, etc.). On bloque avec un message clair.
             if (client.Commandes.Any())
-            {
                 throw new InvalidOperationException(
                     "Impossible de supprimer ce client : il a des commandes enregistrées. " +
                     "Supprimez ou réattribuez d'abord ses commandes si nécessaire.");
-            }
 
             context.Clients.Remove(client);
             context.SaveChanges();
+            _logger.LogWarning("Client supprimé — {Id} {Prenom} {Nom}", id, client.Prenom, client.Nom);
         }
 
         public List<Client> Rechercher(string motCle)
@@ -71,6 +74,20 @@ namespace GestionCoutureApp.Services
                          || c.Prenom.Contains(motCle)
                          || c.Telephone.Contains(motCle))
                 .ToList();
+        }
+
+        // ----------------------------------------------------------------
+        // Validation centralisée avec DataAnnotations
+        // ----------------------------------------------------------------
+        private static void ValiderClient(Client client)
+        {
+            var ctx = new ValidationContext(client);
+            var errors = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(client, ctx, errors, validateAllProperties: true))
+            {
+                var msg = string.Join("\n", errors.Select(e => e.ErrorMessage));
+                throw new InvalidOperationException(msg);
+            }
         }
     }
 }

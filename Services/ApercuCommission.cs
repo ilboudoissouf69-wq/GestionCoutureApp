@@ -3,44 +3,49 @@ using GestionCoutureApp.Models;
 namespace GestionCoutureApp.Services
 {
     /// <summary>
-    /// Resultat d'apercu (non enregistre) d'un calcul de commission pour un couturier.
+    /// Résultat d'aperçu (non enregistré) d'un calcul de commission pour un couturier.
+    /// Utilise decimal pour tous les montants (précision financière exacte).
     /// </summary>
     public class ApercuCommission
     {
         public int IdEmploye { get; set; }
         public string Nom { get; set; } = string.Empty;
         public int NbCommandes { get; set; }
-        public double CaTotal { get; set; }        // montant total des commandes concernees
-        public double CaEncaisse { get; set; }      // montant reellement encaisse sur ces commandes
-        public double BaseCalcul { get; set; }       // = CaTotal ou CaEncaisse, selon le mode choisi
-        public double Commission { get; set; }
+        public decimal CaTotal { get; set; }       // montant total des commandes concernées
+        public decimal CaEncaisse { get; set; }    // montant réellement encaissé
+        public decimal BaseCalcul { get; set; }    // = CaTotal ou CaEncaisse selon le mode
+        public decimal Commission { get; set; }
         public List<int> IdsCommandes { get; set; } = new();
+
+        // Propriétés d'affichage formatées pour la DataGrid
+        public string CaTotalAffiche    => CaTotal.ToString("N0");
+        public string CaEncaisseAffiche => CaEncaisse.ToString("N0");
+        public string BaseAffichee      => BaseCalcul.ToString("N0");
+        public string CommissionAffichee => Commission.ToString("N0");
     }
 
     public interface ICommissionService
     {
         /// <summary>
-        /// Calcule un APERCU (rien n'est enregistre) des commissions par couturier
-        /// pour la periode donnee. Seules les commandes terminees/livrees et pas
-        /// encore rattachees a une commission enregistree sont prises en compte.
+        /// Calcule un APERÇU (rien n'est enregistré) des commissions par couturier.
+        /// Seules les commandes terminées/livrées et pas encore rattachées à une
+        /// commission enregistrée sont prises en compte.
         /// </summary>
         List<ApercuCommission> CalculerApercu(
-            DateTime dateDebut, DateTime dateFin, double pourcentage,
+            DateTime dateDebut, DateTime dateFin, decimal pourcentage,
             bool surMontantEncaisse, int? idCouturierFiltre);
 
         /// <summary>
-        /// Enregistre DEFINITIVEMENT les commissions calculees (une ligne Commission
-        /// par couturier ayant du CA sur la periode) et verrouille les commandes
-        /// concernees pour qu'elles ne soient plus jamais comptees deux fois.
+        /// Enregistre définitivement les commissions calculées et verrouille les
+        /// commandes concernées pour qu'elles ne soient plus jamais comptées deux fois.
         /// </summary>
         void EnregistrerCommissions(
             List<ApercuCommission> apercu, DateTime dateDebut, DateTime dateFin,
-            double pourcentage, bool surMontantEncaisse, int idOperateur, string nomOperateur);
+            decimal pourcentage, bool surMontantEncaisse, int idOperateur, string nomOperateur);
 
         List<Commission> ObtenirHistorique();
 
-        /// <summary>Annule une commission deja enregistree (jamais de suppression) et
-        /// deverrouille les commandes concernees pour un futur recalcul.</summary>
+        /// <summary>Annule une commission déjà enregistrée et déverrouille les commandes.</summary>
         void Annuler(int idCommission, string motif, string nomAnnulateur);
     }
 }

@@ -32,30 +32,28 @@ namespace GestionCoutureApp.Models
 
         public string Statut { get; set; } = "A faire";
 
+        // decimal : type exact pour l'argent (pas de dérive binaire comme double)
         [Required]
-        public double MontantTotal { get; set; }
+        [Column(TypeName = "TEXT")]
+        public decimal MontantTotal { get; set; }
 
-        public List<Mesure> Mesures { get; set; } = new List<Mesure>();
-        public List<Paiement> Paiements { get; set; } = new List<Paiement>();
+        public List<Mesure> Mesures { get; set; } = new();
+        public List<Paiement> Paiements { get; set; } = new();
 
-        // Correctif : seuls les paiements NON annules comptent pour le reste a payer.
-        // (avant : les paiements annules etaient quand meme soustraits, ce qui
-        // affichait un reste plus faible que la realite)
+        // Seuls les paiements NON annulés comptent pour le reste à payer
         [NotMapped]
-        public double ResteAPayer => MontantTotal - Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+        public decimal ResteAPayer =>
+            MontantTotal - Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
 
-        // Total reellement encaisse (paiements valides uniquement) — utilise
-        // notamment pour le calcul des commissions sur base "encaissee".
+        // Total réellement encaissé (paiements valides) — base pour les commissions
         [NotMapped]
-        public double MontantEncaisse => Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+        public decimal MontantEncaisse =>
+            Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
 
         public TimeSpan HeureDebut { get; set; }
         public TimeSpan? HeureFin { get; set; }
 
-        // ========== Verrouillage commission ==========
-        // Une fois une commande incluse dans un calcul de commission ENREGISTRE,
-        // elle est "verrouillee" ici pour ne plus jamais etre comptee deux fois
-        // (voir Models/Commission.cs et Services/CommissionService.cs).
+        // Verrouillage commission : null = eligible à un calcul, sinon déjà incluse
         public int? IdCommission { get; set; }
         [ForeignKey("IdCommission")]
         public Commission? Commission { get; set; }

@@ -1,20 +1,24 @@
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GestionCoutureApp.Services
 {
     public class PaiementService : IPaiementService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly ILogger<PaiementService> _logger;
 
-        // Verrou statique pour eviter les numeros de recu en doublon
-        // en cas d'enregistrements simultanees
-        private static readonly object _verrou = new object();
+        // Verrou statique pour éviter les numéros de reçu en doublon
+        private static readonly object _verrou = new();
 
-        public PaiementService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        public PaiementService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            ILogger<PaiementService> logger)
         {
             _contextFactory = contextFactory;
+            _logger = logger;
         }
 
         // ----------------------------------------------------------------
@@ -41,30 +45,31 @@ namespace GestionCoutureApp.Services
         }
 
         // ----------------------------------------------------------------
-        // Calculs financiers
+        // Calculs financiers — decimal pour précision exacte
         // ----------------------------------------------------------------
 
-        // Total de TOUS les paiements (y compris annules) — pour audit
-        public double TotalPayeParCommande(int idCommande)
+        public decimal TotalPayeParCommande(int idCommande)
         {
             using var context = _contextFactory.CreateDbContext();
             return context.Paiements
                 .Where(p => p.IdCommande == idCommande)
-                .Sum(p => (double?)p.MontantPaye) ?? 0;
+                .AsEnumerable()
+                .Sum(p => p.MontantPaye);
         }
 
-        // Total uniquement des paiements VALIDES — pour calculer le vrai reste
-        public double TotalValideParCommande(int idCommande)
+        public decimal TotalValideParCommande(int idCommande)
         {
             using var context = _contextFactory.CreateDbContext();
             return TotalValideParCommande(context, idCommande);
         }
 
-        private static double TotalValideParCommande(ApplicationDbContext context, int idCommande)
+        private static decimal TotalValideParCommande(ApplicationDbContext context, int idCommande)
         {
+            // AsEnumerable() : SQLite ne supporte pas Sum() sur decimal côté SQL
             return context.Paiements
                 .Where(p => p.IdCommande == idCommande && !p.EstAnnule)
-                .Sum(p => (double?)p.MontantPaye) ?? 0;
+                .AsEnumerable()
+                .Sum(p => p.MontantPaye);
         }
 
         // ----------------------------------------------------------------
@@ -77,43 +82,40 @@ namespace GestionCoutureApp.Services
             {
                 using var context = _contextFactory.CreateDbContext();
 
-                // Recharge le solde en temps reel pour eviter les races conditions
-                double totalValide = TotalValideParCommande(context, paiement.IdCommande);
+                decimal totalValide = TotalValideParCommande(context, paiement.IdCommande);
 
                 var commande = context.Commandes.Find(paiement.IdCommande)
                     ?? throw new InvalidOperationException("Commande introuvable.");
 
-                double resteReel = commande.MontantTotal - totalValide;
+                decimal resteReel = commande.MontantTotal - totalValide;
 
                 if (paiement.MontantPaye <= 0)
-                    throw new InvalidOperationException("Le montant doit etre positif.");
+                    throw new InvalidOperationException("Le montant doit être positif.");
 
-                if (paiement.MontantPaye > resteReel + 0.01) // tolerance centimes
+                // tolérance de 1 centime pour les arrondis d'affichage
+                if (paiement.MontantPaye > resteReel + 0.01m)
                     throw new InvalidOperationException(
-                        $"Montant ({paiement.MontantPaye:N0}) depasse le reste reel ({resteReel:N0} FCFA).");
+                        $"Montant ({paiement.MontantPaye:N0}) dépasse le reste réel ({resteReel:N0} FCFA).");
 
-                // Snapshots financiers au moment de l'enregistrement
                 paiement.MontantTotalCommande = commande.MontantTotal;
-                paiement.ResteAvantPaiement = resteReel;
-
-                // Tracabilite operateur
-                paiement.IdOperateur = idOperateur;
-                paiement.NomOperateur = nomOperateur;
-
-                // Horodatage precis
-                paiement.DatePaiement = DateTime.Now;
-
-                // Numero de recu unique anti-doublon
-                paiement.RecuNumero = GenererNumeroRecu(context);
-                paiement.EstAnnule = false;
+                paiement.ResteAvantPaiement   = resteReel;
+                paiement.IdOperateur          = idOperateur;
+                paiement.NomOperateur         = nomOperateur;
+                paiement.DatePaiement         = DateTime.Now;
+                paiement.RecuNumero           = GenererNumeroRecu(context);
+                paiement.EstAnnule            = false;
 
                 context.Paiements.Add(paiement);
                 context.SaveChanges();
+
+                _logger.LogInformation(
+                    "Paiement {Recu} enregistré — commande {IdCommande} — {Montant:N0} FCFA — opérateur {Op}",
+                    paiement.RecuNumero, paiement.IdCommande, paiement.MontantPaye, nomOperateur);
             }
         }
 
         // ----------------------------------------------------------------
-        // Annulation d'un paiement (jamais de suppression)
+        // Annulation (jamais de suppression)
         // ----------------------------------------------------------------
 
         public void Annuler(int idPaiement, string motif, string nomAnnulateur)
@@ -124,21 +126,25 @@ namespace GestionCoutureApp.Services
                 ?? throw new InvalidOperationException("Paiement introuvable.");
 
             if (paiement.EstAnnule)
-                throw new InvalidOperationException("Ce paiement est deja annule.");
+                throw new InvalidOperationException("Ce paiement est déjà annulé.");
 
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
-            paiement.EstAnnule = true;
+            paiement.EstAnnule        = true;
             paiement.MotifsAnnulation = motif.Trim();
-            paiement.DateAnnulation = DateTime.Now;
-            paiement.NomAnnulateur = nomAnnulateur;
+            paiement.DateAnnulation   = DateTime.Now;
+            paiement.NomAnnulateur    = nomAnnulateur;
 
             context.SaveChanges();
+
+            _logger.LogWarning(
+                "Paiement {Recu} ANNULÉ par {Annulateur} — motif : {Motif}",
+                paiement.RecuNumero, nomAnnulateur, motif);
         }
 
         // ----------------------------------------------------------------
-        // Generation du numero de recu — protegee contre les doublons
+        // Génération du numéro de reçu — protégée contre les doublons
         // ----------------------------------------------------------------
 
         public string GenererNumeroRecu()
@@ -149,22 +155,17 @@ namespace GestionCoutureApp.Services
 
         private static string GenererNumeroRecu(ApplicationDbContext context)
         {
-            // Format : REC-AAAAMMJJ-XXXX (sequence du jour, repart a 0001 chaque jour)
             string dateStr = DateTime.Now.ToString("yyyyMMdd");
-
             int nombreDuJour = context.Paiements
                 .Count(p => p.DatePaiement.Date == DateTime.Today);
 
             string numero = $"REC-{dateStr}-{(nombreDuJour + 1):D4}";
-
-            // Securite anti-doublon : si le numero existe deja, incremente
             int tentative = 1;
             while (context.Paiements.Any(p => p.RecuNumero == numero))
             {
                 tentative++;
                 numero = $"REC-{dateStr}-{(nombreDuJour + tentative):D4}";
             }
-
             return numero;
         }
     }
