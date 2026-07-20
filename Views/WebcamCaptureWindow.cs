@@ -75,13 +75,12 @@ namespace GestionCoutureApp.Views
 
             try
             {
-                string dossierPhotos = System.IO.Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, "photos");
-                if (!Directory.Exists(dossierPhotos))
-                    Directory.CreateDirectory(dossierPhotos);
+                // CORRECTIF : dossier AppData centralisé + nom de fichier
+                // unique (voir la même correction dans CommandesView.cs).
+                string dossierPhotos = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
 
                 string chemin = System.IO.Path.Combine(dossierPhotos,
-                    $"photo_{DateTime.Now:yyyyMMdd_HHmmss}.jpg");
+                    $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}"[..24] + ".jpg");
                 _lastFrame.Save(chemin, ImageFormat.Jpeg);
                 CapturedFilePath = chemin;
                 DialogResult = true;

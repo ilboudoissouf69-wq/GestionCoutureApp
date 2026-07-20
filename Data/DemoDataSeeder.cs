@@ -36,22 +36,25 @@ namespace GestionCoutureApp.Data
                 "Banfora","Dédougou","Kaya","Tenkodogo","Fada N'Gourma","Manga" };
 
             // Types de vêtements
-            var typesNoms = new[] { "Pantalon","Chemise","Robe","Boubou","Veste" };
+            var typesNoms = new[] { "Pantalon", "Chemise", "Robe", "Boubou", "Veste" };
             var descriptions = new Dictionary<string, string[]>
             {
-                ["Pantalon"] = new[] { "Coupe droite classique","Coupe slim / ajustée","Avec poches latérales","Avec pinces" },
-                ["Chemise"]  = new[] { "Col chemise classique","Col V","Manches longues","Manches courtes" },
-                ["Robe"]     = new[] { "Robe longue","Robe midi","Robe courte","Avec ceinture" },
-                ["Boubou"]   = new[] { "Boubou classique","Boubou brodé","Boubou avec poche" },
-                ["Veste"]    = new[] { "Veste classique","Veste cintrée","Avec boutons","Sans manches" },
+                ["Pantalon"] = new[] { "Coupe droite classique", "Coupe slim / ajustée", "Avec poches latérales", "Avec pinces" },
+                ["Chemise"] = new[] { "Col chemise classique", "Col V", "Manches longues", "Manches courtes" },
+                ["Robe"] = new[] { "Robe longue", "Robe midi", "Robe courte", "Avec ceinture" },
+                ["Boubou"] = new[] { "Boubou classique", "Boubou brodé", "Boubou avec poche" },
+                ["Veste"] = new[] { "Veste classique", "Veste cintrée", "Avec boutons", "Sans manches" },
             };
             var prixBase = new Dictionary<string, decimal>
             {
-                ["Pantalon"] = 5_000m, ["Chemise"] = 4_000m, ["Robe"] = 8_000m,
-                ["Boubou"]   = 6_000m, ["Veste"]   = 10_000m
+                ["Pantalon"] = 5_000m,
+                ["Chemise"] = 4_000m,
+                ["Robe"] = 8_000m,
+                ["Boubou"] = 6_000m,
+                ["Veste"] = 10_000m
             };
-            var statuts = new[] { "A faire","En cours","Terminee","Livree" };
-            var modes   = new[] { "Especes","Mobile Money","Virement","Cheque" };
+            var statuts = new[] { "A faire", "En cours", "Terminee", "Livree" };
+            var modes = new[] { "Especes", "Mobile Money", "Virement", "Cheque" };
 
             // ============================================================
             // 1. EMPLOYÉS — Boss déjà créé, on ajoute secrétaires + couturiers
@@ -60,13 +63,15 @@ namespace GestionCoutureApp.Data
             for (int i = 1; i <= 10; i++)
             {
                 string prenom = prenomsF[(i - 1) % prenomsF.Length];
-                string nom    = noms[(i + 5) % noms.Length];
+                string nom = noms[(i + 5) % noms.Length];
                 secretaires.Add(new Employe
                 {
-                    Nom = nom, Prenom = prenom,
+                    Nom = nom,
+                    Prenom = prenom,
                     Identifiant = $"secretaire{i:D2}",
-                    MotDePasse  = PasswordHasher.Hasher($"sec{i:D2}pass"),
-                    Role = "Secretaire", Statut = "Actif"
+                    MotDePasse = PasswordHasher.Hasher($"sec{i:D2}pass"),
+                    Role = "Secretaire",
+                    Statut = "Actif"
                 });
             }
             context.Employes.AddRange(secretaires);
@@ -82,17 +87,19 @@ namespace GestionCoutureApp.Data
                 string nom = noms[i % noms.Length];
                 couturiers.Add(new Employe
                 {
-                    Nom = nom, Prenom = prenom,
+                    Nom = nom,
+                    Prenom = prenom,
                     Identifiant = $"couturier{i:D3}",
-                    MotDePasse  = PasswordHasher.Hasher($"cou{i:D3}pass"),
-                    Role = "Couturier", Statut = i <= 140 ? "Actif" : "Suspendu"
+                    MotDePasse = PasswordHasher.Hasher($"cou{i:D3}pass"),
+                    Role = "Couturier",
+                    Statut = i <= 140 ? "Actif" : "Suspendu"
                 });
             }
             context.Employes.AddRange(couturiers);
             context.SaveChanges();
 
             var couturiersActifs = couturiers.Where(c => c.Statut == "Actif").ToList();
-            var operateurs       = secretaires.Concat(
+            var operateurs = secretaires.Concat(
                 context.Employes.Where(e => e.Role == "Boss").ToList()).ToList();
 
             // ============================================================
@@ -101,16 +108,16 @@ namespace GestionCoutureApp.Data
             var clients = new List<Client>();
             for (int i = 1; i <= 350; i++)
             {
-                bool femme  = i % 3 != 0;
+                bool femme = i % 3 != 0;
                 string prenom = femme
                     ? prenomsF[(i - 1) % prenomsF.Length]
                     : prenomsH[(i - 1) % prenomsH.Length];
                 string nom = noms[i % noms.Length];
                 clients.Add(new Client
                 {
-                    Nom      = nom,
-                    Prenom   = prenom + (i > noms.Length ? $" {i}" : ""),
-                    Telephone = $"7{Rng.Next(0,9)} {Rng.Next(10,99)} {Rng.Next(10,99)} {Rng.Next(10,99)}"
+                    Nom = nom,
+                    Prenom = prenom + (i > noms.Length ? $" {i}" : ""),
+                    Telephone = $"7{Rng.Next(0, 9)} {Rng.Next(10, 99)} {Rng.Next(10, 99)} {Rng.Next(10, 99)}"
                 });
             }
             context.Clients.AddRange(clients);
@@ -124,13 +131,13 @@ namespace GestionCoutureApp.Data
 
             for (int i = 0; i < 620; i++)
             {
-                var client    = clients[i % clients.Count];
+                var client = clients[i % clients.Count];
                 var couturier = couturiersActifs[i % couturiersActifs.Count];
-                var typeNom   = typesNoms[i % typesNoms.Length];
-                var desc      = descriptions[typeNom][i % descriptions[typeNom].Length];
+                var typeNom = typesNoms[i % typesNoms.Length];
+                var desc = descriptions[typeNom][i % descriptions[typeNom].Length];
                 int debutJours = Rng.Next(1, 60);
-                var dateDebut  = today.AddDays(-debutJours);
-                var dateFin    = dateDebut.AddDays(Rng.Next(3, 14));
+                var dateDebut = today.AddDays(-debutJours);
+                var dateFin = dateDebut.AddDays(Rng.Next(3, 14));
                 decimal montant = prixBase[typeNom] + (Rng.Next(0, 8) * 500m);
 
                 // Statut cohérent avec les dates
@@ -144,15 +151,15 @@ namespace GestionCoutureApp.Data
 
                 commandes.Add(new Commande
                 {
-                    IdClient      = client.IdClient,
-                    IdCouturier   = couturier.IdEmploye,
-                    TypeVetement  = typeNom,
+                    IdClient = client.IdClient,
+                    IdCouturier = couturier.IdEmploye,
+                    TypeVetement = typeNom,
                     DescriptionPrecision = desc,
-                    DateDebut     = dateDebut,
-                    DateFin       = dateFin,
-                    Statut        = statut,
-                    MontantTotal  = montant,
-                    Mesures       = MesuresPour(typeNom)
+                    DateDebut = dateDebut,
+                    DateFin = dateFin,
+                    Statut = statut,
+                    MontantTotal = montant,
+                    Mesures = MesuresPour(typeNom)
                 });
             }
             context.Commandes.AddRange(commandes);
@@ -162,7 +169,7 @@ namespace GestionCoutureApp.Data
             // 4. PAIEMENTS — ~800
             // ============================================================
             var paiements = new List<Paiement>();
-            int recuSeq   = 1;
+            int recuSeq = 1;
 
             foreach (var cmd in commandes)
             {
@@ -224,16 +231,16 @@ namespace GestionCoutureApp.Data
         {
             return new Paiement
             {
-                IdCommande           = cmd.IdCommande,
-                MontantPaye          = montantPaye,
-                ModePaiement         = mode,
-                RecuNumero           = $"REC-{date:yyyyMMdd}-{seq:D4}",
-                IdOperateur          = operateur.IdEmploye,
-                NomOperateur         = operateur.Prenom + " " + operateur.Nom,
-                DatePaiement         = date,
+                IdCommande = cmd.IdCommande,
+                MontantPaye = montantPaye,
+                ModePaiement = mode,
+                RecuNumero = $"REC-{date:yyyyMMdd}-{seq:D4}",
+                IdOperateur = operateur.IdEmploye,
+                NomOperateur = operateur.Prenom + " " + operateur.Nom,
+                DatePaiement = date,
                 MontantTotalCommande = totalCommande,
-                ResteAvantPaiement   = resteAvant,
-                EstAnnule            = false
+                ResteAvantPaiement = resteAvant,
+                EstAnnule = false
             };
         }
 

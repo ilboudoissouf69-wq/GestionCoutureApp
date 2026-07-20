@@ -38,8 +38,12 @@ namespace GestionCoutureApp
                 logging.SetMinimumLevel(LogLevel.Information);
             });
 
+            // CORRECTIF : la base est désormais stockée dans %LOCALAPPDATA%
+            // (voir Helpers/AppPaths.cs) au lieu d'un chemin relatif, qui
+            // dépendait du répertoire de lancement et posait des problèmes
+            // de droits d'écriture une fois l'app installée dans Program Files.
             services.AddDbContextFactory<ApplicationDbContext>(options =>
-                options.UseSqlite("Data Source=gestion_couture.db;Cache=Shared"));
+                options.UseSqlite(AppPaths.ChaineConnexionSqlite));
 
             // Services
             services.AddSingleton<IAuthService, AuthService>();
@@ -219,14 +223,48 @@ namespace GestionCoutureApp
                     context.SaveChanges();
                 }
 
-                // ====== Données de démonstration (base vierge uniquement) ======
-                DemoDataSeeder.Seeder(context);
+                // ====== Données de démonstration ======
+                // CORRECTIF CRITIQUE : DemoDataSeeder.Seeder() se déclenchait
+                // automatiquement dès que la table Clients était vide — ce qui
+                // est EXACTEMENT l'état d'une installation neuve chez un vrai
+                // utilisateur. Résultat : n'importe quelle installation
+                // "production" se retrouvait truffée de 350 faux clients,
+                // ~600 fausses commandes et, surtout, de comptes employés
+                // fictifs avec des mots de passe prévisibles et documentés
+                // dans le code source (ex. identifiant "secretaire01" / mot de
+                // passe "sec01pass", "couturier001" / "cou001pass" — voir
+                // Data/DemoDataSeeder.cs). N'importe qui ayant lu (ou deviné)
+                // ce schéma pouvait se connecter à l'application d'un vrai
+                // client avec un accès Secrétaire ou Couturier.
+                //
+                // Le jeu de données de démo n'est désormais inséré que si on
+                // le demande explicitement, en lançant l'application avec
+                // l'argument "--demo" (ex. depuis un raccourci de
+                // démonstration/formation, jamais pour un poste client réel).
+                bool demandeDemoExplicite = e.Args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
+                if (demandeDemoExplicite)
+                {
+                    DemoDataSeeder.Seeder(context);
+                }
             }
             catch (Exception ex)
             {
+                // CORRECTIF : une erreur d'initialisation de la base (fichier
+                // verrouillé, migration corrompue, disque plein, droits
+                // insuffisants...) empêchait l'app de fonctionner correctement,
+                // mais elle continuait quand même vers l'écran de connexion.
+                // Résultat : l'utilisateur pouvait se connecter puis voir
+                // l'app planter à la moindre lecture/écriture en base, sans
+                // comprendre pourquoi. On arrête maintenant proprement
+                // l'application dans ce cas, avec un message clair.
                 MessageBox.Show(
-                    "Erreur lors de l'initialisation de la base :\n" + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    "Erreur critique lors de l'initialisation de la base de données :\n\n" + ex.Message +
+                    "\n\nL'application va se fermer. Si le problème persiste, vérifiez qu'aucune " +
+                    "autre instance de l'application n'est ouverte et que le dossier\n" +
+                    AppPaths.DossierApplication + "\nest accessible en écriture.",
+                    "Erreur critique", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(-1);
+                return;
             }
 
             var loginWindow = new LoginWindow();

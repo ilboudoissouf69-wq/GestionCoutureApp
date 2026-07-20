@@ -384,7 +384,7 @@ namespace GestionCoutureApp.Views
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title  = "Selectionner une photo",
+                Title = "Selectionner une photo",
                 Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp"
             };
 
@@ -423,11 +423,18 @@ namespace GestionCoutureApp.Views
                 }
 
                 // --- Copie vers le dossier photos ---
-                string dossierPhotos = System.IO.Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, "photos");
-                System.IO.Directory.CreateDirectory(dossierPhotos);
+                // CORRECTIF : le dossier vient desormais de AppPaths (voir
+                // Helpers/AppPaths.cs) et non du dossier de l'executable.
+                string dossierPhotos = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
 
-                string nomFichier       = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}{ext}";
+                // CORRECTIF (bug silencieux) : le nom de fichier ne se basait
+                // que sur l'horodatage a la seconde pres. Deux photos
+                // importees dans la meme seconde generaient exactement le
+                // meme nom de fichier ; avec overwrite:true, la seconde
+                // ecrasait la premiere sans aucun avertissement (perte de
+                // photo silencieuse). On ajoute un identifiant unique pour
+                // garantir l'unicite meme en cas d'appels rapproches.
+                string nomFichier = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}"[..24] + ext;
                 string cheminDestination = System.IO.Path.Combine(dossierPhotos, nomFichier);
 
                 System.IO.File.Copy(dialog.FileName, cheminDestination, overwrite: true);
@@ -436,7 +443,7 @@ namespace GestionCoutureApp.Views
                 ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(
                     new Uri(cheminDestination));
                 TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
-                BtnSupprimerPhoto.Visibility   = Visibility.Visible;
+                BtnSupprimerPhoto.Visibility = Visibility.Visible;
             }
             catch (Exception ex)
             {

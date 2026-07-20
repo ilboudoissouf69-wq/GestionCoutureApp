@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.EntityFrameworkCore;
@@ -132,7 +131,17 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // Vérifier si l'identifiant existe déjà
+            // CORRECTIF (securite) : aucune longueur minimale n'etait imposee
+            // au mot de passe d'un employe, ce qui rend le hachage PBKDF2
+            // (voir Helpers/PasswordHasher.cs) quasi inutile face a une
+            // simple attaque par force brute sur un mot de passe trivial.
+            if (TxtMotDePasse.Password.Length < 6)
+            {
+                AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
+                return;
+            }
+
+            // Verifier si l'identifiant existe deja
             if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()))
             {
                 AfficherMessage("Cet identifiant existe déjà.", succes: false);
@@ -213,9 +222,16 @@ namespace GestionCoutureApp.Views
             _employeSelectionne.Identifiant = TxtIdentifiant.Text.Trim();
             _employeSelectionne.Role = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "";
 
-            // Mettre à jour le mot de passe seulement si saisi
+            // Mettre a jour le mot de passe seulement si saisi
             if (!string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
             {
+                // CORRECTIF (securite) : meme controle de longueur minimale
+                // qu'a la creation (voir BtnEnregistrer_Click).
+                if (TxtMotDePasse.Password.Length < 6)
+                {
+                    AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
+                    return;
+                }
                 _employeSelectionne.MotDePasse = HashMotDePasse(TxtMotDePasse.Password);
             }
 

@@ -52,10 +52,42 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             var existant = context.Commandes
                 .Include(c => c.Mesures)
+                .Include(c => c.Paiements)
                 .FirstOrDefault(c => c.IdCommande == commande.IdCommande);
 
             if (existant != null)
             {
+                // CORRECTIF (incohérence métier) : une commande déjà incluse
+                // dans une commission calculée et enregistrée (IdCommission
+                // renseigné) voit son MontantTotal figé dans l'historique de
+                // cette commission (Commission.BaseMontant). Avant ce
+                // correctif, rien n'empêchait de rouvrir cette commande et de
+                // changer son montant total : la commission déjà versée au
+                // couturier devenait alors silencieusement incohérente avec
+                // les commandes qu'elle est censée représenter, sans qu'aucune
+                // erreur ne soit levée nulle part.
+                if (existant.IdCommission.HasValue && existant.MontantTotal != commande.MontantTotal)
+                {
+                    throw new InvalidOperationException(
+                        "Impossible de modifier le montant de cette commande : elle est rattachée à " +
+                        "une commission déjà calculée et enregistrée. Annulez d'abord cette commission " +
+                        "(avec motif) si le montant doit vraiment être corrigé.");
+                }
+
+                // CORRECTIF (incohérence financière) : sans ce garde-fou, on
+                // pouvait enregistrer un MontantTotal inférieur à ce qui a
+                // déjà été effectivement encaissé (paiements non annulés),
+                // ce qui rend Commande.ResteAPayer négatif — une commande
+                // "trop payée" qui n'a pourtant aucun sens métier et fausse
+                // tous les totaux/rapports qui s'appuient sur ResteAPayer.
+                decimal dejaEncaisse = existant.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                if (commande.MontantTotal < dejaEncaisse)
+                {
+                    throw new InvalidOperationException(
+                        $"Le montant total ({commande.MontantTotal:N0} FCFA) ne peut pas être inférieur " +
+                        $"au montant déjà encaissé sur cette commande ({dejaEncaisse:N0} FCFA).");
+                }
+
                 existant.IdClient = commande.IdClient;
                 existant.IdCouturier = commande.IdCouturier;
                 existant.TypeVetement = commande.TypeVetement;
