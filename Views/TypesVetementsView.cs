@@ -44,6 +44,7 @@ namespace GestionCoutureApp.Views
                 })
                 .ToList();
 
+            GridTypes.ItemsSource = null;
             GridTypes.ItemsSource = types;
         }
 
@@ -68,6 +69,7 @@ namespace GestionCoutureApp.Views
                 })
                 .ToList();
 
+            GridTypes.ItemsSource = null;
             GridTypes.ItemsSource = types;
         }
 

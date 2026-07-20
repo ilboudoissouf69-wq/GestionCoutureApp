@@ -61,6 +61,7 @@ namespace GestionCoutureApp.Views
 
         private void ChargerPaiements()
         {
+            GridPaiements.ItemsSource = null;
             GridPaiements.ItemsSource = _paiementService.ObtenirTous();
         }
 

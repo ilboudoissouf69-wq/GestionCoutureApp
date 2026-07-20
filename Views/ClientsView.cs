@@ -20,6 +20,7 @@ namespace GestionCoutureApp.Views
 
         private void ChargerClients()
         {
+            GridClients.ItemsSource = null;
             GridClients.ItemsSource = _clientService.ObtenirTous();
         }
 

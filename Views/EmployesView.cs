@@ -51,6 +51,7 @@ namespace GestionCoutureApp.Views
                 })
                 .ToList();
 
+            GridEmployes.ItemsSource = null;
             GridEmployes.ItemsSource = liste;
         }
 
@@ -80,6 +81,7 @@ namespace GestionCoutureApp.Views
                 })
                 .ToList();
 
+            GridEmployes.ItemsSource = null;
             GridEmployes.ItemsSource = liste;
         }
 

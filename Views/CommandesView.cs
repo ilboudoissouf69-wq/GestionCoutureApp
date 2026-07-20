@@ -69,6 +69,9 @@ namespace GestionCoutureApp.Views
 
         private void ChargerCommandes()
         {
+            // Réinitialise la source à null d'abord pour forcer
+            // le DataGrid à détecter le changement et se rafraîchir
+            GridCommandes.ItemsSource = null;
             GridCommandes.ItemsSource = _commandeService.ObtenirTous();
         }
 
@@ -315,8 +318,21 @@ namespace GestionCoutureApp.Views
             };
 
             _commandeService.Modifier(commande, CollecterMesures());
+
+            // Recharge le tableau et re-sélectionne la ligne modifiée
+            int idModifie = _commandeSelectionneeId;
             ChargerCommandes();
-            ViderChamps();
+
+            // Retrouve et sélectionne la ligne pour que l'utilisateur
+            // voie immédiatement les changements appliqués
+            var items = GridCommandes.ItemsSource as List<Commande>;
+            var ligneModifiee = items?.FirstOrDefault(c => c.IdCommande == idModifie);
+            if (ligneModifiee != null)
+            {
+                GridCommandes.SelectedItem = ligneModifiee;
+                GridCommandes.ScrollIntoView(ligneModifiee);
+            }
+
             MessageBox.Show("Commande modifiee !", "Succes",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }

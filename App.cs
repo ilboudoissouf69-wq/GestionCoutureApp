@@ -1,5 +1,4 @@
 ﻿using System.Windows;
-using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -219,6 +218,9 @@ namespace GestionCoutureApp
                     context.TypesVetements.AddRange(typesInitiaux);
                     context.SaveChanges();
                 }
+
+                // ====== Données de démonstration (base vierge uniquement) ======
+                DemoDataSeeder.Seeder(context);
             }
             catch (Exception ex)
             {
