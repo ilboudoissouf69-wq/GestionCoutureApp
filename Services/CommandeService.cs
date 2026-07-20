@@ -88,13 +88,16 @@ namespace GestionCoutureApp.Services
                         $"au montant déjà encaissé sur cette commande ({dejaEncaisse:N0} FCFA).");
                 }
 
-                existant.IdClient = commande.IdClient;
-                existant.IdCouturier = commande.IdCouturier;
-                existant.TypeVetement = commande.TypeVetement;
+                existant.IdClient            = commande.IdClient;
+                existant.IdCouturier         = commande.IdCouturier;
+                existant.TypeVetement        = commande.TypeVetement;
                 existant.DescriptionPrecision = commande.DescriptionPrecision;
-                existant.DateFin = commande.DateFin;
-                existant.Statut = commande.Statut;
-                existant.MontantTotal = commande.MontantTotal;
+                existant.DateFin             = commande.DateFin;
+                existant.HeureDebut          = commande.HeureDebut;
+                existant.HeureFin            = commande.HeureFin;
+                existant.Statut              = commande.Statut;
+                existant.MontantTotal        = commande.MontantTotal;
+                existant.CheminPhoto         = commande.CheminPhoto;
 
                 context.Mesures.RemoveRange(existant.Mesures);
                 foreach (var mesure in mesures)

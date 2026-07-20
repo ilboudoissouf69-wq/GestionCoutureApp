@@ -18,7 +18,14 @@ namespace GestionCoutureApp.Views
         private void BtnConnexion_Click(object sender, RoutedEventArgs e)
         {
             string identifiant = TxtIdentifiant.Text.Trim();
-            string motDePasse = TxtPassword.Password.Trim();
+            // CORRECTIF : un mot de passe ne doit JAMAIS être modifié (ex: .Trim())
+            // avant vérification ou hachage. Tronquer les espaces en début/fin
+            // change silencieusement la valeur effective du mot de passe : un
+            // utilisateur ayant choisi un mot de passe avec un espace volontaire
+            // ne pourrait plus jamais se reconnecter avec la valeur exacte qu'il
+            // a définie, et la politique de mots de passe se retrouve affaiblie
+            // sans qu'aucun message n'explique pourquoi.
+            string motDePasse = TxtPassword.Password;
 
             if (string.IsNullOrEmpty(identifiant) || string.IsNullOrEmpty(motDePasse))
             {
@@ -46,11 +53,8 @@ namespace GestionCoutureApp.Views
 
                 try
                 {
-                    // Crée et montre la fenêtre principale AVANT de fermer le login
                     var mainWindow = new GestionCoutureApp.Views.MainWindow(employe);
                     mainWindow.Show();
-
-                    // Ferme le login après que la MainWindow est affichée
                     this.Close();
                 }
                 catch (Exception ex)

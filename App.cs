@@ -88,12 +88,12 @@ namespace GestionCoutureApp
                 {
                     var boss = new Employe
                     {
-                        Nom = "Admin",
-                        Prenom = "Boss",
+                        Nom         = "Admin",
+                        Prenom      = "Boss",
                         Identifiant = "boss",
-                        MotDePasse = PasswordHasher.Hasher("boss123"),
-                        Role = "Boss",
-                        Statut = "Actif"
+                        MotDePasse  = PasswordHasher.Hasher("boss123"),
+                        Role        = "Boss",
+                        Statut      = "Actif"
                     };
                     context.Employes.Add(boss);
                     context.SaveChanges();

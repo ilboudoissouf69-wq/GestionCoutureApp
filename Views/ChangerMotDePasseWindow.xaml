@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="GestionCoutureApp.Views.ChangerMotDePasseWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Retouche Choco — Changement de mot de passe obligatoire"
+        Height="480"
+        Width="420"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#1A1A1A"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        WindowStyle="None"
+        ShowInTaskbar="True">
+
+    <!--
+        CORRECTIF SECURITE : cette fenêtre n'a volontairement AUCUN bouton
+        "Fermer" / "Annuler" et sa fermeture par la croix système est
+        neutralisée dans le code-behind. Le compte "boss" par défaut (voir
+        App.cs) ne doit pas pouvoir continuer à utiliser "boss123" en
+        contournant simplement cette étape.
+    -->
+
+    <Border>
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0"
+                    EndPoint="0,1">
+                <GradientStop Color="#F7F3F0"
+                        Offset="0"/>
+                <GradientStop Color="#EFE8E4"
+                        Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="140"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    CornerRadius="0">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0"
+                            EndPoint="0,1">
+                        <GradientStop Color="#1A1A1A"
+                                Offset="0"/>
+                        <GradientStop Color="#2D0000"
+                                Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="MOT DE PASSE PAR DEFAUT DETECTE"
+                               FontSize="14"
+                            FontWeight="Bold"
+                            Foreground="White"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="Vous devez le changer avant de continuer"
+                               FontSize="11"
+                            Foreground="#B0A8A4"
+                               HorizontalAlignment="Center"
+                            Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Grid.Row="1"
+                    Margin="36,24,36,24"
+                    VerticalAlignment="Center">
+
+                <TextBlock Text="Mot de passe actuel"
+                           Style="{StaticResource FieldLabel}"
+                        Margin="0,0,0,5"/>
+                <PasswordBox x:Name="TxtAncien"
+                             Style="{StaticResource ModernPasswordBox}"
+                             Margin="0,0,0,14"/>
+
+                <TextBlock Text="Nouveau mot de passe (6 caractères minimum)"
+                           Style="{StaticResource FieldLabel}"
+                        Margin="0,0,0,5"/>
+                <PasswordBox x:Name="TxtNouveau"
+                             Style="{StaticResource ModernPasswordBox}"
+                             Margin="0,0,0,14"/>
+
+                <TextBlock Text="Confirmer le nouveau mot de passe"
+                           Style="{StaticResource FieldLabel}"
+                        Margin="0,0,0,5"/>
+                <PasswordBox x:Name="TxtConfirmation"
+                             Style="{StaticResource ModernPasswordBox}"
+                             Margin="0,0,0,20"/>
+
+                <Button Content="VALIDER LE CHANGEMENT"
+                        Style="{StaticResource BtnPrimary}"
+                        Height="44"
+                        FontSize="13"
+                        FontWeight="Bold"
+                        Click="BtnValider_Click"/>
+
+                <TextBlock x:Name="TxtErreur"
+                           FontSize="12"
+                        Foreground="#CC0000"
+                           HorizontalAlignment="Center"
+                        TextWrapping="Wrap"
+                           Margin="0,10,0,0"
+                        Visibility="Collapsed"/>
+
+                <Button Content="Se déconnecter"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#6B6B6B"
+                        FontSize="11"
+                        HorizontalAlignment="Center"
+                        Margin="0,14,0,0"
+                        Cursor="Hand"
+                        Click="BtnDeconnexion_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

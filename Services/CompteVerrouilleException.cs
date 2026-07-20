@@ -29,5 +29,16 @@ namespace GestionCoutureApp.Services
         Employe? Authentifier(string identifiant, string motDePasse);
         string HasherMotDePasse(string motDePasse);
         Employe? UtilisateurConnecte { get; }
+
+        /// <summary>
+        /// Change le mot de passe d'un employé et lève le drapeau
+        /// "DoitChangerMotDePasse". Vérifie l'ancien mot de passe avant
+        /// d'appliquer le changement.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        /// Levée si l'ancien mot de passe est incorrect ou si le nouveau
+        /// mot de passe ne respecte pas la longueur minimale.
+        /// </exception>
+        void ChangerMotDePasse(int idEmploye, string ancienMotDePasse, string nouveauMotDePasse);
     }
 }

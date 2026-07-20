@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GestionCoutureApp.Models
 {
@@ -31,7 +32,7 @@ namespace GestionCoutureApp.Models
         [MaxLength(20)]
         public string Statut { get; set; } = "Actif";
 
-        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        [NotMapped]
         public string NomComplet => $"{Prenom} {Nom}";
     }
 }

@@ -18,6 +18,7 @@ namespace GestionCoutureApp.Views
         private int _commandeSelectionneeId;
         private decimal _prixBaseActuel;
         private List<TypeVetement> _typesVetement;
+        private bool _chargementEnCours = false; // empêche CmbTypeVetement_SelectionChanged d'écraser le montant réel
         private string _cheminPhotoTemporaire = string.Empty;
         private string _roleUtilisateur;
 
@@ -94,10 +95,17 @@ namespace GestionCoutureApp.Views
 
             _prixBaseActuel = type.PrixBase;
             TxtPrixBase.Text = "Prix de base : " + type.PrixBase + " FCFA";
-            TxtMontant.Text = type.PrixBase.ToString();
+
+            // Si on est en train de charger une commande existante, on ne
+            // touche PAS au montant — il sera restauré par GridCommandes_SelectionChanged
+            if (!_chargementEnCours)
+                TxtMontant.Text = type.PrixBase.ToString();
 
             CmbDescription.ItemsSource = type.Descriptions.ToList();
-            CmbDescription.Text = string.Empty;
+
+            // Ne réinitialise la description que si on n'est pas en train de charger
+            if (!_chargementEnCours)
+                CmbDescription.Text = string.Empty;
 
             PanelMesuresDynamiques.Children.Clear();
             TxtIndicationMesures.Text = type.MesuresRequises.Count + " mesure(s) requise(s) :";
@@ -130,7 +138,8 @@ namespace GestionCoutureApp.Views
                 PanelMesuresDynamiques.Children.Add(row);
             }
 
-            CalculerPrixTotal();
+            if (!_chargementEnCours)
+                CalculerPrixTotal();
         }
 
         private void CmbAjustement_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -152,10 +161,17 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void GridCommandes_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (GridCommandes.SelectedItem is Commande cmd)
+            if (GridCommandes.SelectedItem is not Commande cmd) return;
+
+            // Active le flag : empêche CmbTypeVetement_SelectionChanged d'écraser
+            // le montant réel et la description avec les valeurs par défaut du type
+            _chargementEnCours = true;
+
+            try
             {
                 _commandeSelectionneeId = cmd.IdCommande;
                 CmbClient.SelectedValue = cmd.IdClient;
+
                 if (cmd.IdCouturier.HasValue)
                     CmbCouturier.SelectedValue = cmd.IdCouturier.Value;
 
@@ -163,7 +179,10 @@ namespace GestionCoutureApp.Views
                 if (typeMatch != null)
                     CmbTypeVetement.SelectedValue = typeMatch.IdTypeVetement;
 
-                // Description : cherche dans la liste ou affiche le texte libre
+                // Restaure le montant RÉEL (pas le prix de base du type)
+                TxtMontant.Text = cmd.MontantTotal.ToString();
+
+                // Restaure la description réelle
                 var descMatch = CmbDescription.Items
                     .Cast<DescriptionCourante>()
                     .FirstOrDefault(d => d.Texte == cmd.DescriptionPrecision);
@@ -173,20 +192,21 @@ namespace GestionCoutureApp.Views
                     CmbDescription.Text = cmd.DescriptionPrecision ?? "";
 
                 TxtHeureDebut.Text = cmd.HeureDebut.ToString(@"hh\:mm");
-                TxtHeureFin.Text = cmd.HeureFin?.ToString(@"hh\:mm") ?? "";
-
+                TxtHeureFin.Text   = cmd.HeureFin?.ToString(@"hh\:mm") ?? "";
                 DateFin.SelectedDate = cmd.DateFin;
 
                 for (int i = 0; i < CmbStatut.Items.Count; i++)
                 {
                     var item = (ComboBoxItem)CmbStatut.Items[i];
-                    if (item.Content.ToString() == cmd.Statut) CmbStatut.SelectedIndex = i;
+                    if (item.Content.ToString() == cmd.Statut)
+                    { CmbStatut.SelectedIndex = i; break; }
                 }
 
+                // Remplit les mesures avec les valeurs enregistrées
                 var mesuresExistantes = _commandeService.ObtenirMesures(cmd.IdCommande);
                 foreach (var child in PanelMesuresDynamiques.Children)
                 {
-                    var row = (StackPanel)child;
+                    var row   = (StackPanel)child;
                     var combo = (ComboBox)row.Children[1];
                     string nomMesure = combo.Tag?.ToString() ?? "";
                     var mesure = mesuresExistantes.FirstOrDefault(m => m.NomMesure == nomMesure);
@@ -200,22 +220,26 @@ namespace GestionCoutureApp.Views
                     }
                 }
 
-                if (!string.IsNullOrEmpty(cmd.CheminPhoto) &&
-                    System.IO.File.Exists(cmd.CheminPhoto))
+                // Photo
+                if (!string.IsNullOrEmpty(cmd.CheminPhoto) && System.IO.File.Exists(cmd.CheminPhoto))
                 {
-                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(
-                        new Uri(cmd.CheminPhoto));
+                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(cmd.CheminPhoto));
                     _cheminPhotoTemporaire = cmd.CheminPhoto;
                     TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
-                    BtnSupprimerPhoto.Visibility = Visibility.Visible;
+                    BtnSupprimerPhoto.Visibility   = Visibility.Visible;
                 }
                 else
                 {
                     ImgPhoto.Source = null;
                     _cheminPhotoTemporaire = string.Empty;
                     TxtPhotoPlaceholder.Visibility = Visibility.Visible;
-                    BtnSupprimerPhoto.Visibility = Visibility.Collapsed;
+                    BtnSupprimerPhoto.Visibility   = Visibility.Collapsed;
                 }
+            }
+            finally
+            {
+                // Toujours désactiver le flag, même en cas d'exception
+                _chargementEnCours = false;
             }
         }
 
@@ -297,44 +321,53 @@ namespace GestionCoutureApp.Views
         private void BtnModifier_Click(object sender, RoutedEventArgs e)
         {
             if (_commandeSelectionneeId == 0)
-            { MessageBox.Show("Selectionnez une commande.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+            {
+                MessageBox.Show("Selectionnez une commande.", "Attention",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             if (ChampsInvalides()) return;
 
             var commande = new Commande
             {
-                IdCommande = _commandeSelectionneeId,
-                IdClient = (int)CmbClient.SelectedValue,
-                IdCouturier = CmbCouturier.SelectedValue as int?,
+                IdCommande   = _commandeSelectionneeId,
+                IdClient     = (int)CmbClient.SelectedValue,
+                IdCouturier  = CmbCouturier.SelectedValue as int?,
                 TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc2
-                    ? dc2.Texte
-                    : CmbDescription.Text,
-                DateFin = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
-                HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
-                HeureFin = ParseHeure(TxtHeureFin.Text),
-                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
+                    ? dc2.Texte : CmbDescription.Text,
+                DateFin      = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
+                HeureDebut   = ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero,
+                HeureFin     = ParseHeure(TxtHeureFin.Text),
+                Statut       = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
                 MontantTotal = decimal.Parse(TxtMontant.Text),
-                CheminPhoto = _cheminPhotoTemporaire
+                CheminPhoto  = _cheminPhotoTemporaire
             };
 
-            _commandeService.Modifier(commande, CollecterMesures());
-
-            // Recharge le tableau et re-sélectionne la ligne modifiée
-            int idModifie = _commandeSelectionneeId;
-            ChargerCommandes();
-
-            // Retrouve et sélectionne la ligne pour que l'utilisateur
-            // voie immédiatement les changements appliqués
-            var items = GridCommandes.ItemsSource as List<Commande>;
-            var ligneModifiee = items?.FirstOrDefault(c => c.IdCommande == idModifie);
-            if (ligneModifiee != null)
+            try
             {
-                GridCommandes.SelectedItem = ligneModifiee;
-                GridCommandes.ScrollIntoView(ligneModifiee);
-            }
+                _commandeService.Modifier(commande, CollecterMesures());
 
-            MessageBox.Show("Commande modifiee !", "Succes",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+                int idModifie = _commandeSelectionneeId;
+                ChargerCommandes();
+
+                // Re-sélectionne et scrolle sur la ligne modifiée
+                var items = GridCommandes.ItemsSource as List<Commande>;
+                var ligne = items?.FirstOrDefault(c => c.IdCommande == idModifie);
+                if (ligne != null)
+                {
+                    GridCommandes.SelectedItem = ligne;
+                    GridCommandes.ScrollIntoView(ligne);
+                }
+
+                MessageBox.Show("Commande modifiee avec succes !", "Succes",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Modification impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void BtnSupprimer_Click(object sender, RoutedEventArgs e)

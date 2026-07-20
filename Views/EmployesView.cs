@@ -217,10 +217,33 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // CORRECTIF (incohérence métier / risque de verrouillage) : rien
+            // n'empêchait de changer le rôle du dernier compte "Boss" actif
+            // vers un autre rôle (Secrétaire/Couturier). Résultat possible :
+            // plus aucun compte "Boss" actif dans toute l'application, donc
+            // plus personne ne peut accéder à la gestion des employés, des
+            // types de vêtements ou des commissions — un verrouillage complet
+            // dont on ne peut se sortir qu'en modifiant la base à la main.
+            string nouveauRole = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "";
+            if (_employeSelectionne.Role == "Boss" && nouveauRole != "Boss")
+            {
+                int nbAutresBossActifs = _context.Employes.Count(emp =>
+                    emp.Role == "Boss" && emp.Statut == "Actif" && emp.IdEmploye != _employeSelectionne.IdEmploye);
+
+                if (nbAutresBossActifs == 0)
+                {
+                    AfficherMessage(
+                        "Impossible de changer ce rôle : c'est le dernier compte Boss actif. " +
+                        "Créez ou réactivez un autre compte Boss avant de modifier celui-ci.",
+                        succes: false);
+                    return;
+                }
+            }
+
             _employeSelectionne.Nom = TxtNom.Text.Trim();
             _employeSelectionne.Prenom = TxtPrenom.Text.Trim();
             _employeSelectionne.Identifiant = TxtIdentifiant.Text.Trim();
-            _employeSelectionne.Role = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "";
+            _employeSelectionne.Role = nouveauRole;
 
             // Mettre a jour le mot de passe seulement si saisi
             if (!string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
@@ -247,7 +270,8 @@ namespace GestionCoutureApp.Views
 
             AfficherMessage("Employé modifié avec succès.", succes: true);
             ChargerEmployes();
-            ViderFormulaire();
+            // On ne vide PAS le formulaire après modification : l'utilisateur
+            // voit le message de succès et peut continuer à modifier si besoin.
         }
 
         // ------------------------------------------------------------------
@@ -305,6 +329,9 @@ namespace GestionCoutureApp.Views
             CmbRole.SelectedIndex = -1;
             BtnSuspendre.Content = "Suspendre";
             GridEmployes.SelectedItem = null;
+            // Efface le message de retour quand on vide le formulaire
+            BorderMessage.Visibility = System.Windows.Visibility.Collapsed;
+            TxtMessage.Text = string.Empty;
         }
 
         // ------------------------------------------------------------------

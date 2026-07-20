@@ -125,6 +125,37 @@ namespace GestionCoutureApp.Services
         }
 
         // ----------------------------------------------------------------
+        // Changement de mot de passe (utilisé notamment pour forcer le
+        // changement du mot de passe par défaut du compte Boss — voir
+        // Employe.DoitChangerMotDePasse et LoginWindow).
+        // ----------------------------------------------------------------
+        public void ChangerMotDePasse(int idEmploye, string ancienMotDePasse, string nouveauMotDePasse)
+        {
+            if (string.IsNullOrWhiteSpace(nouveauMotDePasse) || nouveauMotDePasse.Length < 6)
+                throw new InvalidOperationException("Le nouveau mot de passe doit contenir au moins 6 caractères.");
+
+            using var context = _contextFactory.CreateDbContext();
+            var employe = context.Employes.Find(idEmploye)
+                ?? throw new InvalidOperationException("Employé introuvable.");
+
+            bool ancienValide = PasswordHasher.EstAncienFormatSha256(employe.MotDePasse)
+                ? employe.MotDePasse == PasswordHasher.HasherAncienSha256(ancienMotDePasse)
+                : PasswordHasher.Verifier(ancienMotDePasse, employe.MotDePasse);
+
+            if (!ancienValide)
+                throw new InvalidOperationException("L'ancien mot de passe est incorrect.");
+
+            employe.MotDePasse = PasswordHasher.Hasher(nouveauMotDePasse);
+            context.SaveChanges();
+
+            // Garde la session en mémoire cohérente avec la base
+            if (UtilisateurConnecte != null && UtilisateurConnecte.IdEmploye == idEmploye)
+                UtilisateurConnecte.MotDePasse = employe.MotDePasse;
+
+            _logger.LogWarning("Mot de passe changé (obligatoire ou volontaire) pour l'employé {Id}", idEmploye);
+        }
+
+        // ----------------------------------------------------------------
         // Validation d'un employé (utilisée par EmployesView)
         // ----------------------------------------------------------------
         public static void ValiderEmploye(Employe employe)

@@ -40,8 +40,8 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             var existant = context.Clients.Find(client.IdClient);
             if (existant == null) return;
-            existant.Nom       = client.Nom;
-            existant.Prenom    = client.Prenom;
+            existant.Nom = client.Nom;
+            existant.Prenom = client.Prenom;
             existant.Telephone = client.Telephone;
             context.SaveChanges();
             _logger.LogInformation("Client modifié — {Id} {Prenom} {Nom}", client.IdClient, client.Prenom, client.Nom);
@@ -69,10 +69,17 @@ namespace GestionCoutureApp.Services
         public List<Client> Rechercher(string motCle)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // CORRECTIF (bug silencieux — voir Helpers/TexteHelper.cs) :
+            // comparaison normalisée (minuscule + sans accents) au lieu d'un
+            // Contains() SQL brut qui ratait silencieusement les noms accentués.
+            string cle = Helpers.TexteHelper.NormaliserPourRecherche(motCle);
+
             return context.Clients
-                .Where(c => c.Nom.Contains(motCle)
-                         || c.Prenom.Contains(motCle)
-                         || c.Telephone.Contains(motCle))
+                .AsEnumerable()
+                .Where(c => Helpers.TexteHelper.NormaliserPourRecherche(c.Nom).Contains(cle)
+                         || Helpers.TexteHelper.NormaliserPourRecherche(c.Prenom).Contains(cle)
+                         || (c.Telephone ?? "").Contains(motCle))
                 .ToList();
         }
 
