@@ -1,0 +1,40 @@
+name: Build & Tests
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (Windows)
+    # WPF et net8.0-windows exigent un runner Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore GestionCoutureApp.sln
+
+      - name: Build (Release)
+        run: dotnet build GestionCoutureApp.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test GestionCoutureApp.Tests/GestionCoutureApp.Tests.csproj --configuration Release --no-build --verbosity normal
+
+      # Optionnel : publier les résultats de tests dans l'interface GitHub
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: "**/*.trx"
+          if-no-files-found: ignore

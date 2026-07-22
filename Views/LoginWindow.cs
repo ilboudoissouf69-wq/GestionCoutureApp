@@ -51,6 +51,48 @@ namespace GestionCoutureApp.Views
             {
                 TxtErreur.Visibility = Visibility.Collapsed;
 
+                // ── Changement de mot de passe obligatoire ──────────────────
+                // La colonne DoitChangerMotDePasse a été supprimée (migration
+                // SupprimerDoitChangerMotDePasse), mais le risque reste entier :
+                // un compte Boss dont le mot de passe n'a jamais été changé
+                // depuis la création utilise encore "boss123", affiché en clair
+                // dans la boîte de dialogue du premier démarrage.
+                //
+                // On détecte ce cas directement au login, sans colonne en base :
+                // si le mot de passe qui vient de fonctionner correspond encore
+                // au hash de "boss123", on impose le changement AVANT d'ouvrir
+                // MainWindow. L'utilisateur ne peut pas contourner cette étape
+                // (ChangerMotDePasseWindow bloque Alt+F4 et la croix système
+                // tant que ChangementReussi est false — voir son code-behind).
+                //
+                // Ce contrôle est volontairement limité au rôle Boss : un
+                // Couturier ou une Secrétaire ne dispose pas du mot de passe
+                // par défaut connu publiquement.
+                if (employe.Role == "Boss" &&
+                    GestionCoutureApp.Helpers.PasswordHasher.Verifier("boss123", employe.MotDePasse))
+                {
+                    var changerMdp = new ChangerMotDePasseWindow(employe);
+                    changerMdp.ShowDialog();
+
+                    if (!changerMdp.ChangementReussi)
+                    {
+                        // L'utilisateur a cliqué "Se déconnecter" sans changer
+                        // son mot de passe : on reste sur l'écran de connexion.
+                        TxtErreur.Text = "Vous devez changer votre mot de passe avant de continuer.";
+                        TxtErreur.Visibility = Visibility.Visible;
+                        TxtPassword.Clear();
+                        TxtIdentifiant.Focus();
+                        return;
+                    }
+
+                    // Changement réussi : on recharge l'employé depuis la base
+                    // pour que MainWindow dispose du hash à jour (et non de
+                    // l'ancien "boss123"), puis on continue normalement.
+                    employe = _authService.Authentifier(employe.Identifiant,
+                        changerMdp.NouveauMotDePasse) ?? employe;
+                }
+                // ────────────────────────────────────────────────────────────
+
                 try
                 {
                     var mainWindow = new GestionCoutureApp.Views.MainWindow(employe);

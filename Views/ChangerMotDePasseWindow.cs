@@ -22,6 +22,12 @@ namespace GestionCoutureApp.Views
         /// <summary>Vrai si le mot de passe a été changé avec succès avant fermeture.</summary>
         public bool ChangementReussi { get; private set; } = false;
 
+        /// <summary>
+        /// Nouveau mot de passe saisi, disponible après ChangementReussi = true.
+        /// Utilisé par LoginWindow pour ré-authentifier sans redemander la saisie.
+        /// </summary>
+        public string NouveauMotDePasse { get; private set; } = string.Empty;
+
         public ChangerMotDePasseWindow(Employe employe)
         {
             InitializeComponent();
@@ -79,6 +85,7 @@ namespace GestionCoutureApp.Views
             {
                 _authService.ChangerMotDePasse(_employe.IdEmploye, ancien, nouveau);
                 ChangementReussi = true;
+                NouveauMotDePasse = nouveau;
                 _fermetureAutorisee = true;
 
                 MessageBox.Show(

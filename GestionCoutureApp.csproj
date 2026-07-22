@@ -14,6 +14,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- ⚠ DETTE TECHNIQUE — AForge.Video / AForge.Video.DirectShow (v2.2.5, 2013)
+         Ces paquets reposent sur l'ancienne API DirectShow (COM). Ils n'ont pas
+         reçu de mise à jour depuis 2013 et ne sont plus maintenus.
+         Symptômes connus sous Windows 10/11 : certaines webcams USB modernes ne
+         sont pas détectées, des pilotes récents provoquent des crashes COM, et
+         l'intégration avec les webcams intégrées des portables est capricieuse.
+         MIGRATION RECOMMANDÉE : remplacer par l'une de ces alternatives actives :
+           • OpenCvSharp4.Windows — wrapper .NET de OpenCV, supporte Media Foundation.
+           • Windows.Media.Capture (WinRT) — API Microsoft native Windows 10+.
+         Impact du changement : Views/WebcamCaptureWindow.cs uniquement. -->
     <PackageReference Include="AForge.Video" Version="2.2.5" NoWarn="NU1701" />
     <PackageReference Include="AForge.Video.DirectShow" Version="2.2.5" NoWarn="NU1701" />
     <!-- CommunityToolkit.Mvvm retiré : aucun ObservableObject/RelayCommand n'est
