@@ -54,15 +54,6 @@ namespace GestionCoutureApp
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
             // Sauvegarde automatique
             services.AddSingleton<BackupService>();
-            // NavigationService non enregistré : son constructeur exige un Frame,
-            // qui n'existe qu'une fois MainWindow ouverte (pas au démarrage de l'app),
-            // et n'est pas lui-même enregistré dans ce conteneur DI. Tel quel,
-            // GetRequiredService<INavigationService>() planterait avec un message
-            // DI peu clair. Ce service semble prévu pour une future vraie migration
-            // MVVM (voir NavigationService.cs) — à enregistrer proprement (probablement
-            // en résolvant/assignant le Frame après la construction de MainWindow)
-            // le jour où il sera effectivement utilisé quelque part.
-            // services.AddSingleton<INavigationService, NavigationService>();
 
             Services = services.BuildServiceProvider();
 
@@ -78,6 +69,18 @@ namespace GestionCoutureApp
                 // si elle n'existe pas encore, sinon la met à jour sans perte de données).
                 // Remplace EnsureCreated() qui ne gérait jamais les évolutions de schéma.
                 context.Database.Migrate();
+
+                // CORRECTIF (robustesse concurrence) : le mode journal par défaut de
+                // SQLite ("DELETE" / rollback journal) bloque tous les lecteurs pendant
+                // qu'une écriture est en cours. Le mode WAL (Write-Ahead Logging) permet
+                // aux lectures de continuer pendant une écriture, ce qui réduit fortement
+                // les erreurs "database is locked" quand plusieurs opérations se
+                // chevauchent (ex. la sauvegarde automatique VACUUM INTO en tâche de fond
+                // pendant que l'utilisateur enregistre un paiement). PRAGMA journal_mode
+                // est persistant dans le fichier .db : l'exécuter au démarrage à chaque
+                // lancement garantit qu'il reste actif même après une restauration
+                // manuelle d'une ancienne sauvegarde qui n'aurait pas ce mode.
+                context.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
 
                 // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.
                 // On ne touche plus jamais à son mot de passe ensuite (sinon un Boss qui a

@@ -42,9 +42,30 @@ namespace GestionCoutureApp.Helpers
         public static string DossierLogs => CreerEtRetourner(Path.Combine(DossierApplication, "Logs"));
 
         /// <summary>
-        /// Chaîne de connexion SQLite prête à l'emploi, pointant vers le bon dossier.
+        /// Emplacement de sauvegarde EXTERNE optionnel (clé USB, dossier réseau,
+        /// OneDrive/Google Drive, etc.).
+        /// Configuration : créer un fichier texte "chemin_sauvegarde_externe.txt"
+        /// dans %LOCALAPPDATA%\GestionCoutureApp\ contenant le chemin cible.
+        /// Si ce fichier n'existe pas, aucune copie externe n'est tentée.
         /// </summary>
-        public static string ChaineConnexionSqlite => $"Data Source={CheminBaseDeDonnees};Cache=Shared";
+        public static string? CheminSauvegardeExterne
+        {
+            get
+            {
+                string fichierConfig = Path.Combine(DossierApplication, "chemin_sauvegarde_externe.txt");
+                if (!File.Exists(fichierConfig)) return null;
+                string chemin = File.ReadAllText(fichierConfig).Trim();
+                return string.IsNullOrWhiteSpace(chemin) ? null : chemin;
+            }
+        }
+
+        /// <summary>
+        /// Chaîne de connexion SQLite prête à l'emploi.
+        /// Default Timeout=30 : attend jusqu'à 30s qu'un verrou se libère
+        /// avant de lever SQLITE_BUSY (au lieu d'échouer immédiatement).
+        /// </summary>
+        public static string ChaineConnexionSqlite =>
+            $"Data Source={CheminBaseDeDonnees};Cache=Shared;Default Timeout=30";
 
         private static string InitialiserDossierApplication()
         {

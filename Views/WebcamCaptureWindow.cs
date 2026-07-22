@@ -13,6 +13,14 @@ namespace GestionCoutureApp.Views
         private VideoCaptureDevice? _videoSource;
         private Bitmap? _lastFrame;
 
+        // CORRECTIF (sécurité multithread) : AForge livre les frames sur son
+        // propre thread de capture, pendant que BtnCapturer_Click lit _lastFrame
+        // sur le thread UI. Sans verrou, une frame peut être disposée par
+        // VideoSource_NewFrame exactement pendant que BtnCapturer_Click est en
+        // train de l'enregistrer sur disque (ObjectDisposedException possible,
+        // rare mais réelle en usage normal vu la fréquence des frames).
+        private readonly object _verrouFrame = new();
+
         public string? CapturedFilePath { get; private set; }
 
         public WebcamCaptureWindow()
@@ -48,10 +56,24 @@ namespace GestionCoutureApp.Views
 
         private void VideoSource_NewFrame(object sender, NewFrameEventArgs eventArgs)
         {
-            _lastFrame = (Bitmap)eventArgs.Frame.Clone();
+            // CORRECTIF (fuite de ressources GDI+) : à chaque frame (potentiellement
+            // 15 à 30 fois par seconde), l'ancien code écrasait _lastFrame par un
+            // nouveau Bitmap SANS jamais disposer le précédent. Un Bitmap GDI+
+            // encapsule un handle système non géré : laisser la fenêtre webcam
+            // ouverte plus de quelques secondes épuisait progressivement ces handles,
+            // avec un comportement de plus en plus instable pour toute l'application.
+            var nouvelleFrame = (Bitmap)eventArgs.Frame.Clone();
+            Bitmap? ancienneFrame;
+            lock (_verrouFrame)
+            {
+                ancienneFrame = _lastFrame;
+                _lastFrame = nouvelleFrame;
+            }
+            ancienneFrame?.Dispose();
+
             Dispatcher.Invoke(() =>
             {
-                WebcamPreview.Source = BitmapToImageSource(_lastFrame);
+                WebcamPreview.Source = BitmapToImageSource(nouvelleFrame);
             });
         }
 
@@ -71,7 +93,15 @@ namespace GestionCoutureApp.Views
 
         private void BtnCapturer_Click(object sender, RoutedEventArgs e)
         {
-            if (_lastFrame == null) return;
+            Bitmap? copieLocale;
+            lock (_verrouFrame)
+            {
+                if (_lastFrame == null) return;
+                // Copie sous verrou : on ne travaille plus ensuite sur le champ
+                // partagé, qui peut continuer à être réassigné/disposé par le
+                // thread de capture pendant qu'on écrit le fichier sur disque.
+                copieLocale = (Bitmap)_lastFrame.Clone();
+            }
 
             try
             {
@@ -79,9 +109,16 @@ namespace GestionCoutureApp.Views
                 // unique (voir la même correction dans CommandesView.cs).
                 string dossierPhotos = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
 
+                // CORRECTIF (bug réel) : l'ancien code tronquait la chaîne complète
+                // ("photo_" + horodatage + GUID) à 24 caractères AVANT d'ajouter
+                // l'extension. "photo_" (6) + horodatage yyyyMMdd_HHmmss (15) + "_" (1)
+                // = 22 caractères déjà utilisés, ce qui ne laissait que 2 caractères
+                // hexadécimaux du GUID (256 combinaisons) — loin de l'unicité recherchée.
+                // On prend maintenant explicitement 8 caractères du GUID.
+                string suffixeUnique = Guid.NewGuid().ToString("N")[..8];
                 string chemin = System.IO.Path.Combine(dossierPhotos,
-                    $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}"[..24] + ".jpg");
-                _lastFrame.Save(chemin, ImageFormat.Jpeg);
+                    $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixeUnique}.jpg");
+                copieLocale.Save(chemin, ImageFormat.Jpeg);
                 CapturedFilePath = chemin;
                 DialogResult = true;
                 Close();
@@ -90,6 +127,10 @@ namespace GestionCoutureApp.Views
             {
                 MessageBox.Show("Erreur capture : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                copieLocale.Dispose();
             }
         }
 
@@ -108,7 +149,11 @@ namespace GestionCoutureApp.Views
                 _videoSource.NewFrame -= VideoSource_NewFrame;
                 _videoSource = null;
             }
-            _lastFrame?.Dispose();
+            lock (_verrouFrame)
+            {
+                _lastFrame?.Dispose();
+                _lastFrame = null;
+            }
             base.OnClosed(e);
         }
     }

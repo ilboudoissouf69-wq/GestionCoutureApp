@@ -83,10 +83,50 @@ namespace GestionCoutureApp.Services
                     File.Delete(ancien);
                     _logger.LogInformation("Ancienne sauvegarde supprimée : {Fichier}", ancien);
                 }
+
+                // Copie vers l'emplacement EXTERNE, si configuré.
+                // Un échec ici ne doit JAMAIS faire échouer la sauvegarde locale déjà réussie.
+                CopierVersEmplacementExterne(dest, nom);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Échec de la sauvegarde automatique");
+            }
+        }
+
+        private void CopierVersEmplacementExterne(string cheminSauvegardeLocale, string nomFichier)
+        {
+            string? dossierExterne = AppPaths.CheminSauvegardeExterne;
+            if (string.IsNullOrEmpty(dossierExterne)) return;
+
+            try
+            {
+                if (!Directory.Exists(dossierExterne))
+                {
+                    _logger.LogWarning(
+                        "Sauvegarde externe configurée mais introuvable : {Dossier} " +
+                        "(clé USB débranchée ? partage réseau hors ligne ?)", dossierExterne);
+                    return;
+                }
+
+                string destExterne = Path.Combine(dossierExterne, nomFichier);
+                File.Copy(cheminSauvegardeLocale, destExterne, overwrite: true);
+                _logger.LogInformation("Sauvegarde externe créée : {Fichier}", destExterne);
+
+                var fichiersExternes = Directory.GetFiles(dossierExterne, "gestion_couture_*.db")
+                    .OrderByDescending(f => f)
+                    .ToList();
+
+                foreach (var ancien in fichiersExternes.Skip(MaxBackups))
+                {
+                    File.Delete(ancien);
+                    _logger.LogInformation("Ancienne sauvegarde externe supprimée : {Fichier}", ancien);
+                }
+            }
+            catch (Exception ex)
+            {
+                // On journalise mais on ne propage jamais : la sauvegarde locale a déjà réussi.
+                _logger.LogWarning(ex, "Échec de la copie vers l'emplacement de sauvegarde externe");
             }
         }
 

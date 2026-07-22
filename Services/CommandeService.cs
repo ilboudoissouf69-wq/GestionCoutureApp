@@ -27,8 +27,17 @@ namespace GestionCoutureApp.Services
         public Commande? ObtenirParId(int id)
         {
             using var context = _contextFactory.CreateDbContext();
+            // CORRECTIF : Include(Paiements) est indispensable. Commande.ResteAPayer
+            // et Commande.MontantEncaisse sont des propriétés calculées qui lisent
+            // la collection Paiements en mémoire. Sans cet Include, EF Core ne lève
+            // aucune erreur : la collection reste simplement vide, et ces deux
+            // propriétés renvoient silencieusement des valeurs fausses (reste à
+            // payer = montant total, comme si rien n'avait été encaissé).
             return context.Commandes
                 .Include(c => c.Mesures)
+                .Include(c => c.Paiements)
+                .Include(c => c.Client)
+                .Include(c => c.Couturier)
                 .FirstOrDefault(c => c.IdCommande == id);
         }
 

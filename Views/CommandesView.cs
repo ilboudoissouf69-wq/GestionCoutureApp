@@ -122,15 +122,22 @@ namespace GestionCoutureApp.Views
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
+                // CORRECTIF (précision métier) : l'ancienne liste ne proposait que des
+                // valeurs entières de 10 à 150 cm. En couture, le demi-centimètre a
+                // souvent une réelle importance (ex. tour de taille, longueur de manche).
+                // IsEditable=true permet de choisir dans la liste par confort ET de
+                // taper une valeur précise (ex. "72.5") non présente dans la liste.
                 var combo = new ComboBox
                 {
                     Width = 80,
                     FontSize = 12,
-                    Tag = mesure.NomMesure
+                    Tag = mesure.NomMesure,
+                    IsEditable = true,
+                    IsTextSearchEnabled = true
                 };
 
-                for (int i = 10; i <= 150; i++)
-                    combo.Items.Add(i + " cm");
+                for (int i = 20; i <= 300; i++) // pas de 0.5 cm, de 10 à 150 cm
+                    combo.Items.Add((i * 0.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cm");
                 combo.SelectedIndex = 0;
 
                 row.Children.Add(label);
@@ -212,11 +219,24 @@ namespace GestionCoutureApp.Views
                     var mesure = mesuresExistantes.FirstOrDefault(m => m.NomMesure == nomMesure);
                     if (mesure != null)
                     {
+                        // CORRECTIF : si la valeur enregistrée (ex. "72.5", saisie
+                        // librement) ne correspond à aucun élément de la liste
+                        // déroulante, l'ancien code laissait le ComboBox sur sa
+                        // sélection précédente — la valeur réelle de la commande
+                        // n'était donc jamais affichée. On affiche maintenant
+                        // systématiquement la valeur exacte enregistrée via Text
+                        // (le ComboBox étant IsEditable=true), avec sélection dans
+                        // la liste seulement quand une correspondance exacte existe
+                        // (pour l'affichage visuel de la surbrillance).
+                        bool trouve = false;
                         for (int j = 0; j < combo.Items.Count; j++)
                         {
-                            if (combo.Items[j]?.ToString()?.StartsWith(mesure.Valeur) == true)
-                            { combo.SelectedIndex = j; break; }
+                            string? item = combo.Items[j]?.ToString();
+                            if (item == mesure.Valeur + " cm" || item?.StartsWith(mesure.Valeur + " ") == true)
+                            { combo.SelectedIndex = j; trouve = true; break; }
                         }
+                        if (!trouve)
+                            combo.Text = mesure.Valeur + " cm";
                     }
                 }
 
@@ -253,9 +273,18 @@ namespace GestionCoutureApp.Views
             {
                 var row = (StackPanel)child;
                 var combo = (ComboBox)row.Children[1];
-                if (combo.SelectedItem != null)
+                // CORRECTIF : depuis que le ComboBox est IsEditable=true (précision
+                // au demi-centimètre + saisie libre), le texte tapé par l'utilisateur
+                // n'apparaît PAS forcément dans SelectedItem (ex. valeur saisie qui
+                // n'est pas dans la liste). Il faut lire combo.Text, qui reflète
+                // toujours ce qui est réellement affiché, que ce soit une sélection
+                // de la liste ou une saisie manuelle. L'ancien code, basé uniquement
+                // sur SelectedItem, aurait silencieusement ignoré toute valeur tapée
+                // à la main et non présente dans la liste déroulante.
+                string texte = combo.Text?.Trim() ?? "";
+                if (!string.IsNullOrEmpty(texte))
                 {
-                    string valeur = combo.SelectedItem.ToString()?.Replace(" cm", "") ?? "";
+                    string valeur = texte.Replace(" cm", "").Replace("cm", "").Trim();
                     mesures.Add(new Mesure
                     {
                         NomMesure = combo.Tag?.ToString() ?? "",
@@ -311,11 +340,25 @@ namespace GestionCoutureApp.Views
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
-            _commandeService.Ajouter(commande, CollecterMesures());
-            ChargerCommandes();
-            ViderChamps();
-            MessageBox.Show("Commande creee avec succes !", "Succes",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            try
+            {
+                _commandeService.Ajouter(commande, CollecterMesures());
+                ChargerCommandes();
+                ViderChamps();
+                MessageBox.Show("Commande creee avec succes !", "Succes",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // CORRECTIF : sans ce try/catch, une erreur métier levée par le
+                // service (contrainte de données, etc.) remontait jusqu'au
+                // handler global (Application_DispatcherUnhandledException) qui
+                // affiche un message générique, au lieu du message métier précis
+                // — contrairement à BtnModifier_Click et BtnSupprimer_Click qui,
+                // eux, gèrent déjà correctement ce cas.
+                MessageBox.Show(ex.Message, "Création impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void BtnModifier_Click(object sender, RoutedEventArgs e)
@@ -467,7 +510,15 @@ namespace GestionCoutureApp.Views
                 // ecrasait la premiere sans aucun avertissement (perte de
                 // photo silencieuse). On ajoute un identifiant unique pour
                 // garantir l'unicite meme en cas d'appels rapproches.
-                string nomFichier = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}"[..24] + ext;
+                // CORRECTIF (bug réel) : l'ancien code tronquait la chaîne complète
+                // ("photo_" + horodatage + GUID) à 24 caractères AVANT d'ajouter
+                // l'extension. "photo_" (6) + horodatage yyyyMMdd_HHmmss (15) + "_" (1)
+                // = 22 caractères déjà utilisés, ce qui ne laissait que 2 caractères
+                // hexadécimaux du GUID. Le GUID était censé garantir l'unicité ;
+                // le tronquer à 2 caractères (256 combinaisons) rendait des collisions
+                // bien plus probables qu'attendu.
+                string suffixeUnique = Guid.NewGuid().ToString("N")[..8];
+                string nomFichier = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixeUnique}{ext}";
                 string cheminDestination = System.IO.Path.Combine(dossierPhotos, nomFichier);
 
                 System.IO.File.Copy(dialog.FileName, cheminDestination, overwrite: true);
