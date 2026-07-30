@@ -70,6 +70,58 @@ namespace GestionCoutureApp.Views
             // Pourrait afficher les détails dans un panneau latéral (futur)
         }
 
+        private void BtnNouveauRetour_Click(object sender, RoutedEventArgs e)
+        {
+            OuvrirFenetreNouveauRetour();
+        }
+
+        private void GridRetours_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (GridRetours.SelectedItem is not Retour retour) return;
+
+            if (retour.Statut == "Signale")
+            {
+                var r = MessageBox.Show(
+                    $"Faire passer ce retour en 'En reprise' ?",
+                    "Changement de statut", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (r != MessageBoxResult.Yes) return;
+
+                try
+                {
+                    _retourService.DemarrerReprise(retour.IdRetour, _utilisateur.IdEmploye,
+                        _utilisateur.Prenom + " " + _utilisateur.Nom);
+                    ChargerRetours();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else if (retour.Statut == "En reprise")
+            {
+                var r = MessageBox.Show(
+                    "Marquer ce retour comme 'Résolu' ?",
+                    "Changement de statut", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (r != MessageBoxResult.Yes) return;
+
+                try
+                {
+                    _retourService.Resoudre(retour.IdRetour, _utilisateur.IdEmploye,
+                        _utilisateur.Prenom + " " + _utilisateur.Nom);
+                    ChargerRetours();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show("Ce retour est déjà résolu.", "Information",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
         // ------------------------------------------------------------------
         // Fenêtre de création de retour
         // ------------------------------------------------------------------

@@ -12,19 +12,31 @@
         </Grid.RowDefinitions>
 
         <!-- Titre -->
-        <StackPanel Grid.Row="0"
-                Margin="0,0,0,20">
-            <TextBlock Text="Gestion des Retours"
-                       FontSize="22"
-                       FontWeight="Bold"
-                       Foreground="{StaticResource PrimaryBrush}"/>
-            <Border Height="3"
-                    Width="48"
-                    CornerRadius="2"
-                    Background="#CC0000"
-                    HorizontalAlignment="Left"
-                    Margin="0,6,0,0"/>
-        </StackPanel>
+        <Grid Grid.Row="0"
+              Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Gestion des Retours"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryBrush}"/>
+                <Border Height="3"
+                        Width="48"
+                        CornerRadius="2"
+                        Background="#CC0000"
+                        HorizontalAlignment="Left"
+                        Margin="0,6,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="+ Nouveau retour"
+                    Style="{StaticResource BtnPrimary}"
+                    Padding="16,8"
+                    VerticalAlignment="Top"
+                    Click="BtnNouveauRetour_Click"/>
+        </Grid>
 
         <!-- Recherche -->
         <TextBox Grid.Row="1"
@@ -40,6 +52,7 @@
             <DataGrid x:Name="GridRetours"
                       Style="{StaticResource ModernGrid}"
                       SelectionChanged="GridRetours_SelectionChanged"
+                      MouseDoubleClick="GridRetours_MouseDoubleClick"
                       AutoGenerateColumns="False">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Date"
