@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using GestionCoutureApp.Models;
 
 namespace GestionCoutureApp.Services

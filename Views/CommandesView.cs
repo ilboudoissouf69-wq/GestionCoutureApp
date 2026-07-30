@@ -16,9 +16,10 @@ namespace GestionCoutureApp.Views
         private readonly IClientService _clientService;
         private readonly ApplicationDbContext _context;
         private int _commandeSelectionneeId;
+        private int _pieceCommandeSelectionneeId; // ÉTAPE 1b-i : pièce associée à la commande sélectionnée
         private decimal _prixBaseActuel;
         private List<TypeVetement> _typesVetement;
-        private bool _chargementEnCours = false; // empêche CmbTypeVetement_SelectionChanged d'écraser le montant réel
+        private bool _chargementEnCours = false;
         private string _cheminPhotoTemporaire = string.Empty;
         private string _roleUtilisateur;
 
@@ -179,38 +180,48 @@ namespace GestionCoutureApp.Views
                 _commandeSelectionneeId = cmd.IdCommande;
                 CmbClient.SelectedValue = cmd.IdClient;
 
-                if (cmd.IdCouturier.HasValue)
-                    CmbCouturier.SelectedValue = cmd.IdCouturier.Value;
+                // Remplit les mesures avec les valeurs enregistrées
+                // ÉTAPE 1b-i : on lit les mesures de la PIÈCE, plus de la commande
+                var premierePiece = cmd.Pieces.FirstOrDefault();
+                _pieceCommandeSelectionneeId = premierePiece?.IdPieceCommande ?? 0;
 
-                var typeMatch = _typesVetement.FirstOrDefault(t => t.Nom == cmd.TypeVetement);
-                if (typeMatch != null)
-                    CmbTypeVetement.SelectedValue = typeMatch.IdTypeVetement;
+                // Restaure TypeVetement, couturier, montant et statut depuis la pièce
+                if (premierePiece != null)
+                {
+                    var typeMatchPiece = _typesVetement.FirstOrDefault(t => t.Nom == premierePiece.TypeVetement);
+                    if (typeMatchPiece != null)
+                        CmbTypeVetement.SelectedValue = typeMatchPiece.IdTypeVetement;
 
-                // Restaure le montant RÉEL (pas le prix de base du type)
-                TxtMontant.Text = cmd.MontantTotal.ToString();
+                    TxtMontant.Text = premierePiece.MontantCouture.ToString();
 
-                // Restaure la description réelle
-                var descMatch = CmbDescription.Items
-                    .Cast<DescriptionCourante>()
-                    .FirstOrDefault(d => d.Texte == cmd.DescriptionPrecision);
-                if (descMatch != null)
-                    CmbDescription.SelectedItem = descMatch;
-                else
-                    CmbDescription.Text = cmd.DescriptionPrecision ?? "";
+                    if (premierePiece.IdCouturier.HasValue)
+                        CmbCouturier.SelectedValue = premierePiece.IdCouturier.Value;
+
+                    var descMatchPiece = CmbDescription.Items
+                        .Cast<DescriptionCourante>()
+                        .FirstOrDefault(d => d.Texte == premierePiece.DescriptionPrecision);
+                    if (descMatchPiece != null)
+                        CmbDescription.SelectedItem = descMatchPiece;
+                    else
+                        CmbDescription.Text = premierePiece.DescriptionPrecision ?? "";
+
+                    for (int i = 0; i < CmbStatut.Items.Count; i++)
+                    {
+                        var item = (ComboBoxItem)CmbStatut.Items[i];
+                        if (item.Content.ToString() == premierePiece.Statut)
+                        { CmbStatut.SelectedIndex = i; break; }
+                    }
+
+                    _cheminPhotoTemporaire = premierePiece.CheminPhoto ?? string.Empty;
+                }
 
                 TxtHeureDebut.Text = cmd.HeureDebut.ToString(@"hh\:mm");
                 TxtHeureFin.Text   = cmd.HeureFin?.ToString(@"hh\:mm") ?? "";
                 DateFin.SelectedDate = cmd.DateFin;
 
-                for (int i = 0; i < CmbStatut.Items.Count; i++)
-                {
-                    var item = (ComboBoxItem)CmbStatut.Items[i];
-                    if (item.Content.ToString() == cmd.Statut)
-                    { CmbStatut.SelectedIndex = i; break; }
-                }
-
-                // Remplit les mesures avec les valeurs enregistrées
-                var mesuresExistantes = _commandeService.ObtenirMesures(cmd.IdCommande);
+                var mesuresExistantes = premierePiece != null
+                    ? _commandeService.ObtenirMesuresPiece(premierePiece.IdPieceCommande)
+                    : new List<Mesure>();
                 foreach (var child in PanelMesuresDynamiques.Children)
                 {
                     var row   = (StackPanel)child;
@@ -241,10 +252,9 @@ namespace GestionCoutureApp.Views
                 }
 
                 // Photo
-                if (!string.IsNullOrEmpty(cmd.CheminPhoto) && System.IO.File.Exists(cmd.CheminPhoto))
+                if (!string.IsNullOrEmpty(_cheminPhotoTemporaire) && System.IO.File.Exists(_cheminPhotoTemporaire))
                 {
-                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(cmd.CheminPhoto));
-                    _cheminPhotoTemporaire = cmd.CheminPhoto;
+                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(_cheminPhotoTemporaire));
                     TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
                     BtnSupprimerPhoto.Visibility   = Visibility.Visible;
                 }
@@ -325,24 +335,29 @@ namespace GestionCoutureApp.Views
 
             var commande = new Commande
             {
-                IdClient = (int)CmbClient.SelectedValue,
-                IdCouturier = CmbCouturier.SelectedValue as int?,
+                IdClient  = (int)CmbClient.SelectedValue,
+                DateDebut = DateTime.Now,
+                DateFin   = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
+                HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
+                HeureFin   = ParseHeure(TxtHeureFin.Text),
+                CheminPhoto = _cheminPhotoTemporaire
+            };
+
+            // ÉTAPE 1b-i : les données du vêtement vont maintenant sur PieceCommande
+            var piece = new PieceCommande
+            {
                 TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc1
-                    ? dc1.Texte
-                    : CmbDescription.Text,
-                DateDebut = DateTime.Now,
-                DateFin = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
-                HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
-                HeureFin = ParseHeure(TxtHeureFin.Text),
-                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
-                MontantTotal = decimal.Parse(TxtMontant.Text),
+                    ? dc1.Texte : CmbDescription.Text,
+                IdCouturier  = CmbCouturier.SelectedValue as int?,
+                MontantCouture = decimal.Parse(TxtMontant.Text),
+                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
             try
             {
-                _commandeService.Ajouter(commande, CollecterMesures());
+                _commandeService.Ajouter(commande, piece, CollecterMesures());
                 ChargerCommandes();
                 ViderChamps();
                 MessageBox.Show("Commande creee avec succes !", "Succes",
@@ -373,23 +388,30 @@ namespace GestionCoutureApp.Views
 
             var commande = new Commande
             {
-                IdCommande   = _commandeSelectionneeId,
-                IdClient     = (int)CmbClient.SelectedValue,
-                IdCouturier  = CmbCouturier.SelectedValue as int?,
+                IdCommande = _commandeSelectionneeId,
+                IdClient   = (int)CmbClient.SelectedValue,
+                DateFin    = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
+                HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero,
+                HeureFin   = ParseHeure(TxtHeureFin.Text),
+                CheminPhoto = _cheminPhotoTemporaire
+            };
+
+            // ÉTAPE 1b-i : mise à jour de la pièce existante
+            var piece = new PieceCommande
+            {
+                IdPieceCommande = _pieceCommandeSelectionneeId,
                 TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc2
                     ? dc2.Texte : CmbDescription.Text,
-                DateFin      = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
-                HeureDebut   = ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero,
-                HeureFin     = ParseHeure(TxtHeureFin.Text),
-                Statut       = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "",
-                MontantTotal = decimal.Parse(TxtMontant.Text),
-                CheminPhoto  = _cheminPhotoTemporaire
+                IdCouturier    = CmbCouturier.SelectedValue as int?,
+                MontantCouture = decimal.Parse(TxtMontant.Text),
+                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
+                CheminPhoto = _cheminPhotoTemporaire
             };
 
             try
             {
-                _commandeService.Modifier(commande, CollecterMesures());
+                _commandeService.Modifier(commande, piece, CollecterMesures());
 
                 int idModifie = _commandeSelectionneeId;
                 ChargerCommandes();

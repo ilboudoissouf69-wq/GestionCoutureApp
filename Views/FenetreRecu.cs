@@ -192,8 +192,15 @@ namespace GestionCoutureApp.Views
             // ===== CLIENT / LIVRAISON / COUTURIER =====
             string nomClient = ((_commande.Client?.Prenom ?? "") + " " +
                                    (_commande.Client?.Nom ?? "")).Trim();
-            string nomCouturier = _commande.Couturier != null
-                ? (_commande.Couturier.Prenom + " " + _commande.Couturier.Nom).Trim()
+            // CORRECTIF (Étape 1b-i) : Commande.Couturier/TypeVetement/
+            // DescriptionPrecision ne sont plus jamais renseignés par
+            // CommandeService (dépréciés, voir Commande.cs) — le reçu aurait
+            // silencieusement affiché "Non assigne" et un type de vêtement
+            // vide sur CHAQUE reçu imprimé, y compris pour des commandes où
+            // un couturier est bel et bien assigné (via sa pièce).
+            var premierePiece = _commande.Pieces.FirstOrDefault();
+            string nomCouturier = premierePiece?.Couturier != null
+                ? (premierePiece.Couturier.Prenom + " " + premierePiece.Couturier.Nom).Trim()
                 : "Non assigne";
 
             Ligne(p, Pad("CLIENT", 17) + " : " + nomClient, 10);
@@ -204,9 +211,9 @@ namespace GestionCoutureApp.Views
 
             // ===== DETAILS DU VETEMENT =====
             Ligne(p, "DETAILS DU VETEMENT", 11, TextAlignment.Left, Noir, FontWeights.Bold);
-            Ligne(p, Pad("   Type", 17) + " : " + _commande.TypeVetement, 10);
-            if (!string.IsNullOrWhiteSpace(_commande.DescriptionPrecision))
-                Ligne(p, Pad("   Desc.", 17) + " : " + _commande.DescriptionPrecision, 10);
+            Ligne(p, Pad("   Type", 17) + " : " + _commande.TypeVetementAffiche, 10);
+            if (!string.IsNullOrWhiteSpace(premierePiece?.DescriptionPrecision))
+                Ligne(p, Pad("   Desc.", 17) + " : " + premierePiece!.DescriptionPrecision, 10);
             Espace(p, 6);
 
             // ===== MESURES =====
@@ -227,8 +234,11 @@ namespace GestionCoutureApp.Views
             Espace(p, 6);
 
             // Montants financiers en decimal
+            // CORRECTIF (Étape 1b-i) : _commande.MontantTotal n'est plus
+            // jamais renseigné — utiliser MontantTotalCalcule (somme des
+            // Pieces.MontantCouture) comme repli, au lieu d'un 0 silencieux.
             decimal montantTotal = _paiement.MontantTotalCommande > 0
-                ? _paiement.MontantTotalCommande : _commande.MontantTotal;
+                ? _paiement.MontantTotalCommande : _commande.MontantTotalCalcule;
             decimal resteAvant     = _paiement.ResteAvantPaiement;
             decimal montantCePai   = _paiement.MontantPaye;
             decimal resteApres     = Math.Max(0m, resteAvant - montantCePai);

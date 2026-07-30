@@ -26,6 +26,9 @@ namespace GestionCoutureApp.Data
         public DbSet<DescriptionCourante> DescriptionsCourantes { get; set; }
         public DbSet<Commission> Commissions { get; set; }
 
+        // NOUVEAU Étape 1a (Point 1 — Commandes multi-pièces)
+        public DbSet<PieceCommande> PiecesCommande { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -83,6 +86,47 @@ namespace GestionCoutureApp.Data
                 .WithOne(m => m.TypeVetement)
                 .HasForeignKey(m => m.IdTypeVetement)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // ============================================================
+            // NOUVEAU Étape 1a (Point 1 — Commandes multi-pièces)
+            // ============================================================
+
+            // Relation Commande -> Pieces (cascade) : une pièce n'a strictement
+            // aucun sens sans sa commande parente (contrairement aux paiements,
+            // qui doivent survivre même si on voulait supprimer la commande —
+            // d'ailleurs interdit par CommandeService.Supprimer tant qu'il y a
+            // des paiements). Supprimer une commande doit donc pouvoir
+            // supprimer ses pièces en cascade, SANS pour autant supprimer la
+            // commande elle-même si des paiements existent (cette garde reste
+            // gérée au niveau service, pas au niveau de la base).
+            modelBuilder.Entity<Commande>()
+                .HasMany(c => c.Pieces)
+                .WithOne(p => p.Commande)
+                .HasForeignKey(p => p.IdCommande)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Relation PieceCommande -> Mesures (cascade) — même logique que
+            // Commande -> Mesures aujourd'hui : les mesures d'une pièce n'ont
+            // pas de sens indépendamment de cette pièce. Optionnelle pour
+            // l'instant (IsRequired(false)) car IdPieceCommande est nullable
+            // tant que l'Étape 1b n'a pas basculé la création des mesures
+            // vers les pièces plutôt que vers la commande entière.
+            modelBuilder.Entity<PieceCommande>()
+                .HasMany(p => p.Mesures)
+                .WithOne(m => m.PieceCommande)
+                .HasForeignKey(m => m.IdPieceCommande)
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false);
+
+            // Relation Commission -> Pieces : Restrict, exactement comme pour
+            // Commission -> Commandes aujourd'hui. Une pièce "verrouillée" par
+            // une commission déjà calculée ne doit jamais disparaître
+            // silencieusement si la commission est modifiée/annulée.
+            modelBuilder.Entity<Commission>()
+                .HasMany(co => co.Pieces)
+                .WithOne(p => p.Commission)
+                .HasForeignKey(p => p.IdCommission)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Valeur par défaut pour le statut d'un employé
             modelBuilder.Entity<Employe>()

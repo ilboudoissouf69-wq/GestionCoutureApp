@@ -1,8 +1,7 @@
 // Services/IClientService.cs
 // Interface du service Client.
-// Définit les opérations CRUD possibles sur les clients.
-
 using GestionCoutureApp.Models;
+
 
 namespace GestionCoutureApp.Services
 {

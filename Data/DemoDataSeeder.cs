@@ -149,6 +149,27 @@ namespace GestionCoutureApp.Data
                 else
                     statut = i % 5 == 0 ? "A faire" : "En cours";
 
+                // CORRECTIF (Étape 1b-i) : sans PieceCommande, chaque commande
+                // de démo se serait retrouvée avec Pieces vide — TypeVetementAffiche
+                // aurait affiché "(aucune pièce)", MontantTotalCalcule aurait
+                // été 0, et ResteAPayer serait devenu négatif dès le premier
+                // paiement simulé plus bas (0 - paiements > 0). Les champs
+                // dépréciés ci-dessous (IdCouturier/TypeVetement/Statut/
+                // MontantTotal sur Commande) restent renseignés uniquement
+                // parce que le code des paiements simulés juste après s'appuie
+                // encore sur "cmd.MontantTotal"/"cmd.Statut" comme variables
+                // en mémoire commodes — ils ne sont plus lus nulle part par
+                // l'application elle-même une fois enregistrés en base.
+                var piece = new PieceCommande
+                {
+                    IdCouturier = couturier.IdEmploye,
+                    TypeVetement = typeNom,
+                    DescriptionPrecision = desc,
+                    Statut = statut,
+                    MontantCouture = montant,
+                    Mesures = MesuresPour(typeNom)
+                };
+
                 commandes.Add(new Commande
                 {
                     IdClient = client.IdClient,
@@ -159,7 +180,7 @@ namespace GestionCoutureApp.Data
                     DateFin = dateFin,
                     Statut = statut,
                     MontantTotal = montant,
-                    Mesures = MesuresPour(typeNom)
+                    Pieces = new List<PieceCommande> { piece }
                 });
             }
             context.Commandes.AddRange(commandes);

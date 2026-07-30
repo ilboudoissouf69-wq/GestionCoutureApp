@@ -3,6 +3,7 @@ using System;
 using GestionCoutureApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GestionCoutureApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260727125439_AjoutPieceCommande")]
+    partial class AjoutPieceCommande
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
@@ -241,9 +244,6 @@ namespace GestionCoutureApp.Migrations
                     b.Property<int>("IdCommande")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("IdPieceCommande")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("NomMesure")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -255,8 +255,6 @@ namespace GestionCoutureApp.Migrations
                     b.HasKey("IdMesure");
 
                     b.HasIndex("IdCommande");
-
-                    b.HasIndex("IdPieceCommande");
 
                     b.ToTable("Mesures");
                 });
@@ -336,54 +334,6 @@ namespace GestionCoutureApp.Migrations
                     b.ToTable("Paiements");
                 });
 
-            modelBuilder.Entity("GestionCoutureApp.Models.PieceCommande", b =>
-                {
-                    b.Property<int>("IdPieceCommande")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CheminPhoto")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DescriptionPrecision")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("IdCommission")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("IdCommande")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("IdCouturier")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("MontantCouture")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("RendezVousException")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Statut")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TypeVetement")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("IdPieceCommande");
-
-                    b.HasIndex("IdCommande");
-
-                    b.HasIndex("IdCommission");
-
-                    b.HasIndex("IdCouturier");
-
-                    b.ToTable("PiecesCommande");
-                });
-
             modelBuilder.Entity("GestionCoutureApp.Models.TypeVetement", b =>
                 {
                     b.Property<int>("IdTypeVetement")
@@ -457,14 +407,7 @@ namespace GestionCoutureApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("GestionCoutureApp.Models.PieceCommande", "PieceCommande")
-                        .WithMany("Mesures")
-                        .HasForeignKey("IdPieceCommande")
-                        .OnDelete(DeleteBehavior.Cascade);
-
                     b.Navigation("Commande");
-
-                    b.Navigation("PieceCommande");
                 });
 
             modelBuilder.Entity("GestionCoutureApp.Models.MesureRequise", b =>
@@ -489,30 +432,6 @@ namespace GestionCoutureApp.Migrations
                     b.Navigation("Commande");
                 });
 
-            modelBuilder.Entity("GestionCoutureApp.Models.PieceCommande", b =>
-                {
-                    b.HasOne("GestionCoutureApp.Models.Commande", "Commande")
-                        .WithMany("Pieces")
-                        .HasForeignKey("IdCommande")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GestionCoutureApp.Models.Commission", "Commission")
-                        .WithMany("Pieces")
-                        .HasForeignKey("IdCommission")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("GestionCoutureApp.Models.Employe", "Couturier")
-                        .WithMany()
-                        .HasForeignKey("IdCouturier");
-
-                    b.Navigation("Commande");
-
-                    b.Navigation("Commission");
-
-                    b.Navigation("Couturier");
-                });
-
             modelBuilder.Entity("GestionCoutureApp.Models.Client", b =>
                 {
                     b.Navigation("Commandes");
@@ -523,20 +442,11 @@ namespace GestionCoutureApp.Migrations
                     b.Navigation("Mesures");
 
                     b.Navigation("Paiements");
-
-                    b.Navigation("Pieces");
                 });
 
             modelBuilder.Entity("GestionCoutureApp.Models.Commission", b =>
                 {
                     b.Navigation("Commandes");
-
-                    b.Navigation("Pieces");
-                });
-
-            modelBuilder.Entity("GestionCoutureApp.Models.PieceCommande", b =>
-                {
-                    b.Navigation("Mesures");
                 });
 
             modelBuilder.Entity("GestionCoutureApp.Models.TypeVetement", b =>

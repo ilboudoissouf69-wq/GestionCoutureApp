@@ -52,9 +52,12 @@ namespace GestionCoutureApp.Views
             CmbCommande.ItemsSource = commandes.Select(c => new
             {
                 c.IdCommande,
+                // TypeVetementAffiche et MontantTotalCalcule sont les propriétés
+                // calculées depuis Pieces (Étape 1b-i) — MontantTotal/TypeVetement
+                // sont toujours 0/vide pour les commandes créées après la migration.
                 DisplayText = (c.Client?.Nom ?? "") + " " + (c.Client?.Prenom ?? "")
-                              + " — " + c.TypeVetement
-                              + "  (" + c.MontantTotal.ToString("N0") + " FCFA)"
+                              + " — " + c.TypeVetementAffiche
+                              + "  (" + c.MontantTotalCalcule.ToString("N0") + " FCFA)"
             }).ToList();
             CmbCommande.SelectedValuePath = "IdCommande";
         }
@@ -83,9 +86,12 @@ namespace GestionCoutureApp.Views
                 + (_commandeSelectionnee.Client?.Prenom ?? "");
 
             decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
-            decimal reste = _commandeSelectionnee.MontantTotal - totalValide;
+            // MontantTotalCalcule = somme des PieceCommande.MontantCouture (Étape 1b-i).
+            // L'ancien MontantTotal est toujours 0 pour les nouvelles commandes.
+            decimal montantTotal = _commandeSelectionnee.MontantTotalCalcule;
+            decimal reste = montantTotal - totalValide;
 
-            TxtInfoMontant.Text = "Montant total : " + _commandeSelectionnee.MontantTotal.ToString("N0") + " FCFA";
+            TxtInfoMontant.Text = "Montant total : " + montantTotal.ToString("N0") + " FCFA";
             TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
             TxtInfoReste.Text = "Reste : " + Math.Max(0m, reste).ToString("N0") + " FCFA";
 
@@ -131,7 +137,7 @@ namespace GestionCoutureApp.Views
 
             // Verification solde en temps reel
             decimal totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
-            decimal reste = _commandeSelectionnee.MontantTotal - totalValide;
+            decimal reste = _commandeSelectionnee.MontantTotalCalcule - totalValide;
 
             if (reste <= 0.01m)
             { Alerte("Cette commande est deja entierement payee."); return; }
@@ -278,14 +284,16 @@ namespace GestionCoutureApp.Views
 
             var commande = _context.Commandes
                 .Include(c => c.Client)
-                .Include(c => c.Couturier)
+                .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
                 .FirstOrDefault(c => c.IdCommande == paiement.IdCommande);
 
             if (commande == null) { Alerte("Commande introuvable."); return; }
 
-            var mesures = _context.Mesures
-                .Where(m => m.IdCommande == commande.IdCommande)
-                .ToList();
+            // Les mesures sont maintenant portées par chaque pièce (Étape 1b-i).
+            // On les rassemble depuis toutes les pièces pour rétrocompatibilité
+            // avec FenetreRecu qui attend encore une liste plate de Mesure.
+            var mesures = commande.Pieces.SelectMany(p => p.Mesures).ToList();
 
             var fenetre = new FenetreRecu(commande, paiement, mesures, paiement.NomOperateur);
             fenetre.Owner = Window.GetWindow(this);

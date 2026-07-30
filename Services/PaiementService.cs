@@ -84,10 +84,19 @@ namespace GestionCoutureApp.Services
 
                 decimal totalValide = TotalValideParCommande(context, paiement.IdCommande);
 
-                var commande = context.Commandes.Find(paiement.IdCommande)
+                // ÉTAPE 1b-i : Commande.MontantTotal n'est plus jamais renseigné
+                // par CommandeService — le montant réel est maintenant la somme
+                // des PieceCommande.MontantCouture. Find() ne charge pas les
+                // navigations (Pieces resterait vide) : on utilise donc une
+                // requête explicite avec Include, comme partout ailleurs dans
+                // l'application depuis le correctif équivalent sur ObtenirParId.
+                var commande = context.Commandes
+                    .Include(c => c.Pieces)
+                    .FirstOrDefault(c => c.IdCommande == paiement.IdCommande)
                     ?? throw new InvalidOperationException("Commande introuvable.");
 
-                decimal resteReel = commande.MontantTotal - totalValide;
+                decimal montantTotalCommande = commande.Pieces.Sum(p => p.MontantCouture);
+                decimal resteReel = montantTotalCommande - totalValide;
 
                 if (paiement.MontantPaye <= 0)
                     throw new InvalidOperationException("Le montant doit être positif.");
@@ -97,13 +106,13 @@ namespace GestionCoutureApp.Services
                     throw new InvalidOperationException(
                         $"Montant ({paiement.MontantPaye:N0}) dépasse le reste réel ({resteReel:N0} FCFA).");
 
-                paiement.MontantTotalCommande = commande.MontantTotal;
-                paiement.ResteAvantPaiement   = resteReel;
-                paiement.IdOperateur          = idOperateur;
-                paiement.NomOperateur         = nomOperateur;
-                paiement.DatePaiement         = DateTime.Now;
-                paiement.RecuNumero           = GenererNumeroRecu(context);
-                paiement.EstAnnule            = false;
+                paiement.MontantTotalCommande = montantTotalCommande;
+                paiement.ResteAvantPaiement = resteReel;
+                paiement.IdOperateur = idOperateur;
+                paiement.NomOperateur = nomOperateur;
+                paiement.DatePaiement = DateTime.Now;
+                paiement.RecuNumero = GenererNumeroRecu(context);
+                paiement.EstAnnule = false;
 
                 context.Paiements.Add(paiement);
                 context.SaveChanges();
@@ -131,10 +140,10 @@ namespace GestionCoutureApp.Services
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
-            paiement.EstAnnule        = true;
+            paiement.EstAnnule = true;
             paiement.MotifsAnnulation = motif.Trim();
-            paiement.DateAnnulation   = DateTime.Now;
-            paiement.NomAnnulateur    = nomAnnulateur;
+            paiement.DateAnnulation = DateTime.Now;
+            paiement.NomAnnulateur = nomAnnulateur;
 
             context.SaveChanges();
 

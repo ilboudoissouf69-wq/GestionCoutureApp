@@ -46,8 +46,13 @@ namespace GestionCoutureApp.Views
             int totalClients = _context.Clients.Count();
             TxtTotalClients.Text = totalClients.ToString();
 
-            int enCours = _context.Commandes
-                .Count(c => c.Statut != "Livree");
+            // StatutGlobal est [NotMapped] et calculé depuis Pieces en mémoire.
+            // On charge les commandes avec leurs pièces puis on filtre en mémoire.
+            var commandesAvecPieces = _context.Commandes
+                .Include(c => c.Pieces)
+                .ToList();
+
+            int enCours = commandesAvecPieces.Count(c => c.StatutGlobal != "Livree");
             TxtCommandesEnCours.Text = enCours.ToString();
 
             // CA du jour — uniquement les paiements NON annulés
@@ -59,11 +64,12 @@ namespace GestionCoutureApp.Views
                 .Sum(p => p.MontantPaye);
             TxtCaJour.Text = caJour.ToString("N0");
 
-            // Retards
-            int retards = _context.Commandes
-                .Count(c => c.Statut != "Livree" &&
-                            c.DateFin.Date < aujourdhui &&
-                            c.DateFin != default(DateTime));
+            // Retards : pièces non terminées/livrées dont le rendez-vous est passé.
+            // On passe par StatutGlobal calculé en mémoire (nécessite Pieces chargées).
+            int retards = commandesAvecPieces.Count(c =>
+                c.StatutGlobal != "Livree" &&
+                c.DateFin != default(DateTime) &&
+                c.DateFin.Date < aujourdhui);
             TxtRetards.Text = retards.ToString();
         }
 
@@ -170,21 +176,43 @@ namespace GestionCoutureApp.Views
                 .Where(e => e.Role == "Couturier")
                 .ToList();
 
+            // IdCouturier sur Commande est déprécié (Étape 1b-i) : il est null
+            // pour toutes les commandes créées après la migration multi-pièces.
+            // On passe par PiecesCommande, où le couturier est désormais stocké.
+            // Une même commande peut avoir plusieurs pièces pour le même couturier
+            // (ex. 3 pantalons) : on déduplique par IdCommande pour ne compter
+            // chaque commande qu'une seule fois.
             var stats = couturiers.Select(c => new
             {
                 Nom = c.Nom + " " + c.Prenom,
-                NbCommandes = _context.Commandes.Count(cmd => cmd.IdCouturier == c.IdEmploye),
-                NbTerminees = _context.Commandes.Count(cmd =>
-                    cmd.IdCouturier == c.IdEmploye && cmd.Statut == "Terminee"),
-                NbRetards = _context.Commandes.Count(cmd =>
-                    cmd.IdCouturier == c.IdEmploye &&
-                    cmd.Statut != "Livree" &&
-                    cmd.DateFin != default(DateTime) &&
-                    cmd.DateFin.Date < aujourdhui),
-                CaTotal = _context.Commandes
-                    .Where(cmd => cmd.IdCouturier == c.IdEmploye)
+
+                NbCommandes = _context.PiecesCommande
+                    .Where(p => p.IdCouturier == c.IdEmploye)
+                    .Select(p => p.IdCommande)
+                    .Distinct()
+                    .Count(),
+
+                NbTerminees = _context.PiecesCommande
+                    .Where(p => p.IdCouturier == c.IdEmploye && p.Statut == "Terminee")
+                    .Select(p => p.IdCommande)
+                    .Distinct()
+                    .Count(),
+
+                NbRetards = _context.PiecesCommande
+                    .Where(p => p.IdCouturier == c.IdEmploye &&
+                                p.Statut != "Livree" &&
+                                p.Commande != null &&
+                                p.Commande.DateFin != default(DateTime) &&
+                                p.Commande.DateFin.Date < aujourdhui)
+                    .Select(p => p.IdCommande)
+                    .Distinct()
+                    .Count(),
+
+                // CA = somme des MontantCouture des pièces de ce couturier
+                CaTotal = _context.PiecesCommande
+                    .Where(p => p.IdCouturier == c.IdEmploye)
                     .AsEnumerable()
-                    .Sum(cmd => cmd.MontantTotal)
+                    .Sum(p => p.MontantCouture)
             }).ToList();
 
             GridCouturiers.ItemsSource = stats;
@@ -195,16 +223,21 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void ChargerDernieresCommandes()
         {
+            // Include(Pieces) indispensable : TypeVetementAffiche, MontantTotalCalcule
+            // et StatutGlobalAffiche sont [NotMapped] et calculés depuis Pieces en mémoire.
+            // Sans ce Include, les 3 colonnes afficheraient "(aucune pièce)", "0 FCFA", "A faire".
             var dernieres = _context.Commandes
                 .Include(c => c.Client)
+                .Include(c => c.Pieces)
                 .OrderByDescending(c => c.IdCommande)
                 .Take(5)
+                .AsEnumerable()          // bascule en mémoire pour les propriétés calculées
                 .Select(c => new
                 {
                     Client = c.Client != null ? c.Client.Nom + " " + c.Client.Prenom : "-",
-                    Type = c.TypeVetement,
-                    Montant = c.MontantTotal.ToString("N0") + " FCFA",
-                    Statut = c.Statut,
+                    Type = c.TypeVetementAffiche,
+                    Montant = c.MontantTotalCalcule.ToString("N0") + " FCFA",
+                    Statut = c.StatutGlobalAffiche,
                     DateFin = c.DateFin != default(DateTime)
                         ? c.DateFin.ToString("dd/MM/yyyy") : "-"
                 })

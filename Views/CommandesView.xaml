@@ -71,13 +71,13 @@
                                 Binding="{Binding Client.Nom}"
                                 Width="*"/>
                         <DataGridTextColumn Header="Type"
-                                Binding="{Binding TypeVetement}"
+                                Binding="{Binding TypeVetementAffiche}"
                                 Width="*"/>
                         <DataGridTextColumn Header="Statut"
-                                Binding="{Binding Statut}"
+                                Binding="{Binding StatutGlobalAffiche}"
                                 Width="90"/>
                         <DataGridTextColumn Header="Montant"
-                                Binding="{Binding MontantTotal, StringFormat={}{0:N0}}"
+                                Binding="{Binding MontantTotalCalcule, StringFormat={}{0:N0}}"
                                 Width="90"/>
                         <DataGridTextColumn Header="Reste"
                                 Binding="{Binding ResteAPayer,  StringFormat={}{0:N0}}"

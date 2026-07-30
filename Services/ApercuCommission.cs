@@ -1,3 +1,4 @@
+
 using GestionCoutureApp.Models;
 
 namespace GestionCoutureApp.Services
@@ -17,10 +18,19 @@ namespace GestionCoutureApp.Services
         public decimal Commission { get; set; }
         public List<int> IdsCommandes { get; set; } = new();
 
+        // ÉTAPE 1b-i (Point 1) : verrouillage réel désormais par PIÈCE, pas par
+        // commande (voir CommissionService). IdsCommandes reste rempli (avec les
+        // IdCommande des commandes concernées, potentiellement en double si
+        // plusieurs pièces d'une même commande sont couturées par le même
+        // couturier) pour ne rien casser dans CommissionsView, qui ne l'affiche
+        // qu'à titre indicatif (NbCommandes). C'est IdsPieces qui sert
+        // réellement à verrouiller/déverrouiller lors de l'enregistrement.
+        public List<int> IdsPieces { get; set; } = new();
+
         // Propriétés d'affichage formatées pour la DataGrid
-        public string CaTotalAffiche    => CaTotal.ToString("N0");
+        public string CaTotalAffiche => CaTotal.ToString("N0");
         public string CaEncaisseAffiche => CaEncaisse.ToString("N0");
-        public string BaseAffichee      => BaseCalcul.ToString("N0");
+        public string BaseAffichee => BaseCalcul.ToString("N0");
         public string CommissionAffichee => Commission.ToString("N0");
     }
 

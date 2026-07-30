@@ -15,16 +15,26 @@
     <Window.Resources>
 
         <!-- ── Bouton nav normal : texte gris clair sur fond noir ── -->
-        <Style TargetType="Button" x:Key="NavBtn">
-            <Setter Property="Background"               Value="Transparent"/>
-            <Setter Property="BorderThickness"          Value="0"/>
-            <Setter Property="Foreground"               Value="#B0A8A4"/>
-            <Setter Property="FontSize"                 Value="13"/>
-            <Setter Property="FontWeight"               Value="Normal"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="HorizontalAlignment"      Value="Stretch"/>
-            <Setter Property="Padding"                  Value="20,13"/>
-            <Setter Property="Cursor"                   Value="Hand"/>
+        <Style TargetType="Button"
+                x:Key="NavBtn">
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="BorderThickness"
+                    Value="0"/>
+            <Setter Property="Foreground"
+                    Value="#B0A8A4"/>
+            <Setter Property="FontSize"
+                    Value="13"/>
+            <Setter Property="FontWeight"
+                    Value="Normal"/>
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Left"/>
+            <Setter Property="HorizontalAlignment"
+                    Value="Stretch"/>
+            <Setter Property="Padding"
+                    Value="20,13"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -36,13 +46,21 @@
                                               VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#2D2D2D"/>
-                                <Setter Property="Foreground"                  Value="White"/>
+                            <Trigger Property="IsMouseOver"
+                                    Value="True">
+                                <Setter TargetName="bg"
+                                        Property="Background"
+                                        Value="#2D2D2D"/>
+                                <Setter Property="Foreground"
+                                        Value="White"/>
                             </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#CC0000"/>
-                                <Setter Property="Foreground"                  Value="White"/>
+                            <Trigger Property="IsPressed"
+                                    Value="True">
+                                <Setter TargetName="bg"
+                                        Property="Background"
+                                        Value="#CC0000"/>
+                                <Setter Property="Foreground"
+                                        Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -51,10 +69,15 @@
         </Style>
 
         <!-- ── Bouton nav actif : rouge marque + barre gauche blanche ── -->
-        <Style TargetType="Button" x:Key="NavBtnActif" BasedOn="{StaticResource NavBtn}">
-            <Setter Property="Background"  Value="#CC0000"/>
-            <Setter Property="Foreground"  Value="White"/>
-            <Setter Property="FontWeight"  Value="SemiBold"/>
+        <Style TargetType="Button"
+                x:Key="NavBtnActif"
+                BasedOn="{StaticResource NavBtn}">
+            <Setter Property="Background"
+                    Value="#CC0000"/>
+            <Setter Property="Foreground"
+                    Value="White"/>
+            <Setter Property="FontWeight"
+                    Value="SemiBold"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -74,8 +97,11 @@
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#A80000"/>
+                            <Trigger Property="IsMouseOver"
+                                    Value="True">
+                                <Setter TargetName="bg"
+                                        Property="Background"
+                                        Value="#A80000"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -84,10 +110,14 @@
         </Style>
 
         <!-- ── Séparateur sidebar ── -->
-        <Style TargetType="Separator" x:Key="NavSep">
-            <Setter Property="Background" Value="#3A3A3A"/>
-            <Setter Property="Margin"     Value="16,8"/>
-            <Setter Property="Height"     Value="1"/>
+        <Style TargetType="Separator"
+                x:Key="NavSep">
+            <Setter Property="Background"
+                    Value="#3A3A3A"/>
+            <Setter Property="Margin"
+                    Value="16,8"/>
+            <Setter Property="Height"
+                    Value="1"/>
         </Style>
 
     </Window.Resources>
@@ -99,7 +129,8 @@
         </Grid.ColumnDefinitions>
 
         <!-- ═══════════════════════════════════════════════ SIDEBAR ═══ -->
-        <Border Grid.Column="0" Background="#1A1A1A">
+        <Border Grid.Column="0"
+                Background="#1A1A1A">
 
             <DockPanel>
 
@@ -136,8 +167,7 @@
                                FontSize="14"
                                FontWeight="Bold"
                                Foreground="White"
-                               HorizontalAlignment="Center"
-                               />
+                               HorizontalAlignment="Center"/>
                     <TextBlock x:Name="TxtUtilisateur"
                                FontSize="11"
                                Foreground="#B0A8A4"
@@ -148,7 +178,8 @@
                                MaxWidth="200"/>
                 </StackPanel>
 
-                <Separator Style="{StaticResource NavSep}" DockPanel.Dock="Top"/>
+                <Separator Style="{StaticResource NavSep}"
+                        DockPanel.Dock="Top"/>
 
                 <!-- Déconnexion en bas -->
                 <Button x:Name="BtnDeconnexion"
@@ -159,7 +190,8 @@
                         Click="BtnDeconnexion_Click"
                         Margin="0,0,0,16"/>
 
-                <Separator Style="{StaticResource NavSep}" DockPanel.Dock="Bottom"/>
+                <Separator Style="{StaticResource NavSep}"
+                        DockPanel.Dock="Bottom"/>
 
                 <!-- Menus de navigation -->
                 <StackPanel>

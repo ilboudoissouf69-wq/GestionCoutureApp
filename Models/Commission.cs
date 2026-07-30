@@ -52,6 +52,16 @@ namespace GestionCoutureApp.Models
 
         public List<Commande> Commandes { get; set; } = new();
 
+        // ÉTAPE 1b-i (Point 1) : le verrouillage d'une commission se fait
+        // maintenant au niveau de chaque PIÈCE (voir PieceCommande.IdCommission),
+        // pas au niveau de la commande entière — une commande peut, à terme,
+        // contenir des pièces facturées à des couturiers différents, donc
+        // rattachées à des commissions différentes. "Commandes" ci-dessus
+        // reste en base pour compatibilité avec l'historique déjà enregistré
+        // avant cette étape, mais toute NOUVELLE commission n'utilise plus que
+        // "Pieces".
+        public List<PieceCommande> Pieces { get; set; } = new();
+
         [NotMapped]
         public string StatutAffichage => EstAnnulee ? "ANNULEE" : "Validee";
 
