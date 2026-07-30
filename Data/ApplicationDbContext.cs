@@ -29,6 +29,8 @@ namespace GestionCoutureApp.Data
         // NOUVEAU Étape 1a (Point 1 — Commandes multi-pièces)
         public DbSet<PieceCommande> PiecesCommande { get; set; }
 
+        public DbSet<Parametre> Parametres { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

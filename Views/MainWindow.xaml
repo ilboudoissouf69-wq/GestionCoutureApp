@@ -134,7 +134,14 @@
 
             <DockPanel>
 
-                <!-- Zone logo + identité -->
+
+                                <Button x:Name="BtnParametres"
+                                        Content="  Paramètres"
+                                        Style="{StaticResource NavBtn}"
+                                        Visibility="Collapsed"
+                                        Click="BtnParametres_Click"/>
+
+                                <!-- Zone logo + identité -->
                 <StackPanel DockPanel.Dock="Top"
                             Margin="0,24,0,16"
                             HorizontalAlignment="Center">

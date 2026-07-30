@@ -30,6 +30,7 @@ namespace GestionCoutureApp.Views
                     BtnEmployes.Visibility = Visibility.Visible;
                     BtnCommissions.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
+                    BtnParametres.Visibility = Visibility.Visible;
                     SetBoutonActif(BtnTableauDeBord);
                 }
                 else if (role == "Secretaire")
@@ -159,5 +160,20 @@ namespace GestionCoutureApp.Views
                 MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private void BtnParametres_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RoleAutorise("Boss")) return;
+            try
+            {
+                ContentFrame.Navigate(new ParametresView());
+                SetBoutonActif(BtnParametres);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
     }
 }

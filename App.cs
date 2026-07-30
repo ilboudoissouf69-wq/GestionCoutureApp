@@ -52,6 +52,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IPaiementService, PaiementService>();
             services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
+            services.AddSingleton<IParametresService, ParametresService>();
             // Sauvegarde automatique
             services.AddSingleton<BackupService>();
 
