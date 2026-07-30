@@ -10,6 +10,8 @@ namespace GestionCoutureApp.Views
         private readonly IAlerteService _alerteService;
         private List<AlerteRendezVous> _alertesActuelles = new();
         private List<AlerteRendezVous> _tousRendezVous = new();
+        // Empêche AppliquerFiltre de s'exécuter avant la fin du chargement initial
+        private bool _chargementTermine = false;
 
         public AlertesView()
         {
@@ -35,6 +37,8 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                _chargementTermine = false;
+
                 // Chargement séquentiel (pas de Task.WhenAll pour éviter
                 // les conflits DbContext SQLite concurrents)
                 _tousRendezVous = await _alerteService.ObtenirTousRendezVousAVenir();
@@ -53,6 +57,7 @@ namespace GestionCoutureApp.Views
                 TxtAujourdhui.Text = aujourdhui.ToString();
                 TxtSemaine.Text = cetteSemaine.ToString();
 
+                _chargementTermine = true;
                 AppliquerFiltre();
             }
             catch (Exception ex)
@@ -64,6 +69,8 @@ namespace GestionCoutureApp.Views
 
         private void Filtre_Changed(object sender, RoutedEventArgs e)
         {
+            // Ignoré tant que les données ne sont pas chargées
+            if (!_chargementTermine) return;
             AppliquerFiltre();
         }
 
