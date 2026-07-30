@@ -29,8 +29,9 @@ namespace GestionCoutureApp.Views
                     BtnTypesVetements.Visibility = Visibility.Visible;
                     BtnEmployes.Visibility = Visibility.Visible;
                     BtnCommissions.Visibility = Visibility.Visible;
-                    ContentFrame.Navigate(new DashboardView());
+                    BtnRetours.Visibility = Visibility.Visible;
                     BtnParametres.Visibility = Visibility.Visible;
+                    ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
                 else if (role == "Secretaire")
@@ -39,9 +40,11 @@ namespace GestionCoutureApp.Views
                     BtnClients.Visibility = Visibility.Visible;
                     BtnCommandes.Visibility = Visibility.Visible;
                     BtnPaiements.Visibility = Visibility.Visible;
+                    BtnRetours.Visibility = Visibility.Visible;
                     BtnTypesVetements.Visibility = Visibility.Collapsed;
                     BtnEmployes.Visibility = Visibility.Collapsed;
                     BtnCommissions.Visibility = Visibility.Collapsed;
+                    BtnParametres.Visibility = Visibility.Collapsed;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -154,6 +157,21 @@ namespace GestionCoutureApp.Views
             {
                 ContentFrame.Navigate(new CommissionsView());
                 SetBoutonActif(BtnCommissions);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+        private void BtnRetours_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RoleAutorise("Boss", "Secretaire")) return;
+            try
+            {
+                ContentFrame.Navigate(new RetoursView());
+                SetBoutonActif(BtnRetours);
             }
             catch (UnauthorizedAccessException)
             {

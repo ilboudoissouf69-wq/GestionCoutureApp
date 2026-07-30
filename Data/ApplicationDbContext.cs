@@ -31,6 +31,9 @@ namespace GestionCoutureApp.Data
 
         public DbSet<Parametre> Parametres { get; set; }
 
+        // Point 4 — Retours (reprises gratuites)
+        public DbSet<Retour> Retours { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

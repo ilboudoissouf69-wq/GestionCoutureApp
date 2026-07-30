@@ -195,50 +195,58 @@
                 <Separator Style="{StaticResource NavSep}"
                         DockPanel.Dock="Bottom"/>
 
-                <!-- Menus de navigation -->
-                <StackPanel>
-                    <Button x:Name="BtnTableauDeBord"
-                            Content="  Tableau de bord"
-                            Style="{StaticResource NavBtn}"
-                            Click="BtnTableauDeBord_Click"/>
-                    <Button x:Name="BtnClients"
-                            Content="  Clients"
-                            Style="{StaticResource NavBtn}"
-                            Click="BtnClients_Click"/>
-                    <Button x:Name="BtnCommandes"
-                            Content="  Commandes"
-                            Style="{StaticResource NavBtn}"
-                            Click="BtnCommandes_Click"/>
-                    <Button x:Name="BtnPaiements"
-                            Content="  Paiements"
-                            Style="{StaticResource NavBtn}"
-                            Click="BtnPaiements_Click"/>
+                <!-- Menus de navigation — ScrollViewer pour les petits écrans -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              PanningMode="VerticalOnly">
+                    <StackPanel>
+                        <Button x:Name="BtnTableauDeBord"
+                                Content="  Tableau de bord"
+                                Style="{StaticResource NavBtn}"
+                                Click="BtnTableauDeBord_Click"/>
+                        <Button x:Name="BtnClients"
+                                Content="  Clients"
+                                Style="{StaticResource NavBtn}"
+                                Click="BtnClients_Click"/>
+                        <Button x:Name="BtnCommandes"
+                                Content="  Commandes"
+                                Style="{StaticResource NavBtn}"
+                                Click="BtnCommandes_Click"/>
+                        <Button x:Name="BtnPaiements"
+                                Content="  Paiements"
+                                Style="{StaticResource NavBtn}"
+                                Click="BtnPaiements_Click"/>
 
-                    <Separator Style="{StaticResource NavSep}"/>
+                        <Separator Style="{StaticResource NavSep}"/>
 
-                    <Button x:Name="BtnTypesVetements"
-                            Content="  Types vetements"
-                            Style="{StaticResource NavBtn}"
-                            Visibility="Collapsed"
-                            Click="BtnTypesVetements_Click"/>
-                    <Button x:Name="BtnEmployes"
-                            Content="  Employes"
-                            Style="{StaticResource NavBtn}"
-                            Visibility="Collapsed"
-                            Click="BtnEmployes_Click"/>
-                    <Button x:Name="BtnCommissions"
-                            Content="  Commissions"
-                            Style="{StaticResource NavBtn}"
-                            Visibility="Collapsed"
-                            Click="BtnCommissions_Click"/>
-
-                    <Button x:Name="BtnParametres"
-                         Content="  Paramètres"
-                         Style="{StaticResource NavBtn}"
-                         Visibility="Collapsed"
-                         Click="BtnParametres_Click"/>
-                </StackPanel>
-            </DockPanel>
+                        <Button x:Name="BtnTypesVetements"
+                                Content="  Types vetements"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnTypesVetements_Click"/>
+                        <Button x:Name="BtnEmployes"
+                                Content="  Employes"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnEmployes_Click"/>
+                        <Button x:Name="BtnCommissions"
+                                Content="  Commissions"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnCommissions_Click"/>
+                        <Button x:Name="BtnRetours"
+                                Content="  Retours"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnRetours_Click"/>
+                        <Button x:Name="BtnParametres"
+                                Content="  Parametres"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnParametres_Click"/>
+                    </StackPanel>
+                </ScrollViewer>
+                        </DockPanel>
         </Border>
 
         <!-- ══════════════════════════════════════════ ZONE CONTENU ═══ -->
