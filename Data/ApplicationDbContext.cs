@@ -34,8 +34,32 @@ namespace GestionCoutureApp.Data
         // Point 4 — Retours (reprises gratuites)
         public DbSet<Retour> Retours { get; set; }
 
+
+        // Point 3 — Depenses
+        public DbSet<Depense> Depenses { get; set; }
+
+        // Point 2 - Matériaux supplémentaires
+        public DbSet<MaterielSupplement> MaterielsSupplements { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            // Point 2 - Relation PieceCommande -> MaterielSupplements (Restrict)
+            // Pas cascade ici car MaterielSupplement a aussi une FK Commande
+            // déjà en cascade. EF Core refuse les chemins de cascade multiples.
+            modelBuilder.Entity<PieceCommande>()
+                .HasMany(p => p.MaterielSupplements)
+                .WithOne(m => m.PieceCommande)
+                .HasForeignKey(m => m.IdPieceCommande)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
+
+            // Point 2 - Relation Commande -> MaterielSupplements (cascade)
+            modelBuilder.Entity<Commande>()
+                .HasMany(c => c.MaterielSupplements)
+                .WithOne(m => m.Commande)
+                .HasForeignKey(m => m.IdCommande)
+                .OnDelete(DeleteBehavior.Cascade);
             base.OnModelCreating(modelBuilder);
 
             // Securite/robustesse : un identifiant de connexion ne peut exister

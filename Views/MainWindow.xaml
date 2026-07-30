@@ -235,6 +235,20 @@
                                 Visibility="Collapsed"
                                 Click="BtnCommissions_Click"/>
 
+
+                        <Button x:Name="BtnDepenses"
+                                Content="  Depenses"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnDepenses_Click"/>    
+
+
+                        <Button x:Name="BtnMateriels"
+                                Content="  Materiaux"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnMateriels_Click"/>   
+
                         <Button x:Name="BtnAlertes"
                                 Content="  Alertes RDV"
                                 Style="{StaticResource NavBtn}"

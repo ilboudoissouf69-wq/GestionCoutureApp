@@ -32,6 +32,8 @@ namespace GestionCoutureApp.Views
                     BtnRetours.Visibility = Visibility.Visible;
                     BtnParametres.Visibility = Visibility.Visible;
                     BtnAlertes.Visibility = Visibility.Visible;
+                    BtnDepenses.Visibility = Visibility.Visible;
+                    BtnMateriels.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -47,6 +49,8 @@ namespace GestionCoutureApp.Views
                     BtnCommissions.Visibility = Visibility.Collapsed;
                     BtnParametres.Visibility = Visibility.Collapsed;
                     BtnAlertes.Visibility = Visibility.Visible;
+                    BtnDepenses.Visibility = Visibility.Visible;
+                    BtnMateriels.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -59,6 +63,7 @@ namespace GestionCoutureApp.Views
                     BtnTypesVetements.Visibility = Visibility.Collapsed;
                     BtnEmployes.Visibility = Visibility.Collapsed;
                     BtnCommissions.Visibility = Visibility.Collapsed;
+                    BtnDepenses.Visibility = Visibility.Collapsed;
                     BtnDeconnexion.Visibility = Visibility.Visible;
                     BtnAlertes.Visibility = Visibility.Collapsed;
                     ContentFrame.Navigate(new CouturierDashboardView(employe));
@@ -197,6 +202,20 @@ namespace GestionCoutureApp.Views
             }
         }
 
+        private void BtnMateriels_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RoleAutorise("Boss", "Secretaire")) return;
+            try
+            {
+                ContentFrame.Navigate(new MaterielsView());
+                SetBoutonActif(BtnMateriels);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show("Acces refuse.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void BtnParametres_Click(object sender, RoutedEventArgs e)
         {
             if (!RoleAutorise("Boss")) return;
@@ -208,6 +227,20 @@ namespace GestionCoutureApp.Views
             catch (UnauthorizedAccessException)
             {
                 MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnDepenses_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RoleAutorise("Boss")) return;
+            try
+            {
+                ContentFrame.Navigate(new DepensesView());
+                SetBoutonActif(BtnDepenses);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show("Acces refuse.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

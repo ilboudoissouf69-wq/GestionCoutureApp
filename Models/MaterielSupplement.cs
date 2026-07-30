@@ -8,13 +8,16 @@ namespace GestionCoutureApp.Models
         [Key]
         public int IdMateriel { get; set; }
 
+        public int? IdPieceCommande { get; set; }
+        [ForeignKey("IdPieceCommande")]
+        public PieceCommande? PieceCommande { get; set; }
+
         [Required]
         public int IdCommande { get; set; }
-
         [ForeignKey("IdCommande")]
         public Commande? Commande { get; set; }
 
-        [Required(ErrorMessage = "La désignation du matériau est obligatoire.")]
+        [Required]
         [MaxLength(150)]
         public string Designation { get; set; } = string.Empty;
 
@@ -25,5 +28,11 @@ namespace GestionCoutureApp.Models
 
         [NotMapped]
         public decimal Montant => Quantite * PrixUnitaire;
+
+        [NotMapped]
+        public string MontantAffiche => Montant.ToString("N0") + " FCFA";
+
+        [NotMapped]
+        public string PrixUnitaireAffiche => PrixUnitaire.ToString("N0") + " FCFA";
     }
 }

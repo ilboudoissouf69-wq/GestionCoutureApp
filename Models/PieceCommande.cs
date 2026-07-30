@@ -70,6 +70,8 @@ namespace GestionCoutureApp.Models
 
         public List<Mesure> Mesures { get; set; } = new();
 
+        public List<MaterielSupplement> MaterielSupplements { get; set; } = new();
+
         // Point 5 (Alertes) : le rendez-vous est normalement porté par la
         // commande entière (un seul horaire de retrait pour toutes les
         // pièces). Ce champ ne sert QUE dans le cas d'exception documenté au

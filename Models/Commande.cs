@@ -74,6 +74,7 @@ namespace GestionCoutureApp.Models
 
         public List<Mesure> Mesures { get; set; } = new();
         public List<Paiement> Paiements { get; set; } = new();
+        public List<MaterielSupplement> MaterielSupplements { get; set; } = new();
 
         // Seuls les paiements NON annulés comptent pour le reste à payer
         //

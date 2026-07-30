@@ -55,6 +55,10 @@ namespace GestionCoutureApp
             services.AddSingleton<IParametresService, ParametresService>();
             services.AddSingleton<IRetourService, RetourService>();
             services.AddSingleton<IAlerteService, AlerteService>();
+            services.AddSingleton<IDepenseService, DepenseService>();
+            services.AddSingleton<IMaterielService, MaterielService>();
+
+
             // Sauvegarde automatique
             services.AddSingleton<BackupService>();
 
