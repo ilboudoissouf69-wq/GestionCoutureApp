@@ -234,6 +234,12 @@
                                 Style="{StaticResource NavBtn}"
                                 Visibility="Collapsed"
                                 Click="BtnCommissions_Click"/>
+
+                        <Button x:Name="BtnAlertes"
+                                Content="  Alertes RDV"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnAlertes_Click"/>
                         <Button x:Name="BtnRetours"
                                 Content="  Retours"
                                 Style="{StaticResource NavBtn}"

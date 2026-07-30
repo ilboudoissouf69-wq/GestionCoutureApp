@@ -31,6 +31,7 @@ namespace GestionCoutureApp.Views
                     BtnCommissions.Visibility = Visibility.Visible;
                     BtnRetours.Visibility = Visibility.Visible;
                     BtnParametres.Visibility = Visibility.Visible;
+                    BtnAlertes.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -45,6 +46,7 @@ namespace GestionCoutureApp.Views
                     BtnEmployes.Visibility = Visibility.Collapsed;
                     BtnCommissions.Visibility = Visibility.Collapsed;
                     BtnParametres.Visibility = Visibility.Collapsed;
+                    BtnAlertes.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -58,6 +60,7 @@ namespace GestionCoutureApp.Views
                     BtnEmployes.Visibility = Visibility.Collapsed;
                     BtnCommissions.Visibility = Visibility.Collapsed;
                     BtnDeconnexion.Visibility = Visibility.Visible;
+                    BtnAlertes.Visibility = Visibility.Collapsed;
                     ContentFrame.Navigate(new CouturierDashboardView(employe));
                 }
             };
@@ -176,6 +179,21 @@ namespace GestionCoutureApp.Views
             catch (UnauthorizedAccessException)
             {
                 MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+        private void BtnAlertes_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RoleAutorise("Boss", "Secretaire")) return;
+            try
+            {
+                ContentFrame.Navigate(new AlertesView());
+                SetBoutonActif(BtnAlertes);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show("Acces refuse.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

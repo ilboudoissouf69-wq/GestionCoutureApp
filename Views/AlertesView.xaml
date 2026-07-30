@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page x:Class="GestionCoutureApp.Views.AlertesView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{StaticResource BackgroundBrush}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="28,24,28,28">
+
+            <!-- TITRE -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Alertes Rendez-vous"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryBrush}"/>
+                <Border Height="3"
+                        Width="48"
+                        CornerRadius="2"
+                        Background="#CC0000"
+                        HorizontalAlignment="Left"
+                        Margin="0,6,0,0"/>
+                <TextBlock Text="Commandes dont le retrait ou l'essayage approche"
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <!-- 3 Cartes statistiques -->
+            <UniformGrid Columns="3"
+                         Margin="0,0,0,20">
+
+                <!-- Alertes actives — rouge marque -->
+                <Border CornerRadius="8"
+                        Padding="18,14"
+                        Margin="0,0,8,0"
+                        Background="#CC0000">
+                    <StackPanel>
+                        <TextBlock Text="ALERTE(S) ACTIVE(S)"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="#FFCCCC"/>
+                        <TextBlock x:Name="TxtNbAlertes"
+                                   Text="0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="dans le delai parametre"
+                                   FontSize="11"
+                                   Foreground="#FFCCCC"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Aujourd'hui — orange -->
+                <Border CornerRadius="8"
+                        Padding="18,14"
+                        Margin="0,0,8,0"
+                        Background="#D97706">
+                    <StackPanel>
+                        <TextBlock Text="AUJOURD'HUI"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="#FFF3CD"/>
+                        <TextBlock x:Name="TxtAujourdhui"
+                                   Text="0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="rendez-vous prevus"
+                                   FontSize="11"
+                                   Foreground="#FFF3CD"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Cette semaine — noir charbon -->
+                <Border CornerRadius="8"
+                        Padding="18,14"
+                        Background="#1A1A1A">
+                    <StackPanel>
+                        <TextBlock Text="CETTE SEMAINE"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="#B0A8A4"/>
+                        <TextBlock x:Name="TxtSemaine"
+                                   Text="0"
+                                   FontSize="28"
+                                   FontWeight="Bold"
+                                   Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="rendez-vous a venir"
+                                   FontSize="11"
+                                   Foreground="#B0A8A4"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- Filtres -->
+            <Border Style="{StaticResource Card}"
+                    Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Filtrer : "
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               Margin="0,0,10,0"
+                               Foreground="{StaticResource PrimaryBrush}"/>
+                    <RadioButton x:Name="RbTous"
+                                 Content="Tous les RDV"
+                                 GroupName="FiltreAlerte"
+                                 IsChecked="True"
+                                 Margin="0,0,16,0"
+                                 FontSize="13"
+                                 Checked="Filtre_Changed"/>
+                    <RadioButton x:Name="RbAlertes"
+                                 Content="Alertes uniquement"
+                                 GroupName="FiltreAlerte"
+                                 Margin="0,0,16,0"
+                                 FontSize="13"
+                                 Checked="Filtre_Changed"/>
+                    <RadioButton x:Name="RbUrgentes"
+                                 Content="Urgentes (&lt; 1h)"
+                                 GroupName="FiltreAlerte"
+                                 FontSize="13"
+                                 Checked="Filtre_Changed"/>
+                    <Button Content="Actualiser"
+                            Style="{StaticResource BtnGhost}"
+                            Margin="16,0,0,0"
+                            Height="32"
+                            FontSize="12"
+                            Click="BtnActualiser_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Liste des alertes -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Rendez-vous a venir"
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"
+                               Margin="0,0,0,10"/>
+                    <DataGrid x:Name="GridAlertes"
+                              Style="{StaticResource ModernGrid}"
+                              IsReadOnly="True"
+                              AutoGenerateColumns="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Client"
+                                                Binding="{Binding NomClient}"
+                                                Width="*"/>
+                            <DataGridTextColumn Header="Telephone"
+                                                Binding="{Binding Telephone}"
+                                                Width="110"/>
+                            <DataGridTextColumn Header="Vetement"
+                                                Binding="{Binding TypeVetement}"
+                                                Width="120"/>
+                            <DataGridTextColumn Header="Date"
+                                                Binding="{Binding DateRendezVous, StringFormat=\{0:dd/MM/yyyy\}}"
+                                                Width="100"/>
+                            <DataGridTextColumn Header="Heure"
+                                                Binding="{Binding HeureRendezVous}"
+                                                Width="60"/>
+                            <DataGridTextColumn Header="Temps restant"
+                                                Binding="{Binding TempsRestant}"
+                                                Width="110"/>
+                            <DataGridTextColumn Header="Couturier"
+                                                Binding="{Binding NomCouturier}"
+                                                Width="*"/>
+                            <DataGridTextColumn Header="Statut"
+                                                Binding="{Binding Statut}"
+                                                Width="100"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock x:Name="TxtMessage"
+                               FontSize="11"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Page>
