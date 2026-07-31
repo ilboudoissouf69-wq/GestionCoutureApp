@@ -8,6 +8,7 @@ namespace GestionCoutureApp.Views
     public partial class AlertesView : Page
     {
         private readonly IAlerteService _alerteService;
+        private readonly IWhatsAppService _whatsAppService;
         private List<AlerteRendezVous> _alertesActuelles = new();
         private List<AlerteRendezVous> _tousRendezVous = new();
         // Empêche AppliquerFiltre de s'exécuter avant la fin du chargement initial
@@ -18,6 +19,7 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
 
             _alerteService = App.Services.GetRequiredService<IAlerteService>();
+            _whatsAppService = App.Services.GetRequiredService<IWhatsAppService>();
 
             Loaded += async (s, e) =>
             {
@@ -117,6 +119,32 @@ namespace GestionCoutureApp.Views
             {
                 MessageBox.Show("Erreur : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnContacterWhatsApp_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not AlerteRendezVous alerte) return;
+
+            if (string.IsNullOrWhiteSpace(alerte.Telephone))
+            {
+                MessageBox.Show("Ce client n'a pas de numero de telephone enregistre.",
+                    "Numero manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string message =
+                $"Bonjour {alerte.NomClient}, votre commande ({alerte.TypeVetement}) " +
+                "est terminee et prete a etre recuperee a l'atelier. Merci !";
+
+            try
+            {
+                _whatsAppService.OuvrirConversation(alerte.Telephone, message);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur : " + ex.Message, "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

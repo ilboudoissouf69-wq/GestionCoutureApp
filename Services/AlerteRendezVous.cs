@@ -17,6 +17,7 @@ namespace GestionCoutureApp.Services
         public string TempsRestant { get; set; } = string.Empty;
         public string NomCouturier { get; set; } = string.Empty;
         public bool EstUrgent { get; set; }
+        public bool ProposerContactWhatsApp { get; set; }
     }
 
     public interface IAlerteService

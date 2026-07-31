@@ -57,6 +57,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IAlerteService, AlerteService>();
             services.AddSingleton<IDepenseService, DepenseService>();
             services.AddSingleton<IMaterielService, MaterielService>();
+            services.AddSingleton<IWhatsAppService, WhatsAppService>();
 
 
             // Sauvegarde automatique
