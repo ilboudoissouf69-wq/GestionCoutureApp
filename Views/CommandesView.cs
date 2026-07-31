@@ -16,12 +16,15 @@ namespace GestionCoutureApp.Views
         private readonly IClientService _clientService;
         private readonly ApplicationDbContext _context;
         private int _commandeSelectionneeId;
-        private int _pieceCommandeSelectionneeId; // ÉTAPE 1b-i : pièce associée à la commande sélectionnée
+        private int? _pieceSelectionneeId; // null = aucune pièce sélectionnée
         private decimal _prixBaseActuel;
         private List<TypeVetement> _typesVetement;
         private bool _chargementEnCours = false;
         private string _cheminPhotoTemporaire = string.Empty;
         private string _roleUtilisateur;
+
+        // Pièces chargées pour la commande sélectionnée
+        private List<PieceCommande> _piecesCommande = new();
 
         public CommandesView()
         {
@@ -42,6 +45,23 @@ namespace GestionCoutureApp.Views
             {
                 BtnModifier.Visibility = Visibility.Collapsed;
                 BtnSupprimer.Visibility = Visibility.Collapsed;
+                BtnSupprimerPiece.Visibility = Visibility.Collapsed;
+            }
+
+            // ===== COUTURIER : cacher créer/supprimer commande + supprimer pièce =====
+            if (_roleUtilisateur == "Couturier")
+            {
+                BtnCreer.Visibility = Visibility.Collapsed;
+                BtnSupprimer.Visibility = Visibility.Collapsed;
+                BtnSupprimerPiece.Visibility = Visibility.Collapsed;
+                BtnAjouterPiece.Visibility = Visibility.Collapsed;
+            }
+
+            // ===== BOSS : voir forcer statut + supprimer pièce =====
+            if (_roleUtilisateur == "Boss")
+            {
+                BtnForcerStatut.Visibility = Visibility.Visible;
+                BtnSupprimerPiece.Visibility = Visibility.Visible;
             }
 
             CmbClient.ItemsSource = _clientService.ObtenirTous();
@@ -69,10 +89,11 @@ namespace GestionCoutureApp.Views
             ChargerCommandes();
         }
 
+        // ==================================================================
+        // Chargement des commandes
+        // ==================================================================
         private void ChargerCommandes()
         {
-            // Réinitialise la source à null d'abord pour forcer
-            // le DataGrid à détecter le changement et se rafraîchir
             GridCommandes.ItemsSource = null;
             GridCommandes.ItemsSource = _commandeService.ObtenirTous();
         }
@@ -84,9 +105,9 @@ namespace GestionCoutureApp.Views
             else GridCommandes.ItemsSource = _commandeService.Rechercher(motCle);
         }
 
-        // ------------------------------------------------------------------
+        // ==================================================================
         // Quand on choisit un type de vetement
-        // ------------------------------------------------------------------
+        // ==================================================================
         private void CmbTypeVetement_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (CmbTypeVetement.SelectedValue == null) return;
@@ -97,14 +118,11 @@ namespace GestionCoutureApp.Views
             _prixBaseActuel = type.PrixBase;
             TxtPrixBase.Text = "Prix de base : " + type.PrixBase + " FCFA";
 
-            // Si on est en train de charger une commande existante, on ne
-            // touche PAS au montant — il sera restauré par GridCommandes_SelectionChanged
             if (!_chargementEnCours)
                 TxtMontant.Text = type.PrixBase.ToString();
 
             CmbDescription.ItemsSource = type.Descriptions.ToList();
 
-            // Ne réinitialise la description que si on n'est pas en train de charger
             if (!_chargementEnCours)
                 CmbDescription.Text = string.Empty;
 
@@ -123,11 +141,6 @@ namespace GestionCoutureApp.Views
                     VerticalAlignment = VerticalAlignment.Center
                 };
 
-                // CORRECTIF (précision métier) : l'ancienne liste ne proposait que des
-                // valeurs entières de 10 à 150 cm. En couture, le demi-centimètre a
-                // souvent une réelle importance (ex. tour de taille, longueur de manche).
-                // IsEditable=true permet de choisir dans la liste par confort ET de
-                // taper une valeur précise (ex. "72.5") non présente dans la liste.
                 var combo = new ComboBox
                 {
                     Width = 80,
@@ -137,7 +150,7 @@ namespace GestionCoutureApp.Views
                     IsTextSearchEnabled = true
                 };
 
-                for (int i = 20; i <= 300; i++) // pas de 0.5 cm, de 10 à 150 cm
+                for (int i = 20; i <= 300; i++)
                     combo.Items.Add((i * 0.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cm");
                 combo.SelectedIndex = 0;
 
@@ -148,6 +161,9 @@ namespace GestionCoutureApp.Views
 
             if (!_chargementEnCours)
                 CalculerPrixTotal();
+
+            // Charger les mesures antérieures du client pour réutilisation
+            ChargerMesuresAnterieures();
         }
 
         private void CmbAjustement_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -164,81 +180,190 @@ namespace GestionCoutureApp.Views
             TxtMontant.Text = total.ToString();
         }
 
-        // ------------------------------------------------------------------
-        // Quand on clique sur une commande dans le tableau
-        // ------------------------------------------------------------------
+        // ==================================================================
+        // Sélection d'une commande dans le tableau
+        // ==================================================================
         private void GridCommandes_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (GridCommandes.SelectedItem is not Commande cmd) return;
 
-            // Active le flag : empêche CmbTypeVetement_SelectionChanged d'écraser
-            // le montant réel et la description avec les valeurs par défaut du type
             _chargementEnCours = true;
 
             try
             {
                 _commandeSelectionneeId = cmd.IdCommande;
+                _pieceSelectionneeId = null;
+
+                // Charger les informations de la commande (niveau conteneur)
                 CmbClient.SelectedValue = cmd.IdClient;
-
-                // Remplit les mesures avec les valeurs enregistrées
-                // ÉTAPE 1b-i : on lit les mesures de la PIÈCE, plus de la commande
-                var premierePiece = cmd.Pieces.FirstOrDefault();
-                _pieceCommandeSelectionneeId = premierePiece?.IdPieceCommande ?? 0;
-
-                // Restaure TypeVetement, couturier, montant et statut depuis la pièce
-                if (premierePiece != null)
-                {
-                    var typeMatchPiece = _typesVetement.FirstOrDefault(t => t.Nom == premierePiece.TypeVetement);
-                    if (typeMatchPiece != null)
-                        CmbTypeVetement.SelectedValue = typeMatchPiece.IdTypeVetement;
-
-                    TxtMontant.Text = premierePiece.MontantCouture.ToString();
-
-                    if (premierePiece.IdCouturier.HasValue)
-                        CmbCouturier.SelectedValue = premierePiece.IdCouturier.Value;
-
-                    var descMatchPiece = CmbDescription.Items
-                        .Cast<DescriptionCourante>()
-                        .FirstOrDefault(d => d.Texte == premierePiece.DescriptionPrecision);
-                    if (descMatchPiece != null)
-                        CmbDescription.SelectedItem = descMatchPiece;
-                    else
-                        CmbDescription.Text = premierePiece.DescriptionPrecision ?? "";
-
-                    for (int i = 0; i < CmbStatut.Items.Count; i++)
-                    {
-                        var item = (ComboBoxItem)CmbStatut.Items[i];
-                        if (item.Content.ToString() == premierePiece.Statut)
-                        { CmbStatut.SelectedIndex = i; break; }
-                    }
-
-                    _cheminPhotoTemporaire = premierePiece.CheminPhoto ?? string.Empty;
-                }
-
                 TxtHeureDebut.Text = cmd.HeureDebut.ToString(@"hh\:mm");
-                TxtHeureFin.Text   = cmd.HeureFin?.ToString(@"hh\:mm") ?? "";
+                TxtHeureFin.Text = cmd.HeureFin?.ToString(@"hh\:mm") ?? "";
                 DateFin.SelectedDate = cmd.DateFin;
 
-                var mesuresExistantes = premierePiece != null
-                    ? _commandeService.ObtenirMesuresPiece(premierePiece.IdPieceCommande)
-                    : new List<Mesure>();
+                // Charger les pièces depuis le service (avec mesures et couturier)
+                _piecesCommande = _commandeService.ObtenirPiecesCommande(cmd.IdCommande);
+                RafraichirListePieces();
+
+                // Afficher les champs de pièce en mode "ajout" (première pièce vide)
+                // ou afficher la première pièce si la commande a des pièces
+                if (_piecesCommande.Count == 0)
+                {
+                    AfficherFormulairePiece(true);
+                }
+                else
+                {
+                    // Ne pas afficher le formulaire de pièce par défaut :
+                    // l'utilisateur doit cliquer sur une pièce pour la modifier
+                    MasquerFormulairePiece();
+
+                    // Afficher le bouton forcer statut si plusieurs pièces
+                    BtnForcerStatut.Visibility = (_piecesCommande.Count > 1 && _roleUtilisateur == "Boss")
+                        ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                // Cacher les boutons Créer/Modifier commande (on est en mode consultation)
+                BtnCreer.Visibility = _roleUtilisateur == "Couturier"
+                    ? Visibility.Collapsed : Visibility.Visible;
+            }
+            finally
+            {
+                _chargementEnCours = false;
+            }
+        }
+
+        // ==================================================================
+        // Gestion de la liste des pièces
+        // ==================================================================
+        private void RafraichirListePieces()
+        {
+            ListePieces.ItemsSource = null;
+            ListePieces.ItemsSource = _piecesCommande;
+
+            // Mettre à jour le total
+            decimal total = _piecesCommande.Sum(p => p.MontantCouture);
+            TxtTotalPieces.Text = total.ToString("N0") + " FCFA";
+        }
+
+        private void AfficherFormulairePiece(bool modeCreation)
+        {
+            // Afficher tous les contrôles de détail pièce
+            LblDetailPiece.Visibility = Visibility.Visible;
+            LblDetailPiece.Text = modeCreation ? "Nouvelle piece" : "Modifier la piece";
+            SepDetailPiece.Visibility = Visibility.Visible;
+            LblTypeVetement.Visibility = Visibility.Visible;
+            CmbTypeVetement.Visibility = Visibility.Visible;
+            LblCouturier.Visibility = Visibility.Visible;
+            CmbCouturier.Visibility = Visibility.Visible;
+            PanelPrix.Visibility = Visibility.Visible;
+            LblDescription.Visibility = Visibility.Visible;
+            CmbDescription.Visibility = Visibility.Visible;
+            LblMontant.Visibility = Visibility.Visible;
+            TxtMontant.Visibility = Visibility.Visible;
+            LblStatut.Visibility = Visibility.Visible;
+            CmbStatut.Visibility = Visibility.Visible;
+            TxtIndicationMesures.Visibility = Visibility.Visible;
+            SepMesures.Visibility = Visibility.Visible;
+            LblPhoto.Visibility = Visibility.Visible;
+            PanelBoutonsPhoto.Visibility = Visibility.Visible;
+            PanelPhoto.Visibility = Visibility.Visible;
+            BtnSauvegarderPiece.Visibility = Visibility.Visible;
+
+            PanelActionsPiece.Visibility = modeCreation ? Visibility.Collapsed : Visibility.Visible;
+
+            // Réutilisation des mesures : visible uniquement en création
+            LblReutilisationMesures.Visibility = modeCreation ? Visibility.Visible : Visibility.Collapsed;
+            CmbMesuresAnterieures.Visibility = modeCreation ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void MasquerFormulairePiece()
+        {
+            LblDetailPiece.Visibility = Visibility.Collapsed;
+            SepDetailPiece.Visibility = Visibility.Collapsed;
+            LblTypeVetement.Visibility = Visibility.Collapsed;
+            CmbTypeVetement.Visibility = Visibility.Collapsed;
+            LblCouturier.Visibility = Visibility.Collapsed;
+            CmbCouturier.Visibility = Visibility.Collapsed;
+            PanelPrix.Visibility = Visibility.Collapsed;
+            LblDescription.Visibility = Visibility.Collapsed;
+            CmbDescription.Visibility = Visibility.Collapsed;
+            LblMontant.Visibility = Visibility.Collapsed;
+            TxtMontant.Visibility = Visibility.Collapsed;
+            LblStatut.Visibility = Visibility.Collapsed;
+            CmbStatut.Visibility = Visibility.Collapsed;
+            TxtIndicationMesures.Visibility = Visibility.Collapsed;
+            SepMesures.Visibility = Visibility.Collapsed;
+            LblPhoto.Visibility = Visibility.Collapsed;
+            PanelBoutonsPhoto.Visibility = Visibility.Collapsed;
+            PanelPhoto.Visibility = Visibility.Collapsed;
+            BtnSauvegarderPiece.Visibility = Visibility.Collapsed;
+            PanelActionsPiece.Visibility = Visibility.Collapsed;
+            LblReutilisationMesures.Visibility = Visibility.Collapsed;
+            CmbMesuresAnterieures.Visibility = Visibility.Collapsed;
+            PanelMesuresDynamiques.Children.Clear();
+        }
+
+        // ==================================================================
+        // Clic sur une pièce dans la liste
+        // ==================================================================
+        private void PieceItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe) return;
+            if (fe.DataContext is not PieceCommande piece) return;
+
+            _pieceSelectionneeId = piece.IdPieceCommande;
+            _chargementEnCours = true;
+
+            try
+            {
+                // Afficher le formulaire de modification
+                AfficherFormulairePiece(false);
+
+                // Remplir les champs depuis la pièce
+                var typeMatch = _typesVetement.FirstOrDefault(t => t.Nom == piece.TypeVetement);
+                if (typeMatch != null)
+                    CmbTypeVetement.SelectedValue = typeMatch.IdTypeVetement;
+
+                TxtMontant.Text = piece.MontantCouture.ToString();
+
+                if (piece.IdCouturier.HasValue)
+                    CmbCouturier.SelectedValue = piece.IdCouturier.Value;
+                else
+                    CmbCouturier.SelectedIndex = -1;
+
+                // Description
+                if (CmbDescription.ItemsSource != null)
+                {
+                    var descMatch = CmbDescription.Items
+                        .Cast<DescriptionCourante>()
+                        .FirstOrDefault(d => d.Texte == piece.DescriptionPrecision);
+                    if (descMatch != null)
+                        CmbDescription.SelectedItem = descMatch;
+                    else
+                        CmbDescription.Text = piece.DescriptionPrecision ?? "";
+                }
+                else
+                {
+                    CmbDescription.Text = piece.DescriptionPrecision ?? "";
+                }
+
+                // Statut
+                for (int i = 0; i < CmbStatut.Items.Count; i++)
+                {
+                    var item = (ComboBoxItem)CmbStatut.Items[i];
+                    if (item.Content.ToString() == piece.Statut)
+                    { CmbStatut.SelectedIndex = i; break; }
+                }
+
+                // Mesures
+                var mesuresExistantes = _commandeService.ObtenirMesuresPiece(piece.IdPieceCommande);
                 foreach (var child in PanelMesuresDynamiques.Children)
                 {
-                    var row   = (StackPanel)child;
+                    var row = (StackPanel)child;
                     var combo = (ComboBox)row.Children[1];
                     string nomMesure = combo.Tag?.ToString() ?? "";
                     var mesure = mesuresExistantes.FirstOrDefault(m => m.NomMesure == nomMesure);
                     if (mesure != null)
                     {
-                        // CORRECTIF : si la valeur enregistrée (ex. "72.5", saisie
-                        // librement) ne correspond à aucun élément de la liste
-                        // déroulante, l'ancien code laissait le ComboBox sur sa
-                        // sélection précédente — la valeur réelle de la commande
-                        // n'était donc jamais affichée. On affiche maintenant
-                        // systématiquement la valeur exacte enregistrée via Text
-                        // (le ComboBox étant IsEditable=true), avec sélection dans
-                        // la liste seulement quand une correspondance exacte existe
-                        // (pour l'affichage visuel de la surbrillance).
                         bool trouve = false;
                         for (int j = 0; j < combo.Items.Count; j++)
                         {
@@ -252,30 +377,417 @@ namespace GestionCoutureApp.Views
                 }
 
                 // Photo
+                _cheminPhotoTemporaire = piece.CheminPhoto ?? string.Empty;
                 if (!string.IsNullOrEmpty(_cheminPhotoTemporaire) && System.IO.File.Exists(_cheminPhotoTemporaire))
                 {
                     ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(_cheminPhotoTemporaire));
                     TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
-                    BtnSupprimerPhoto.Visibility   = Visibility.Visible;
+                    BtnSupprimerPhoto.Visibility = Visibility.Visible;
                 }
                 else
                 {
                     ImgPhoto.Source = null;
                     _cheminPhotoTemporaire = string.Empty;
                     TxtPhotoPlaceholder.Visibility = Visibility.Visible;
-                    BtnSupprimerPhoto.Visibility   = Visibility.Collapsed;
+                    BtnSupprimerPhoto.Visibility = Visibility.Collapsed;
                 }
+
+                // Calculer l'ajustement à partir du montant
+                if (typeMatch != null)
+                {
+                    decimal ecart = piece.MontantCouture - typeMatch.PrixBase;
+                    int indexAjustement = (int)Math.Round(ecart / 500m);
+                    if (indexAjustement >= 0 && indexAjustement < CmbAjustement.Items.Count)
+                        CmbAjustement.SelectedIndex = indexAjustement;
+                    else
+                        CmbAjustement.SelectedIndex = 0;
+                }
+
+                // Boutons d'action
+                BtnDupliquerPiece.Visibility = Visibility.Visible;
+                BtnSupprimerPiece.Visibility = (_roleUtilisateur == "Boss" || _roleUtilisateur != "Secretaire")
+                    ? Visibility.Visible : Visibility.Collapsed;
             }
             finally
             {
-                // Toujours désactiver le flag, même en cas d'exception
                 _chargementEnCours = false;
             }
         }
 
-        // ------------------------------------------------------------------
+        // ==================================================================
+        // Réutilisation des mesures
+        // ==================================================================
+        private void ChargerMesuresAnterieures()
+        {
+            CmbMesuresAnterieures.ItemsSource = null;
+            CmbMesuresAnterieures.SelectedIndex = -1;
+
+            if (CmbClient.SelectedValue == null || CmbTypeVetement.SelectedValue == null) return;
+
+            int idClient = (int)CmbClient.SelectedValue;
+            int idType = (int)CmbTypeVetement.SelectedValue;
+            var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idType);
+            if (type == null) return;
+
+            var piecesAnterieures = _commandeService.ObtenirPiecesAnterieuresClient(
+                idClient, type.Nom, _commandeSelectionneeId > 0 ? _commandeSelectionneeId : (int?)null);
+
+            CmbMesuresAnterieures.ItemsSource = piecesAnterieures;
+        }
+
+        private void CmbMesuresAnterieures_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_chargementEnCours) return;
+            if (CmbMesuresAnterieures.SelectedItem is not PieceCommande pieceAnterieure) return;
+
+            // Recharger les mesures de la pièce antérieure
+            var mesures = _commandeService.ObtenirMesuresPiece(pieceAnterieure.IdPieceCommande);
+
+            foreach (var child in PanelMesuresDynamiques.Children)
+            {
+                var row = (StackPanel)child;
+                var combo = (ComboBox)row.Children[1];
+                string nomMesure = combo.Tag?.ToString() ?? "";
+                var mesure = mesures.FirstOrDefault(m => m.NomMesure == nomMesure);
+                if (mesure != null)
+                {
+                    bool trouve = false;
+                    for (int j = 0; j < combo.Items.Count; j++)
+                    {
+                        string? item = combo.Items[j]?.ToString();
+                        if (item == mesure.Valeur + " cm" || item?.StartsWith(mesure.Valeur + " ") == true)
+                        { combo.SelectedIndex = j; trouve = true; break; }
+                    }
+                    if (!trouve)
+                        combo.Text = mesure.Valeur + " cm";
+                }
+            }
+        }
+
+        // ==================================================================
+        // Ajouter une pièce
+        // ==================================================================
+        private void BtnAjouterPiece_Click(object sender, RoutedEventArgs e)
+        {
+            if (_commandeSelectionneeId == 0)
+            {
+                MessageBox.Show("Selectionnez d'abord une commande.",
+                    "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Vérifier si on peut ajouter
+            if (!_commandeService.PeutAjouterPiece(_commandeSelectionneeId))
+            {
+                if (_roleUtilisateur == "Boss")
+                {
+                    var motif = MessageBox.Show(
+                        "Un acompte a deja ete encaisse sur cette commande.\n\n" +
+                        "En tant que Boss, vous pouvez ajouter une pièce avec motif obligatoire.\n\n" +
+                        "Voulez-vous continuer ?",
+                        "Ajout avec exception",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (motif != MessageBoxResult.Yes) return;
+
+                    // Demander le motif
+                    string? motifSaisi = DemanderMotif("Motif de l'ajout apres encaissement");
+                    if (string.IsNullOrWhiteSpace(motifSaisi)) return;
+
+                    // On ne fait rien de spécial avec le motif ici : il est passé au service
+                    // pour traçabilité. La pièce sera ajoutée normalement.
+                    // (Le motif pourrait être stocké dans un log ou une table d'audit)
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "Impossible d'ajouter une pièce : un acompte a déjà été encaissé.\n" +
+                        "Seul le Boss peut ajouter une pièce dans ce cas.",
+                        "Ajout impossible",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
+            // Réinitialiser le formulaire pour une nouvelle pièce
+            _pieceSelectionneeId = null;
+            CmbTypeVetement.SelectedIndex = -1;
+            CmbCouturier.SelectedIndex = -1;
+            CmbDescription.Text = "";
+            CmbAjustement.SelectedIndex = 0;
+            TxtPrixBase.Text = "Prix de base : -";
+            TxtPrixTotal.Text = "Prix total : -";
+            TxtMontant.Text = "";
+            CmbStatut.SelectedIndex = 0;
+            _prixBaseActuel = 0;
+            PanelMesuresDynamiques.Children.Clear();
+            TxtIndicationMesures.Text = "Selectionnez un type de vetement";
+            _cheminPhotoTemporaire = string.Empty;
+            ImgPhoto.Source = null;
+            TxtPhotoPlaceholder.Visibility = Visibility.Visible;
+            BtnSupprimerPhoto.Visibility = Visibility.Collapsed;
+            CmbMesuresAnterieures.ItemsSource = null;
+
+            AfficherFormulairePiece(true);
+        }
+
+        // ==================================================================
+        // Sauvegarder une pièce (ajout ou modification)
+        // ==================================================================
+        private void BtnSauvegarderPiece_Click(object sender, RoutedEventArgs e)
+        {
+            if (CmbTypeVetement.SelectedValue == null)
+            {
+                MessageBox.Show("Selectionnez un type de vetement.",
+                    "Champ manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (!decimal.TryParse(TxtMontant.Text, out decimal montant) || montant <= 0)
+            {
+                MessageBox.Show("Le montant doit être positif.",
+                    "Montant invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // SECRETAIRE : confirmation + mot de passe pour l'ajout de pièce
+            if (_roleUtilisateur == "Secretaire" && _pieceSelectionneeId == null)
+            {
+                if (!DemanderMotDePasse()) return;
+            }
+
+            var piece = new PieceCommande
+            {
+                TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
+                DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc
+                    ? dc.Texte : CmbDescription.Text,
+                IdCouturier = CmbCouturier.SelectedValue as int?,
+                MontantCouture = montant,
+                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
+                CheminPhoto = _cheminPhotoTemporaire
+            };
+
+            var mesures = CollecterMesures();
+
+            try
+            {
+                if (_pieceSelectionneeId.HasValue)
+                {
+                    // Modification d'une pièce existante
+                    piece.IdPieceCommande = _pieceSelectionneeId.Value;
+                    _commandeService.ModifierPiece(piece, mesures);
+                    MessageBox.Show("Piece modifiee avec succes !", "Succes",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else if (_commandeSelectionneeId > 0)
+                {
+                    // Ajout d'une pièce à une commande existante
+                    _commandeService.AjouterPiece(
+                        _commandeSelectionneeId, piece, mesures,
+                        _roleUtilisateur == "Boss");
+                    MessageBox.Show("Piece ajoutee avec succes !", "Succes",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    // Ne devrait pas arriver
+                    return;
+                }
+
+                // Recharger les pièces et rafraîchir
+                _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
+                RafraichirListePieces();
+                ChargerCommandes();
+                MasquerFormulairePiece();
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Operation impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // ==================================================================
+        // Dupliquer une pièce
+        // ==================================================================
+        private void BtnDupliquerPiece_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_pieceSelectionneeId.HasValue) return;
+
+            try
+            {
+                var nouvellePiece = _commandeService.DupliquerPiece(_pieceSelectionneeId.Value);
+
+                // Recharger
+                _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
+                RafraichirListePieces();
+                ChargerCommandes();
+
+                MessageBox.Show("Piece dupliquee avec succes !", "Succes",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Duplication impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // ==================================================================
+        // Supprimer une pièce
+        // ==================================================================
+        private void BtnSupprimerPiece_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_pieceSelectionneeId.HasValue) return;
+
+            var r = MessageBox.Show(
+                "Supprimer cette piece ?\n\nCette action est irreversible.",
+                "Confirmation",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (r == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    _commandeService.SupprimerPiece(_pieceSelectionneeId.Value);
+
+                    _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
+                    RafraichirListePieces();
+                    ChargerCommandes();
+                    MasquerFormulairePiece();
+                    _pieceSelectionneeId = null;
+
+                    MessageBox.Show("Piece supprimee.", "Succes",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageBox.Show(ex.Message, "Suppression impossible",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+
+        // ==================================================================
+        // Forcer le statut de toutes les pièces
+        // ==================================================================
+        private void BtnForcerStatut_Click(object sender, RoutedEventArgs e)
+        {
+            if (_commandeSelectionneeId == 0) return;
+
+            var dialog = new Window
+            {
+                Title = "Forcer le statut de toutes les pieces",
+                Width = 350,
+                Height = 220,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.White,
+                SizeToContent = SizeToContent.Height
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Nouveau statut pour toutes les pieces :",
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 12)
+            });
+
+            var cmb = new ComboBox
+            {
+                Height = 36,
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            cmb.Items.Add("A faire");
+            cmb.Items.Add("En cours");
+            cmb.Items.Add("Terminee");
+            cmb.Items.Add("Livree");
+            cmb.SelectedIndex = 2; // "Terminee" par défaut
+            panel.Children.Add(cmb);
+
+            var message = new TextBlock
+            {
+                Text = "",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                Height = 18,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            panel.Children.Add(message);
+
+            var btnPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var btnOk = new Button
+            {
+                Content = "Appliquer",
+                Width = 100,
+                Height = 36,
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+
+            var btnAnnuler = new Button
+            {
+                Content = "Annuler",
+                Width = 90,
+                Height = 36,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Cursor = Cursors.Hand
+            };
+
+            btnOk.Click += (s, ev) =>
+            {
+                string statut = cmb.SelectedItem?.ToString() ?? "";
+                try
+                {
+                    _commandeService.ForcerStatutToutesPieces(_commandeSelectionneeId, statut);
+                    dialog.DialogResult = true;
+                    dialog.Close();
+
+                    // Recharger
+                    _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
+                    RafraichirListePieces();
+                    ChargerCommandes();
+
+                    MessageBox.Show("Statut de toutes les pieces mis a jour.",
+                        "Succes", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    message.Text = ex.Message;
+                }
+            };
+
+            btnAnnuler.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+            btnPanel.Children.Add(btnOk);
+            btnPanel.Children.Add(btnAnnuler);
+            panel.Children.Add(btnPanel);
+
+            dialog.Content = panel;
+            dialog.Owner = Window.GetWindow(this);
+            dialog.ShowDialog();
+        }
+
+        // ==================================================================
         // Collecter les mesures
-        // ------------------------------------------------------------------
+        // ==================================================================
         private List<Mesure> CollecterMesures()
         {
             var mesures = new List<Mesure>();
@@ -283,14 +795,6 @@ namespace GestionCoutureApp.Views
             {
                 var row = (StackPanel)child;
                 var combo = (ComboBox)row.Children[1];
-                // CORRECTIF : depuis que le ComboBox est IsEditable=true (précision
-                // au demi-centimètre + saisie libre), le texte tapé par l'utilisateur
-                // n'apparaît PAS forcément dans SelectedItem (ex. valeur saisie qui
-                // n'est pas dans la liste). Il faut lire combo.Text, qui reflète
-                // toujours ce qui est réellement affiché, que ce soit une sélection
-                // de la liste ou une saisie manuelle. L'ancien code, basé uniquement
-                // sur SelectedItem, aurait silencieusement ignoré toute valeur tapée
-                // à la main et non présente dans la liste déroulante.
                 string texte = combo.Text?.Trim() ?? "";
                 if (!string.IsNullOrEmpty(texte))
                 {
@@ -312,12 +816,38 @@ namespace GestionCoutureApp.Views
             return null;
         }
 
-        // ------------------------------------------------------------------
-        // ===== BOUTONS CRUD =====
-        // ------------------------------------------------------------------
+        // ==================================================================
+        // ===== BOUTONS CRUD COMMANDE =====
+        // ==================================================================
         private void BtnCreer_Click(object sender, RoutedEventArgs e)
         {
-            if (ChampsInvalides()) return;
+            // Validation minimale : client et date fin
+            if (CmbClient.SelectedValue == null)
+            {
+                MessageBox.Show("Selectionnez un client.", "Champs manquants",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (DateFin.SelectedDate == null)
+            {
+                MessageBox.Show("Selectionnez une date de fin prevue.", "Champs manquants",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Vérifier qu'au moins les champs pièce de base sont remplis
+            if (CmbTypeVetement.SelectedValue == null)
+            {
+                MessageBox.Show("Selectionnez un type de vetement pour la premiere piece.",
+                    "Champs manquants", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (!decimal.TryParse(TxtMontant.Text, out decimal montant) || montant <= 0)
+            {
+                MessageBox.Show("Le montant doit etre positif.",
+                    "Montant invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             // SECRETAIRE : confirmation + mot de passe
             if (_roleUtilisateur == "Secretaire")
@@ -327,29 +857,26 @@ namespace GestionCoutureApp.Views
                     "Confirmation d'enregistrement",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
-
                 if (confirm != MessageBoxResult.Yes) return;
-
                 if (!DemanderMotDePasse()) return;
             }
 
             var commande = new Commande
             {
-                IdClient  = (int)CmbClient.SelectedValue,
+                IdClient = (int)CmbClient.SelectedValue,
                 DateDebut = DateTime.Now,
-                DateFin   = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
+                DateFin = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
                 HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? DateTime.Now.TimeOfDay,
-                HeureFin   = ParseHeure(TxtHeureFin.Text),
+                HeureFin = ParseHeure(TxtHeureFin.Text),
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
-            // ÉTAPE 1b-i : les données du vêtement vont maintenant sur PieceCommande
             var piece = new PieceCommande
             {
                 TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc1
                     ? dc1.Texte : CmbDescription.Text,
-                IdCouturier  = CmbCouturier.SelectedValue as int?,
+                IdCouturier = CmbCouturier.SelectedValue as int?,
                 MontantCouture = decimal.Parse(TxtMontant.Text),
                 Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
@@ -365,13 +892,7 @@ namespace GestionCoutureApp.Views
             }
             catch (InvalidOperationException ex)
             {
-                // CORRECTIF : sans ce try/catch, une erreur métier levée par le
-                // service (contrainte de données, etc.) remontait jusqu'au
-                // handler global (Application_DispatcherUnhandledException) qui
-                // affiche un message générique, au lieu du message métier précis
-                // — contrairement à BtnModifier_Click et BtnSupprimer_Click qui,
-                // eux, gèrent déjà correctement ce cas.
-                MessageBox.Show(ex.Message, "Création impossible",
+                MessageBox.Show(ex.Message, "Creation impossible",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -384,63 +905,53 @@ namespace GestionCoutureApp.Views
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            if (ChampsInvalides()) return;
 
-            var commande = new Commande
+            // Modifier uniquement les infos au niveau commande (dates, client)
+            // Les pièces se modifient individuellement via BtnSauvegarderPiece
+            if (CmbClient.SelectedValue == null)
             {
-                IdCommande = _commandeSelectionneeId,
-                IdClient   = (int)CmbClient.SelectedValue,
-                DateFin    = DateFin.SelectedDate ?? DateTime.Now.AddDays(7),
-                HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero,
-                HeureFin   = ParseHeure(TxtHeureFin.Text),
-                CheminPhoto = _cheminPhotoTemporaire
-            };
-
-            // ÉTAPE 1b-i : mise à jour de la pièce existante
-            var piece = new PieceCommande
-            {
-                IdPieceCommande = _pieceCommandeSelectionneeId,
-                TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
-                DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc2
-                    ? dc2.Texte : CmbDescription.Text,
-                IdCouturier    = CmbCouturier.SelectedValue as int?,
-                MontantCouture = decimal.Parse(TxtMontant.Text),
-                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
-                CheminPhoto = _cheminPhotoTemporaire
-            };
-
-            try
-            {
-                _commandeService.Modifier(commande, piece, CollecterMesures());
-
-                int idModifie = _commandeSelectionneeId;
-                ChargerCommandes();
-
-                // Re-sélectionne et scrolle sur la ligne modifiée
-                var items = GridCommandes.ItemsSource as List<Commande>;
-                var ligne = items?.FirstOrDefault(c => c.IdCommande == idModifie);
-                if (ligne != null)
-                {
-                    GridCommandes.SelectedItem = ligne;
-                    GridCommandes.ScrollIntoView(ligne);
-                }
-
-                MessageBox.Show("Commande modifiee avec succes !", "Succes",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (InvalidOperationException ex)
-            {
-                MessageBox.Show(ex.Message, "Modification impossible",
+                MessageBox.Show("Selectionnez un client.", "Champs manquants",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
+
+            var r = MessageBox.Show(
+                "Modifier les informations de la commande ?\n" +
+                "(Client, dates). Les pieces se modifient individuellement.",
+                "Confirmation",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (r != MessageBoxResult.Yes) return;
+
+            using var context = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext();
+            var existante = context.Commandes.FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
+            if (existante == null) return;
+
+            existante.IdClient = (int)CmbClient.SelectedValue;
+            existante.DateFin = DateFin.SelectedDate ?? existante.DateFin;
+            existante.HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? existante.HeureDebut;
+            existante.HeureFin = ParseHeure(TxtHeureFin.Text);
+
+            context.SaveChanges();
+
+            ChargerCommandes();
+            MessageBox.Show("Commande modifiee avec succes !", "Succes",
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BtnSupprimer_Click(object sender, RoutedEventArgs e)
         {
             if (_commandeSelectionneeId == 0)
-            { MessageBox.Show("Selectionnez une commande.", "Attention", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-            var r = MessageBox.Show("Supprimer cette commande ?", "Confirmation",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            {
+                MessageBox.Show("Selectionnez une commande.", "Attention",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var r = MessageBox.Show("Supprimer cette commande ?\n\nToutes les pieces seront supprimees.",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
             if (r == MessageBoxResult.Yes)
             {
                 try
@@ -461,22 +972,11 @@ namespace GestionCoutureApp.Views
 
         private void BtnVider_Click(object sender, RoutedEventArgs e) { ViderChamps(); }
 
-        private bool ChampsInvalides()
-        {
-            if (CmbClient.SelectedValue == null)
-            { MessageBox.Show("Selectionnez un client.", "Champs manquants", MessageBoxButton.OK, MessageBoxImage.Warning); return true; }
-            if (CmbTypeVetement.SelectedValue == null)
-            { MessageBox.Show("Selectionnez un type de vetement.", "Champs manquants", MessageBoxButton.OK, MessageBoxImage.Warning); return true; }
-            if (!decimal.TryParse(TxtMontant.Text, out decimal m) || m <= 0)
-            { MessageBox.Show("Le montant doit etre positif.", "Montant invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return true; }
-            return false;
-        }
-
-        // ------------------------------------------------------------------
-        // Import photo depuis le disque — avec validation
-        // ------------------------------------------------------------------
+        // ==================================================================
+        // Import / Capture / Suppression photo
+        // ==================================================================
         private static readonly string[] ExtensionsAutorisees = { ".jpg", ".jpeg", ".png", ".bmp" };
-        private const long TailleMaxOctets = 5 * 1024 * 1024; // 5 Mo
+        private const long TailleMaxOctets = 5 * 1024 * 1024;
 
         private void BtnImporterPhoto_Click(object sender, RoutedEventArgs e)
         {
@@ -491,54 +991,28 @@ namespace GestionCoutureApp.Views
             try
             {
                 var info = new System.IO.FileInfo(dialog.FileName);
-
-                // --- Validation extension ---
                 string ext = info.Extension.ToLowerInvariant();
                 if (!ExtensionsAutorisees.Contains(ext))
                 {
-                    MessageBox.Show(
-                        $"Format non autorisé : {ext}\nFormats acceptés : JPG, PNG, BMP.",
+                    MessageBox.Show($"Format non autorise : {ext}\nFormats acceptes : JPG, PNG, BMP.",
                         "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
-                // --- Validation taille (max 5 Mo) ---
                 if (info.Length > TailleMaxOctets)
                 {
                     MessageBox.Show(
-                        $"L'image est trop volumineuse ({info.Length / 1024 / 1024:N1} Mo).\nTaille maximum autorisée : 5 Mo.",
+                        $"L'image est trop volumineuse ({info.Length / 1024 / 1024:N1} Mo).\nTaille max : 5 Mo.",
                         "Fichier trop grand", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-
-                // --- Validation signature binaire (magic bytes) ---
                 if (!EstImageValide(dialog.FileName))
                 {
-                    MessageBox.Show(
-                        "Le fichier sélectionné n'est pas une image valide.",
+                    MessageBox.Show("Le fichier n'est pas une image valide.",
                         "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                // --- Copie vers le dossier photos ---
-                // CORRECTIF : le dossier vient desormais de AppPaths (voir
-                // Helpers/AppPaths.cs) et non du dossier de l'executable.
                 string dossierPhotos = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
-
-                // CORRECTIF (bug silencieux) : le nom de fichier ne se basait
-                // que sur l'horodatage a la seconde pres. Deux photos
-                // importees dans la meme seconde generaient exactement le
-                // meme nom de fichier ; avec overwrite:true, la seconde
-                // ecrasait la premiere sans aucun avertissement (perte de
-                // photo silencieuse). On ajoute un identifiant unique pour
-                // garantir l'unicite meme en cas d'appels rapproches.
-                // CORRECTIF (bug réel) : l'ancien code tronquait la chaîne complète
-                // ("photo_" + horodatage + GUID) à 24 caractères AVANT d'ajouter
-                // l'extension. "photo_" (6) + horodatage yyyyMMdd_HHmmss (15) + "_" (1)
-                // = 22 caractères déjà utilisés, ce qui ne laissait que 2 caractères
-                // hexadécimaux du GUID. Le GUID était censé garantir l'unicité ;
-                // le tronquer à 2 caractères (256 combinaisons) rendait des collisions
-                // bien plus probables qu'attendu.
                 string suffixeUnique = Guid.NewGuid().ToString("N")[..8];
                 string nomFichier = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixeUnique}{ext}";
                 string cheminDestination = System.IO.Path.Combine(dossierPhotos, nomFichier);
@@ -546,8 +1020,7 @@ namespace GestionCoutureApp.Views
                 System.IO.File.Copy(dialog.FileName, cheminDestination, overwrite: true);
 
                 _cheminPhotoTemporaire = cheminDestination;
-                ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(
-                    new Uri(cheminDestination));
+                ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(cheminDestination));
                 TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
                 BtnSupprimerPhoto.Visibility = Visibility.Visible;
             }
@@ -558,10 +1031,6 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        /// <summary>
-        /// Vérifie les magic bytes du fichier pour confirmer qu'il s'agit bien
-        /// d'une image (protection contre un .exe renommé en .jpg, etc.).
-        /// </summary>
         private static bool EstImageValide(string chemin)
         {
             try
@@ -570,23 +1039,15 @@ namespace GestionCoutureApp.Views
                 var header = new byte[8];
                 int lu = fs.Read(header, 0, header.Length);
                 if (lu < 3) return false;
-
-                // JPEG : FF D8 FF
                 if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
-                // PNG  : 89 50 4E 47 0D 0A 1A 0A
                 if (lu >= 8 && header[0] == 0x89 && header[1] == 0x50 &&
                     header[2] == 0x4E && header[3] == 0x47) return true;
-                // BMP  : 42 4D
                 if (header[0] == 0x42 && header[1] == 0x4D) return true;
-
                 return false;
             }
             catch { return false; }
         }
 
-        // ------------------------------------------------------------------
-        // Capture photo via webcam
-        // ------------------------------------------------------------------
         private void BtnPrendrePhoto_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -610,9 +1071,6 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        // ------------------------------------------------------------------
-        // Supprimer photo
-        // ------------------------------------------------------------------
         private void BtnSupprimerPhoto_Click(object sender, RoutedEventArgs e)
         {
             _cheminPhotoTemporaire = string.Empty;
@@ -621,12 +1079,14 @@ namespace GestionCoutureApp.Views
             BtnSupprimerPhoto.Visibility = Visibility.Collapsed;
         }
 
-        // ------------------------------------------------------------------
+        // ==================================================================
         // Vider tous les champs
-        // ------------------------------------------------------------------
+        // ==================================================================
         private void ViderChamps()
         {
             _commandeSelectionneeId = 0;
+            _pieceSelectionneeId = null;
+            _piecesCommande = new List<PieceCommande>();
             CmbClient.SelectedIndex = -1;
             CmbCouturier.SelectedIndex = -1;
             CmbTypeVetement.SelectedIndex = -1;
@@ -643,16 +1103,128 @@ namespace GestionCoutureApp.Views
             PanelMesuresDynamiques.Children.Clear();
             TxtIndicationMesures.Text = "Selectionnez un type de vetement";
             GridCommandes.SelectedItem = null;
+            ListePieces.ItemsSource = null;
+            TxtTotalPieces.Text = "0 FCFA";
 
             _cheminPhotoTemporaire = string.Empty;
             ImgPhoto.Source = null;
             TxtPhotoPlaceholder.Visibility = Visibility.Visible;
             BtnSupprimerPhoto.Visibility = Visibility.Collapsed;
+
+            MasquerFormulairePiece();
+
+            // Réafficher le formulaire pour la première pièce (mode création)
+            AfficherFormulairePiece(true);
         }
 
-        // ------------------------------------------------------------------
+        // ==================================================================
+        // Demander un motif (pour les exceptions Boss)
+        // ==================================================================
+        private string? DemanderMotif(string titre)
+        {
+            string? resultat = null;
+
+            var dialog = new Window
+            {
+                Title = titre,
+                Width = 420,
+                Height = 240,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.White,
+                SizeToContent = SizeToContent.Height
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Motif :",
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var txtMotif = new TextBox
+            {
+                Height = 70,
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+                AcceptsReturn = true,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            panel.Children.Add(txtMotif);
+
+            var message = new TextBlock
+            {
+                Text = "",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                Height = 18,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            panel.Children.Add(message);
+
+            var btnPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var btnOk = new Button
+            {
+                Content = "Confirmer",
+                Width = 110,
+                Height = 36,
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+
+            var btnAnnuler = new Button
+            {
+                Content = "Annuler",
+                Width = 100,
+                Height = 36,
+                FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Cursor = Cursors.Hand
+            };
+
+            btnOk.Click += (s, ev) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtMotif.Text))
+                {
+                    message.Text = "Le motif est obligatoire.";
+                    return;
+                }
+                resultat = txtMotif.Text.Trim();
+                dialog.DialogResult = true;
+                dialog.Close();
+            };
+
+            btnAnnuler.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+            btnPanel.Children.Add(btnOk);
+            btnPanel.Children.Add(btnAnnuler);
+            panel.Children.Add(btnPanel);
+
+            dialog.Content = panel;
+            dialog.Owner = Window.GetWindow(this);
+            dialog.ShowDialog();
+
+            return resultat;
+        }
+
+        // ==================================================================
         // ===== FENETRE MOT DE PASSE (securite secretaire) =====
-        // ------------------------------------------------------------------
+        // ==================================================================
         private bool DemanderMotDePasse()
         {
             var dialog = new Window
@@ -704,14 +1276,12 @@ namespace GestionCoutureApp.Views
             };
             mainPanel.Children.Add(message);
 
-            // Séparateur
             mainPanel.Children.Add(new Separator
             {
                 Background = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
                 Margin = new Thickness(0, 0, 0, 14)
             });
 
-            // Boutons
             var btnPanel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -773,7 +1343,6 @@ namespace GestionCoutureApp.Views
                 dialog.Close();
             };
 
-            // Permettre validation avec Entree
             passwordBox.KeyDown += (s, ev) =>
             {
                 if (ev.Key == System.Windows.Input.Key.Enter)

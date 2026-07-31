@@ -13,10 +13,10 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="20"/>
-            <ColumnDefinition Width="400"/>
+            <ColumnDefinition Width="420"/>
         </Grid.ColumnDefinitions>
 
-        <!-- GAUCHE -->
+        <!-- ═══════════════ GAUCHE : Liste des commandes ═══════════════ -->
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -28,7 +28,7 @@
                     Margin="0,0,0,20">
                 <TextBlock Text="Gestion des Commandes"
                            FontSize="22"
-                        FontWeight="Bold"
+                           FontWeight="Bold"
                            Foreground="{StaticResource PrimaryBrush}"/>
                 <Border Height="3"
                         Width="48"
@@ -39,7 +39,7 @@
             </StackPanel>
 
             <TextBox Grid.Row="1"
-                    x:Name="TxtRecherche"
+                     x:Name="TxtRecherche"
                      Style="{StaticResource ModernTextBox}"
                      Margin="0,0,0,14"
                      TextChanged="TxtRecherche_TextChanged"/>
@@ -68,34 +68,37 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Client"
-                                Binding="{Binding Client.Nom}"
+                                            Binding="{Binding Client.Nom}"
                                 Width="*"/>
                         <DataGridTextColumn Header="Type"
-                                Binding="{Binding TypeVetementAffiche}"
+                                            Binding="{Binding TypeVetementAffiche}"
                                 Width="*"/>
+                        <DataGridTextColumn Header="Pieces"
+                                            Binding="{Binding Pieces.Count}"
+                                Width="50"/>
                         <DataGridTextColumn Header="Statut"
-                                Binding="{Binding StatutGlobalAffiche}"
-                                Width="90"/>
+                                            Binding="{Binding StatutGlobalAffiche}"
+                                Width="120"/>
                         <DataGridTextColumn Header="Montant"
-                                Binding="{Binding MontantTotalCalcule, StringFormat={}{0:N0}}"
-                                Width="90"/>
+                                            Binding="{Binding MontantTotalCalcule, StringFormat={}{0:N0}}"
+                                            Width="90"/>
                         <DataGridTextColumn Header="Reste"
-                                Binding="{Binding ResteAPayer,  StringFormat={}{0:N0}}"
-                                Width="90"/>
+                                            Binding="{Binding ResteAPayer, StringFormat={}{0:N0}}"
+                                            Width="90"/>
                         <DataGridTextColumn Header="Date fin"
-                                Binding="{Binding DateFin,      StringFormat={}{0:dd/MM/yy}}"
-                                Width="82"/>
+                                            Binding="{Binding DateFin, StringFormat={}{0:dd/MM/yy}}"
+                                            Width="82"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
         </Grid>
 
-        <!-- DROITE -->
+        <!-- ═══════════════ DROITE : Détails commande + pièces ═══════════════ -->
         <Border Grid.Column="2"
                 Style="{StaticResource Card}"
                 Padding="0"
                 VerticalAlignment="Top"
-                MaxHeight="840">
+                MaxHeight="860">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -103,28 +106,29 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- En-tête panel — noir -->
+                <!-- En-tête panel -->
                 <Border Grid.Row="0"
                         CornerRadius="10,10,0,0"
                         Padding="20,14"
                         Background="#1A1A1A">
                     <TextBlock Text="Details de la commande"
                                FontSize="14"
-                            FontWeight="Bold"
-                            Foreground="White"/>
+                               FontWeight="Bold"
+                               Foreground="White"/>
                 </Border>
 
                 <ScrollViewer Grid.Row="1"
-                        VerticalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
                               Padding="20,16,20,8">
                     <StackPanel>
 
+                        <!-- ═══ Client ═══ -->
                         <TextBlock Text="Client *"
                                 Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="CmbClient"
-                                Style="{StaticResource ModernComboBox}"
+                                  Style="{StaticResource ModernComboBox}"
                                   Margin="0,0,0,12"
-                                SelectedValuePath="IdClient">
+                                  SelectedValuePath="IdClient">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <TextBlock>
@@ -139,41 +143,266 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
 
-                        <TextBlock Text="Couturier"
-                                Style="{StaticResource FieldLabel}"/>
-                        <ComboBox x:Name="CmbCouturier"
-                                Style="{StaticResource ModernComboBox}"
-                                  Margin="0,0,0,12"
-                                SelectedValuePath="IdEmploye">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock>
-                                        <TextBlock.Text>
-                                            <MultiBinding StringFormat="{}{0} {1}">
-                                                <Binding Path="Nom"/>
-                                                <Binding Path="Prenom"/>
-                                            </MultiBinding>
-                                        </TextBlock.Text>
-                                    </TextBlock>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <!-- ═══ Dates / Heures ═══ -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Heure debut"
+                                        Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtHeureDebut"
+                                         Style="{StaticResource ModernTextBox}"
+                                         IsReadOnly="True"
+                                        Background="#F2ECE8"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Heure fin (HH:mm)"
+                                        Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtHeureFin"
+                                         Style="{StaticResource ModernTextBox}"/>
+                            </StackPanel>
+                        </Grid>
 
-                        <TextBlock Text="Type de vetement *"
+                        <TextBlock Text="Date de fin prevue *"
                                 Style="{StaticResource FieldLabel}"/>
+                        <DatePicker x:Name="DateFin"
+                                    Height="36"
+                                FontSize="13"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    Margin="0,0,0,12"/>
+
+                        <Separator Background="{StaticResource BorderBrush}"
+                                Margin="0,2,0,12"/>
+
+                        <!-- ═══════════════════════════════════════════════ -->
+                        <!-- ZONE PIECES DE COMMANDE                       -->
+                        <!-- ═══════════════════════════════════════════════ -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Pieces de la commande"
+                                       FontSize="13"
+                                    FontWeight="SemiBold"
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal">
+                                <Button x:Name="BtnAjouterPiece"
+                                        Content="+ Piece"
+                                        Style="{StaticResource BtnGhost}"
+                                        FontSize="11"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
+                                        Click="BtnAjouterPiece_Click"/>
+                                <Button x:Name="BtnForcerStatut"
+                                        Content="Forcer statut"
+                                        Style="{StaticResource BtnGhost}"
+                                        FontSize="11"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Visibility="Collapsed"
+                                        Click="BtnForcerStatut_Click"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Liste des pièces -->
+                        <Border Background="#F8F6F4"
+                                CornerRadius="8"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                Padding="8"
+                                Margin="0,0,0,10"
+                                MinHeight="50">
+                            <ItemsControl x:Name="ListePieces">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="White"
+                                                CornerRadius="6"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
+                                                Padding="10,8"
+                                                Margin="0,0,0,6"
+                                                Cursor="Hand"
+                                                MouseLeftButtonUp="PieceItem_MouseLeftButtonUp">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding TypeVetement}"
+                                                               FontSize="13"
+                                                            FontWeight="SemiBold"
+                                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                                    <StackPanel Orientation="Horizontal"
+                                                            Margin="0,2,0,0">
+                                                        <TextBlock FontSize="11"
+                                                                   Foreground="{StaticResource TextSecondaryBrush}">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding StringFormat="{}{0} — {1:N0} FCFA">
+                                                                    <Binding Path="Couturier.NomComplet"
+                                                                            FallbackValue="Non assigne"/>
+                                                                    <Binding Path="MontantCouture"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                    <!-- Badge statut -->
+                                                    <Border x:Name="BadgeStatutPiece"
+                                                            CornerRadius="10"
+                                                            Padding="8,3"
+                                                            Margin="0,0,6,0">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Statut}"
+                                                                            Value="A faire">
+                                                                        <Setter Property="Background"
+                                                                                Value="#FEF3C7"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Statut}"
+                                                                            Value="En cours">
+                                                                        <Setter Property="Background"
+                                                                                Value="#DBEAFE"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Statut}"
+                                                                            Value="Terminee">
+                                                                        <Setter Property="Background"
+                                                                                Value="#D1FAE5"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Statut}"
+                                                                            Value="Livree">
+                                                                        <Setter Property="Background"
+                                                                                Value="#E0E7FF"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock FontSize="10"
+                                                                FontWeight="SemiBold">
+                                                            <TextBlock.Text>
+                                                                <Binding Path="StatutAffiche"/>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+
+                        <!-- Total des pièces -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Total couture :"
+                                       FontSize="13"
+                                    FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtTotalPieces"
+                                       Text="0 FCFA"
+                                       FontSize="14"
+                                    FontWeight="Bold"
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       Grid.Column="1"/>
+                        </Grid>
+
+                        <Separator Background="{StaticResource BorderBrush}"
+                                Margin="0,2,0,12"
+                                   x:Name="SepDetailPiece"
+                                Visibility="Collapsed"/>
+
+                        <!-- ═══ DÉTAIL PIÈCE SÉLECTIONNÉE ═══ -->
+                        <TextBlock x:Name="LblDetailPiece"
+                                   Text="Selectionnez une piece pour la modifier"
+                                   FontSize="13"
+                                FontWeight="SemiBold"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   Visibility="Collapsed"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- Boutons d'action sur la pièce -->
+                        <StackPanel x:Name="PanelActionsPiece"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,10"
+                                    Visibility="Collapsed">
+                            <Button x:Name="BtnDupliquerPiece"
+                                    Content="Dupliquer"
+                                    Style="{StaticResource BtnGhost}"
+                                    FontSize="11"
+                                    Height="28"
+                                    Padding="8,0"
+                                    Margin="0,0,4,0"
+                                    Click="BtnDupliquerPiece_Click"/>
+                            <Button x:Name="BtnSupprimerPiece"
+                                    Content="Supprimer"
+                                    Style="{StaticResource BtnGhost}"
+                                    FontSize="11"
+                                    Height="28"
+                                    Padding="8,0"
+                                    Foreground="{StaticResource DangerBrush}"
+                                    Click="BtnSupprimerPiece_Click"/>
+                        </StackPanel>
+
+                        <!-- Type de vêtement (pour la pièce) -->
+                        <TextBlock x:Name="LblTypeVetement"
+                                   Text="Type de vetement *"
+                                   Style="{StaticResource FieldLabel}"
+                                   Visibility="Collapsed"/>
                         <ComboBox x:Name="CmbTypeVetement"
-                                Style="{StaticResource ModernComboBox}"
+                                  Style="{StaticResource ModernComboBox}"
                                   Margin="0,0,0,12"
                                   DisplayMemberPath="DisplayText"
-                                  SelectionChanged="CmbTypeVetement_SelectionChanged"/>
+                                  SelectionChanged="CmbTypeVetement_SelectionChanged"
+                                  Visibility="Collapsed"/>
 
-                        <!-- Encadré prix — sobre fond chaud -->
-                        <Border Background="#FBF8F6"
+                        <!-- Couturier (pour la pièce) -->
+                        <TextBlock x:Name="LblCouturier"
+                                   Text="Couturier"
+                                   Style="{StaticResource FieldLabel}"
+                                   Visibility="Collapsed"/>
+                        <ComboBox x:Name="CmbCouturier"
+                                  Style="{StaticResource ModernComboBox}"
+                                  Margin="0,0,0,12"
+                                  SelectedValuePath="IdEmploye"
+                                  Visibility="Collapsed">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0} {1}">
+                                                <Binding Path="Nom"/>
+                                                <Binding Path="Prenom"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <!-- Encadré prix -->
+                        <Border x:Name="PanelPrix"
+                                Background="#FBF8F6"
                                 CornerRadius="8"
                                 Padding="14,10"
                                 Margin="0,0,0,12"
                                 BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1">
+                                BorderThickness="1"
+                                Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock x:Name="TxtPrixBase"
                                            Text="Prix de base : -"
@@ -201,89 +430,90 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="Description"
-                                Style="{StaticResource FieldLabel}"/>
+                        <!-- Description -->
+                        <TextBlock x:Name="LblDescription"
+                                   Text="Description"
+                                   Style="{StaticResource FieldLabel}"
+                                   Visibility="Collapsed"/>
                         <ComboBox x:Name="CmbDescription"
                                   IsEditable="True"
                                 IsTextSearchEnabled="True"
                                   Height="36"
                                 FontSize="13"
                                   DisplayMemberPath="Texte"
-                                  Margin="0,0,0,12"/>
+                                  Margin="0,0,0,12"
+                                  Visibility="Collapsed"/>
 
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="10"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Heure debut"
-                                        Style="{StaticResource FieldLabel}"/>
-                                <TextBox x:Name="TxtHeureDebut"
-                                        Style="{StaticResource ModernTextBox}"
-                                         IsReadOnly="True"
-                                        Background="#F2ECE8"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <TextBlock Text="Heure fin (HH:mm)"
-                                        Style="{StaticResource FieldLabel}"/>
-                                <TextBox x:Name="TxtHeureFin"
-                                        Style="{StaticResource ModernTextBox}"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <TextBlock Text="Date de fin prevue *"
-                                Style="{StaticResource FieldLabel}"/>
-                        <DatePicker x:Name="DateFin"
-                                Height="36"
-                                FontSize="13"
-                                    BorderBrush="{StaticResource BorderBrush}"
-                                    Margin="0,0,0,12"/>
-
-                        <TextBlock Text="Montant total (FCFA) *"
-                                Style="{StaticResource FieldLabel}"/>
+                        <!-- Montant -->
+                        <TextBlock x:Name="LblMontant"
+                                   Text="Montant couture (FCFA) *"
+                                   Style="{StaticResource FieldLabel}"
+                                   Visibility="Collapsed"/>
                         <TextBox x:Name="TxtMontant"
-                                Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,12"/>
+                                 Style="{StaticResource ModernTextBox}"
+                                 Margin="0,0,0,12"
+                                 Visibility="Collapsed"/>
 
-                        <TextBlock Text="Statut *"
-                                Style="{StaticResource FieldLabel}"/>
+                        <!-- Statut pièce -->
+                        <TextBlock x:Name="LblStatut"
+                                   Text="Statut piece *"
+                                   Style="{StaticResource FieldLabel}"
+                                   Visibility="Collapsed"/>
                         <ComboBox x:Name="CmbStatut"
-                                Style="{StaticResource ModernComboBox}"
+                                  Style="{StaticResource ModernComboBox}"
                                   Margin="0,0,0,14"
-                                SelectedIndex="0">
+                                  SelectedIndex="0"
+                                  Visibility="Collapsed">
                             <ComboBoxItem Content="A faire"/>
                             <ComboBoxItem Content="En cours"/>
                             <ComboBoxItem Content="Terminee"/>
                             <ComboBoxItem Content="Livree"/>
                         </ComboBox>
 
-                        <Separator Background="{StaticResource BorderBrush}"
-                                Margin="0,2,0,12"/>
-                        <TextBlock Text="Mesures requises"
-                                   FontSize="13"
-                                FontWeight="SemiBold"
-                                   Foreground="{StaticResource PrimaryBrush}"
-                                   Margin="0,0,0,6"/>
+                        <!-- Réutilisation des mesures -->
+                        <TextBlock x:Name="LblReutilisationMesures"
+                                   Text="Reutiliser les mesures d'une piece precedente"
+                                   FontSize="11"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,0,0,4"
+                                   Visibility="Collapsed"/>
+                        <ComboBox x:Name="CmbMesuresAnterieures"
+                                  Style="{StaticResource ModernComboBox}"
+                                  Margin="0,0,0,10"
+                                  DisplayMemberPath="LabelReutilisation"
+                                  SelectionChanged="CmbMesuresAnterieures_SelectionChanged"
+                                  Visibility="Collapsed"/>
+
+                        <Separator x:Name="SepMesures"
+                                   Background="{StaticResource BorderBrush}"
+                                   Margin="0,2,0,12"
+                                   Visibility="Collapsed"/>
                         <TextBlock x:Name="TxtIndicationMesures"
                                    Text="Selectionnez un type de vetement"
                                    FontSize="12"
-                                Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,8"/>
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="0,0,0,8"
+                                   Visibility="Collapsed"/>
                         <StackPanel x:Name="PanelMesuresDynamiques"
-                                Margin="0,0,0,14"/>
+                                    Margin="0,0,0,14"/>
 
-                        <Separator Background="{StaticResource BorderBrush}"
-                                Margin="0,2,0,12"/>
-                        <TextBlock Text="Photo de la commande"
+                        <!-- Photo -->
+                        <Separator x:Name="SepPhoto"
+                                   Background="{StaticResource BorderBrush}"
+                                   Margin="0,2,0,12"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="LblPhoto"
+                                   Text="Photo de la piece"
                                    FontSize="13"
                                 FontWeight="SemiBold"
                                    Foreground="{StaticResource PrimaryBrush}"
-                                   Margin="0,0,0,10"/>
+                                   Margin="0,0,0,10"
+                                   Visibility="Collapsed"/>
 
-                        <StackPanel Orientation="Horizontal"
-                                Margin="0,0,0,10">
+                        <StackPanel x:Name="PanelBoutonsPhoto"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,10"
+                                    Visibility="Collapsed">
                             <Button x:Name="BtnImporterPhoto"
                                     Content="Importer"
                                     Style="{StaticResource BtnNavy}"
@@ -299,15 +529,17 @@
                                     Click="BtnPrendrePhoto_Click"/>
                         </StackPanel>
 
-                        <Border Background="#FBF8F6"
+                        <Border x:Name="PanelPhoto"
+                                Background="#FBF8F6"
                                 BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Height="130"
-                                Margin="0,0,0,4">
+                                Margin="0,0,0,4"
+                                Visibility="Collapsed">
                             <Grid>
                                 <Image x:Name="ImgPhoto"
-                                        Stretch="Uniform"
+                                       Stretch="Uniform"
                                         Margin="8"/>
                                 <TextBlock x:Name="TxtPhotoPlaceholder"
                                            Text="Aucune photo selectionnee"
@@ -316,7 +548,7 @@
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                                 <Button x:Name="BtnSupprimerPhoto"
-                                        Content="✕"
+                                        Content="x"
                                         Width="26"
                                         Height="26"
                                         FontSize="11"
@@ -343,10 +575,18 @@
                             </Grid>
                         </Border>
 
+                        <!-- Bouton sauvegarder la pièce -->
+                        <Button x:Name="BtnSauvegarderPiece"
+                                Content="Sauvegarder la piece"
+                                Style="{StaticResource BtnSuccess}"
+                                Margin="0,8,0,0"
+                                Visibility="Collapsed"
+                                Click="BtnSauvegarderPiece_Click"/>
+
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- Boutons d'action -->
+                <!-- ═══ Boutons d'action commande ═══ -->
                 <Border Grid.Row="2"
                         Padding="20,12"
                         BorderBrush="{StaticResource BorderBrush}"

@@ -28,15 +28,6 @@ namespace GestionCoutureApp.Services
         public Commande? ObtenirParId(int id)
         {
             using var context = _contextFactory.CreateDbContext();
-            // Include(Pieces) + sous-Include(Mesures/Couturier) indispensable :
-            // Commande.ResteAPayer / MontantEncaisse / MontantTotalCalcule /
-            // TypeVetementAffiche / StatutGlobal sont des propriétés calculées
-            // qui lisent Pieces et Paiements en mémoire. Sans ces Include, EF
-            // Core ne lève aucune erreur : les collections restent simplement
-            // vides, et ces propriétés renvoient silencieusement des valeurs
-            // fausses (même piège que celui déjà corrigé pour Paiements en
-            // Étape 0 — voir le commentaire original resté au-dessus des
-            // propriétés calculées).
             return context.Commandes
                 .Include(c => c.Paiements)
                 .Include(c => c.Client)
@@ -45,11 +36,6 @@ namespace GestionCoutureApp.Services
                 .FirstOrDefault(c => c.IdCommande == id);
         }
 
-        // ÉTAPE 1b-i (Point 1 — Commandes multi-pièces) : "piece" porte
-        // maintenant TypeVetement/IdCouturier/MontantCouture. CommandesView
-        // n'en construit qu'UNE SEULE pour l'instant (garanti jusqu'à l'UI
-        // multi-pièces de l'Étape 1b-ii) — mais le modèle de données, lui,
-        // est déjà le modèle final.
         public void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -66,11 +52,6 @@ namespace GestionCoutureApp.Services
             foreach (var mesure in mesures)
             {
                 mesure.IdPieceCommande = piece.IdPieceCommande;
-                // La colonne IdCommande de Mesure reste NOT NULL en base pour
-                // l'instant (héritage d'avant l'Étape 1) : on la renseigne
-                // donc encore en parallèle d'IdPieceCommande. L'Étape 1c la
-                // rendra optionnelle puis la retirera une fois plus aucune
-                // vue ne s'appuyant dessus.
                 mesure.IdCommande = commande.IdCommande;
                 context.Mesures.Add(mesure);
             }
@@ -87,17 +68,12 @@ namespace GestionCoutureApp.Services
 
             if (existante == null) return;
 
-            // ÉTAPE 1b-i : tant qu'une commande n'a qu'une seule pièce, on la
-            // retrouve directement ainsi. L'UI multi-pièces (Étape 1b-ii)
-            // devra remplacer ceci par une mise à jour ciblée par
-            // IdPieceCommande plutôt que "la première pièce trouvée".
+            // Mise à jour de la pièce existante
             var pieceExistante = existante.Pieces.FirstOrDefault();
 
             if (pieceExistante != null)
             {
-                // CORRECTIF conservé (incohérence métier) : une pièce déjà
-                // incluse dans une commission calculée et enregistrée voit
-                // son montant figé dans l'historique de cette commission.
+                // Verrouillage commission
                 if (pieceExistante.IdCommission.HasValue && pieceExistante.MontantCouture != piece.MontantCouture)
                 {
                     throw new InvalidOperationException(
@@ -106,8 +82,7 @@ namespace GestionCoutureApp.Services
                         "(avec motif) si le montant doit vraiment être corrigé.");
                 }
 
-                // CORRECTIF conservé (incohérence financière) : le montant ne
-                // peut pas descendre sous ce qui a déjà été encaissé.
+                // Garde financière : le montant ne peut pas descendre sous l'encaissé
                 decimal dejaEncaisse = existante.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
                 if (piece.MontantCouture < dejaEncaisse)
                 {
@@ -133,10 +108,6 @@ namespace GestionCoutureApp.Services
             }
             else
             {
-                // Cas limite : une commande sans aucune pièce (ne devrait
-                // plus se produire une fois cette étape en place, mais on
-                // couvre le cas plutôt que de silencieusement ignorer la
-                // pièce fournie).
                 piece.IdCommande = existante.IdCommande;
                 if (string.IsNullOrWhiteSpace(piece.Statut))
                     piece.Statut = "A faire";
@@ -168,8 +139,6 @@ namespace GestionCoutureApp.Services
 
             if (commande == null) return;
 
-            // Une commande ayant déjà reçu un paiement ne doit jamais être supprimée :
-            // cela effacerait silencieusement l'historique financier.
             if (commande.Paiements.Any())
             {
                 throw new InvalidOperationException(
@@ -178,8 +147,6 @@ namespace GestionCoutureApp.Services
                     "de la commande à \"Annulée\" plutôt que de la supprimer.");
             }
 
-            // ÉTAPE 1b-i : le verrouillage commission se vérifie maintenant
-            // au niveau de chaque pièce, plus au niveau de la commande.
             if (commande.Pieces.Any(p => p.IdCommission.HasValue))
             {
                 throw new InvalidOperationException(
@@ -187,7 +154,7 @@ namespace GestionCoutureApp.Services
                     "rattachée à une commission déjà enregistrée.");
             }
 
-            context.Commandes.Remove(commande); // cascade vers Pieces (voir DbContext)
+            context.Commandes.Remove(commande);
             context.SaveChanges();
         }
 
@@ -208,16 +175,273 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
-        // Renommée depuis ObtenirMesures(idCommande) : lit maintenant les
-        // mesures d'une PIÈCE précise, pas d'une commande entière — le
-        // renommage est volontaire pour qu'un appel resté sur l'ancienne
-        // signature soit détecté à la compilation plutôt que de
-        // silencieusement renvoyer une liste vide.
         public List<Mesure> ObtenirMesuresPiece(int idPieceCommande)
         {
             using var context = _contextFactory.CreateDbContext();
             return context.Mesures
                 .Where(m => m.IdPieceCommande == idPieceCommande)
+                .ToList();
+        }
+
+        // ==================================================================
+        // Point 1 — Commandes multi-pièces (Étape 1b-ii)
+        // ==================================================================
+
+        public bool PeutAjouterPiece(int idCommande)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var commande = context.Commandes
+                .Include(c => c.Paiements)
+                .FirstOrDefault(c => c.IdCommande == idCommande);
+            if (commande == null) return false;
+            // Aucun paiement encaissé = on peut ajouter librement
+            return !commande.Paiements.Any(p => !p.EstAnnule);
+        }
+
+        public void AjouterPiece(int idCommande, PieceCommande piece, List<Mesure> mesures,
+            bool roleBoss, string? motifException = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var commande = context.Commandes
+                .Include(c => c.Paiements)
+                .FirstOrDefault(c => c.IdCommande == idCommande)
+                ?? throw new InvalidOperationException("Commande introuvable.");
+
+            bool aPaiements = commande.Paiements.Any(p => !p.EstAnnule);
+
+            if (aPaiements)
+            {
+                if (!roleBoss)
+                {
+                    throw new InvalidOperationException(
+                        "Impossible d'ajouter une pièce : un acompte a déjà été encaissé sur cette commande. " +
+                        "Seul le Boss peut ajouter une pièce avec motif obligatoire.");
+                }
+                if (string.IsNullOrWhiteSpace(motifException))
+                {
+                    throw new InvalidOperationException(
+                        "L'ajout d'une pièce après encaissement nécessite un motif obligatoire (Boss).");
+                }
+            }
+
+            piece.IdCommande = idCommande;
+            if (string.IsNullOrWhiteSpace(piece.Statut))
+                piece.Statut = "A faire";
+            context.PiecesCommande.Add(piece);
+            context.SaveChanges();
+
+            foreach (var mesure in mesures)
+            {
+                mesure.IdPieceCommande = piece.IdPieceCommande;
+                mesure.IdCommande = idCommande;
+                context.Mesures.Add(mesure);
+            }
+            context.SaveChanges();
+        }
+
+        public void ModifierPiece(PieceCommande piece, List<Mesure> mesures)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var pieceExistante = context.PiecesCommande
+                .Include(p => p.Mesures)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Paiements)
+                .FirstOrDefault(p => p.IdPieceCommande == piece.IdPieceCommande)
+                ?? throw new InvalidOperationException("Pièce introuvable.");
+
+            // Verrouillage commission
+            if (pieceExistante.IdCommission.HasValue && pieceExistante.MontantCouture != piece.MontantCouture)
+            {
+                throw new InvalidOperationException(
+                    "Impossible de modifier le montant de cette pièce : elle est rattachée à " +
+                    "une commission déjà calculée. Annulez d'abord cette commission.");
+            }
+
+            // Garde financière : montant ne peut pas descendre sous l'encaissé total
+            var commande = pieceExistante.Commande;
+            if (commande != null)
+            {
+                decimal dejaEncaisse = commande.Paiements
+                    .Where(p => !p.EstAnnule)
+                    .AsEnumerable()
+                    .Sum(p => p.MontantPaye);
+
+                // Total actuel de toutes les pièces (sauf celle modifiée)
+                decimal totalAutresPieces = commande.Pieces
+                    .Where(p => p.IdPieceCommande != piece.IdPieceCommande)
+                    .AsEnumerable()
+                    .Sum(p => p.MontantCouture);
+
+                if (totalAutresPieces + piece.MontantCouture < dejaEncaisse)
+                {
+                    throw new InvalidOperationException(
+                        $"Le montant de la pièce ({piece.MontantCouture:N0} FCFA) ferait descendre " +
+                        $"le total de la commande sous le montant déjà encaissé ({dejaEncaisse:N0} FCFA).");
+                }
+            }
+
+            pieceExistante.TypeVetement = piece.TypeVetement;
+            pieceExistante.IdCouturier = piece.IdCouturier;
+            pieceExistante.MontantCouture = piece.MontantCouture;
+            pieceExistante.DescriptionPrecision = piece.DescriptionPrecision;
+            pieceExistante.CheminPhoto = piece.CheminPhoto;
+            if (!string.IsNullOrWhiteSpace(piece.Statut))
+                pieceExistante.Statut = piece.Statut;
+
+            // Remplacement des mesures
+            context.Mesures.RemoveRange(pieceExistante.Mesures);
+            foreach (var mesure in mesures)
+            {
+                mesure.IdPieceCommande = pieceExistante.IdPieceCommande;
+                mesure.IdCommande = pieceExistante.IdCommande;
+                context.Mesures.Add(mesure);
+            }
+
+            context.SaveChanges();
+        }
+
+        public void SupprimerPiece(int idPieceCommande)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var piece = context.PiecesCommande
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Paiements)
+                .Include(p => p.Mesures)
+                .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
+                ?? throw new InvalidOperationException("Pièce introuvable.");
+
+            if (piece.IdCommission.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "Impossible de supprimer cette pièce : elle est rattachée à une commission.");
+            }
+
+            var commande = piece.Commande;
+            if (commande != null && commande.Paiements.Any(p => !p.EstAnnule))
+            {
+                throw new InvalidOperationException(
+                    "Impossible de supprimer cette pièce : des paiements ont été encaissés sur cette commande.");
+            }
+
+            // Vérifier qu'il reste au moins une pièce si la commande en a plusieurs
+            int nbPieces = context.PiecesCommande
+                .Count(p => p.IdCommande == piece.IdCommande);
+            if (nbPieces <= 1)
+            {
+                throw new InvalidOperationException(
+                    "Impossible de supprimer la dernière pièce d'une commande. " +
+                    "Supprimez la commande entière si nécessaire.");
+            }
+
+            context.Mesures.RemoveRange(piece.Mesures);
+            context.PiecesCommande.Remove(piece);
+            context.SaveChanges();
+        }
+
+        public PieceCommande DupliquerPiece(int idPieceCommandeSource)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var source = context.PiecesCommande
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Paiements)
+                .FirstOrDefault(p => p.IdPieceCommande == idPieceCommandeSource)
+                ?? throw new InvalidOperationException("Pièce source introuvable.");
+
+            if (source.Commande != null && source.Commande.Paiements.Any(p => !p.EstAnnule))
+            {
+                throw new InvalidOperationException(
+                    "Impossible de dupliquer : des paiements ont été encaissés sur cette commande.");
+            }
+
+            var nouvellePiece = new PieceCommande
+            {
+                IdCommande = source.IdCommande,
+                TypeVetement = source.TypeVetement,
+                DescriptionPrecision = source.DescriptionPrecision,
+                CheminPhoto = source.CheminPhoto,
+                IdCouturier = source.IdCouturier,
+                MontantCouture = source.MontantCouture,
+                Statut = "A faire"
+            };
+
+            context.PiecesCommande.Add(nouvellePiece);
+            context.SaveChanges();
+
+            // Dupliquer aussi les mesures
+            var mesuresSource = context.Mesures
+                .Where(m => m.IdPieceCommande == idPieceCommandeSource)
+                .ToList();
+
+            foreach (var m in mesuresSource)
+            {
+                context.Mesures.Add(new Mesure
+                {
+                    IdPieceCommande = nouvellePiece.IdPieceCommande,
+                    IdCommande = source.IdCommande,
+                    NomMesure = m.NomMesure,
+                    Valeur = m.Valeur
+                });
+            }
+            context.SaveChanges();
+
+            // Recharger avec navigation pour renvoyer un objet complet
+            context.Entry(nouvellePiece).Reference(p => p.Couturier).Load();
+            return nouvellePiece;
+        }
+
+        public void ForcerStatutToutesPieces(int idCommande, string nouveauStatut)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var pieces = context.PiecesCommande
+                .Where(p => p.IdCommande == idCommande)
+                .ToList();
+
+            if (pieces.Count == 0) return;
+
+            // Vérifier qu'aucune pièce n'est verrouillée par une commission
+            // (on ne force pas le statut d'une pièce commissionnée)
+            var verrouillees = pieces.Where(p => p.IdCommission.HasValue).ToList();
+            if (verrouillees.Any())
+            {
+                throw new InvalidOperationException(
+                    $"{verrouillees.Count} pièce(s) sont rattachées à une commission et ne peuvent " +
+                    "pas voir leur statut modifié par un forçage en cascade.");
+            }
+
+            foreach (var piece in pieces)
+            {
+                piece.Statut = nouveauStatut;
+            }
+            context.SaveChanges();
+        }
+
+        public List<PieceCommande> ObtenirPiecesCommande(int idCommande)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            return context.PiecesCommande
+                .Include(p => p.Couturier)
+                .Include(p => p.Mesures)
+                .Where(p => p.IdCommande == idCommande)
+                .ToList();
+        }
+
+        public List<PieceCommande> ObtenirPiecesAnterieuresClient(int idClient, string typeVetement, int? exclureIdCommande = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var query = context.PiecesCommande
+                .Include(p => p.Mesures)
+                .Include(p => p.Commande)
+                .Where(p => p.Commande != null
+                    && p.Commande.IdClient == idClient
+                    && p.TypeVetement == typeVetement
+                    && (p.Statut == "Terminee" || p.Statut == "Livree"));
+
+            if (exclureIdCommande.HasValue)
+                query = query.Where(p => p.IdCommande != exclureIdCommande.Value);
+
+            return query
+                .OrderByDescending(p => p.IdPieceCommande)
+                .Take(10)
                 .ToList();
         }
     }
