@@ -81,15 +81,33 @@ namespace GestionCoutureApp.Models
         public int? IdOperateurResolution { get; set; }
         public string? NomOperateurResolution { get; set; }
 
+        // CORRECTIF (audit) : le commentaire d'en-tête de ce fichier annonçait
+        // déjà "jamais supprimé, seulement annulé avec motif", mais aucun
+        // champ ni méthode ne le permettait réellement (RetourService n'avait
+        // pas de méthode Annuler). Un retour signalé par erreur ne pouvait ni
+        // être supprimé (pas de méthode) ni être annulé proprement (pas de
+        // champ) — il restait coincé en "Signalé" pour toujours.
+        public bool EstAnnule { get; set; } = false;
+        public string? MotifAnnulation { get; set; }
+        public DateTime? DateAnnulation { get; set; }
+        public string? NomAnnulateur { get; set; }
+
         // ---- Propriétés calculées (affichage) ----
         [NotMapped]
-        public string StatutAffiche => Statut switch
+        public string StatutAffiche
         {
-            "Signale" => "Signalé",
-            "En reprise" => "En reprise",
-            "Resolu" => "Résolu",
-            _ => Statut
-        };
+            get
+            {
+                if (EstAnnule) return "Annulé";
+                return Statut switch
+                {
+                    "Signale" => "Signalé",
+                    "En reprise" => "En reprise",
+                    "Resolu" => "Résolu",
+                    _ => Statut
+                };
+            }
+        }
 
         [NotMapped]
         public string DateSignalementAffichee => DateSignalement.ToString("dd/MM/yyyy");

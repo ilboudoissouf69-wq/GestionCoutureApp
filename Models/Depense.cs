@@ -24,5 +24,18 @@ namespace GestionCoutureApp.Models
 
         // Tracabilite : qui a enregistre la depense
         public string NomOperateur { get; set; } = string.Empty;
+
+        // CORRECTIF (audit — Décision 3.1 actée mais non implémentée) :
+        // une dépense enregistrée ne doit jamais disparaître physiquement de
+        // la base — exactement le même mécanisme que Paiement et Commission.
+        // Une dépense annulée reste dans l'historique mais sort des totaux
+        // du tableau de bord (voir DepenseService.TotalParPeriode).
+        public bool EstAnnulee { get; set; } = false;
+        public string? MotifAnnulation { get; set; }
+        public DateTime? DateAnnulation { get; set; }
+        public string? NomAnnulateur { get; set; }
+
+        [NotMapped]
+        public string StatutAffiche => EstAnnulee ? "ANNULÉE" : "Validée";
     }
 }

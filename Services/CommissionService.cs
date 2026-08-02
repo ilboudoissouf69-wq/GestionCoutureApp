@@ -65,18 +65,22 @@ namespace GestionCoutureApp.Services
 
                 decimal caTotal = piecesCouturier.Sum(p => p.MontantCouture);
 
-                // CaEncaisse par pièce : pour l'instant (tant qu'une commande
-                // ne contient qu'UNE SEULE pièce, garanti jusqu'à l'Étape
-                // 1b-ii), le montant encaissé sur la commande entière
-                // équivaut exactement au montant encaissé pour cette pièce.
-                // ATTENTION — dès que l'UI multi-pièces (1b-ii) puis le
-                // Point 2 (matériel) seront en place, cette ligne devra être
-                // remplacée par la répartition au prorata décrite dans le
-                // cahier des charges V2 (Point 2) : un acompte non détaillé
-                // se répartit au prorata du montant de chaque pièce de la
-                // commande, et seule la part "couture" de cette répartition
-                // entre dans la base de commission.
-                decimal caEncaisse = piecesCouturier.Sum(p => p.Commande?.MontantEncaisse ?? 0m);
+                // CORRECTIF (audit) — BUG CRITIQUE : l'ancienne version faisait
+                // `piecesCouturier.Sum(p => p.Commande.MontantEncaisse)`, c'est-à-dire
+                // qu'elle additionnait TOUT l'encaissé de la commande entière, une
+                // fois PAR PIÈCE du couturier. Conséquences réelles (AjouterPiece est
+                // bien câblé dans CommandesView, donc atteignable en production) :
+                //   - 2 pièces du même couturier sur une même commande => son encaissé
+                //     est compté deux fois.
+                //   - 2 pièces de couturiers différents sur la même commande => les
+                //     DEUX couturiers reçoivent une commission calculée sur 100% de
+                //     l'encaissé, alors qu'aucun des deux n'a fait tout le travail.
+                //
+                // Correction : chaque pièce ne reçoit que sa PART PROPORTIONNELLE de
+                // l'encaissé de la commande, au prorata de son propre montant de
+                // couture sur le total de la commande (même principe que le prorata
+                // couture/matériel prévu au Point 2 du cahier).
+                decimal caEncaisse = piecesCouturier.Sum(p => PartEncaisseeDeLaPiece(p));
 
                 decimal base_ = surMontantEncaisse ? caEncaisse : caTotal;
                 decimal commission = Math.Round(base_ * (pourcentage / 100m), 0);
@@ -103,6 +107,30 @@ namespace GestionCoutureApp.Services
             return resultat;
         }
 
+        // CORRECTIF (audit) — NOUVEAU : calcule la part d'encaissé qui revient
+        // réellement à UNE pièce, au prorata de son montant de couture sur le
+        // total des pièces de sa commande.
+        //
+        // Exemple concret : commande à 2 pièces, 2000 FCFA (couturier A) et
+        // 3000 FCFA (couturier B), total 5000 FCFA. Le client a versé un
+        // acompte de 2000 FCFA (non détaillé, comme toujours — Option A du
+        // Point 1). Part de A = 2000 * (2000/5000) = 800 FCFA.
+        // Part de B = 2000 * (3000/5000) = 1200 FCFA. Total = 2000 FCFA :
+        // l'encaissé réel de la commande n'est jamais dépassé, ni dupliqué.
+        private static decimal PartEncaisseeDeLaPiece(PieceCommande piece)
+        {
+            var commande = piece.Commande;
+            if (commande == null) return 0m;
+
+            decimal totalCommande = commande.Pieces.Sum(p => p.MontantCouture);
+            if (totalCommande <= 0m) return 0m;
+
+            decimal encaisseCommande = commande.MontantEncaisse;
+            decimal proportion = piece.MontantCouture / totalCommande;
+
+            return Math.Round(encaisseCommande * proportion, 0);
+        }
+
         public void EnregistrerCommissions(
             List<ApercuCommission> apercu, DateTime dateDebut, DateTime dateFin,
             decimal pourcentage, bool surMontantEncaisse, int idOperateur, string nomOperateur)
@@ -125,7 +153,15 @@ namespace GestionCoutureApp.Services
                     // entre-temps par une autre opération. Le filtre
                     // "IdCommission == null" ici est ce qui empêche réellement
                     // qu'une même pièce soit comptée deux fois.
+                    // CORRECTIF (audit) : Include(Commande.Pieces) est nécessaire pour
+                    // que PartEncaisseeDeLaPiece() puisse calculer le total de la
+                    // commande (toutes ses pièces) et pas seulement les pièces de CE
+                    // couturier — sinon la proportion serait faussée.
                     var pieces = context.PiecesCommande
+                        .Include(p => p.Commande)
+                            .ThenInclude(c => c!.Pieces)
+                        .Include(p => p.Commande)
+                            .ThenInclude(c => c!.Paiements)
                         .Where(p => ligne.IdsPieces.Contains(p.IdPieceCommande) && p.IdCommission == null)
                         .ToList();
 
@@ -154,16 +190,14 @@ namespace GestionCoutureApp.Services
                     // raison de fraîcheur que le filtre ci-dessus) :
                     if (surMontantEncaisse)
                     {
-                        // Voir le commentaire équivalent dans CalculerApercu :
-                        // tant qu'une commande = une pièce, l'encaissé de la
-                        // commande équivaut à celui de sa pièce unique.
-                        var idsCommandesConcernees = pieces.Select(p => p.IdCommande).Distinct().ToList();
-                        decimal encaisseTotal = context.Commandes
-                            .Include(c => c.Paiements)
-                            .Where(c => idsCommandesConcernees.Contains(c.IdCommande))
-                            .ToList()
-                            .Sum(c => c.MontantEncaisse);
-                        commission.BaseMontant = encaisseTotal;
+                        // CORRECTIF (audit) : même bug que CalculerApercu (voir
+                        // PartEncaisseeDeLaPiece) — sommer l'encaissé de la commande
+                        // ENTIÈRE par commande distincte ignorait que d'autres pièces
+                        // de cette même commande peuvent appartenir à un autre
+                        // couturier, ou que ce couturier a déjà plusieurs pièces dans
+                        // la même commande. On additionne maintenant la part
+                        // proportionnelle réelle de CHAQUE pièce.
+                        commission.BaseMontant = pieces.Sum(p => PartEncaisseeDeLaPiece(p));
                     }
                     else
                     {

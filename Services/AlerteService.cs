@@ -17,16 +17,68 @@ namespace GestionCoutureApp.Services
             _parametresService = parametresService;
         }
 
+        // CORRECTIF (audit) : réécrit pour travailler PIÈCE PAR PIÈCE (et non
+        // plus commande par commande) et pour générer les DEUX types d'alerte
+        // prévus au Point 5 du cahier. L'ancienne version ne produisait que
+        // l'alerte "rendez-vous proche" ; l'alerte "pas encore prise en
+        // charge" (mi-délai entre dépôt et rendez-vous, statut toujours
+        // "À faire") n'existait nulle part dans le code.
         public async Task<List<AlerteRendezVous>> ObtenirAlertesActuelles()
         {
             var delaiHeures = await _parametresService.ObtenirDelaiAlerteRendezVousHeures();
             var maintenant = DateTime.Now;
-            var limite = maintenant.AddHours(delaiHeures);
 
-            var tous = await ObtenirTousRendezVousAVenir();
+            await using var context = await _contextFactory.CreateDbContextAsync();
 
-            return tous
-                .Where(a => a.DateRendezVous <= limite)
+            var pieces = await context.PiecesCommande
+                .Include(p => p.Couturier)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Client)
+                .Where(p => p.Statut != "Livree" && p.Commande != null)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var alertes = new List<AlerteRendezVous>();
+
+            foreach (var piece in pieces)
+            {
+                var commande = piece.Commande!;
+                var dateRdv = ObtenirDateRendezVous(piece, commande);
+                if (dateRdv <= maintenant) continue; // rendez-vous déjà passé : pas une alerte "à venir"
+
+                // Alerte 1 — "pas encore prise en charge" : à la moitié du temps
+                // entre le dépôt et le rendez-vous, si le statut est toujours
+                // "A faire". Disparaît dès que le statut passe à "En cours"
+                // (cette pièce ne rentre alors même plus dans cette boucle
+                // puisque le calcul se refait à chaque appel — rien à stocker).
+                if (piece.Statut == "A faire")
+                {
+                    var dateDepot = commande.DateDebut.Date + commande.HeureDebut;
+                    var dureeTotal = dateRdv - dateDepot;
+                    if (dureeTotal > TimeSpan.Zero)
+                    {
+                        var miTemps = dateDepot + TimeSpan.FromTicks(dureeTotal.Ticks / 2);
+                        if (maintenant >= miTemps)
+                        {
+                            alertes.Add(ConstruireAlerte(
+                                piece, commande, dateRdv, maintenant,
+                                "PasEncorePriseEnCharge"));
+                        }
+                    }
+                }
+
+                // Alerte 2 — "rendez-vous proche" : dans les N heures réglées
+                // par le Boss (Paramètres), tant que le statut n'est pas
+                // encore "Terminee".
+                if (piece.Statut != "Terminee" && dateRdv <= maintenant.AddHours(delaiHeures))
+                {
+                    alertes.Add(ConstruireAlerte(
+                        piece, commande, dateRdv, maintenant,
+                        "RendezVousProche"));
+                }
+            }
+
+            return alertes
                 .OrderBy(a => a.DateRendezVous)
                 .ToList();
         }
@@ -37,53 +89,63 @@ namespace GestionCoutureApp.Services
 
             await using var context = await _contextFactory.CreateDbContextAsync();
 
-            var commandes = await context.Commandes
-                .Include(c => c.Client)
-                .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
-                .Where(c => c.DateFin >= maintenant.Date)
-                .Where(c => c.Pieces.Any(p => p.Statut != "Livree"))
-                .OrderBy(c => c.DateFin)
-                .ThenBy(c => c.HeureFin ?? TimeSpan.Zero)
+            var pieces = await context.PiecesCommande
+                .Include(p => p.Couturier)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Client)
+                .Where(p => p.Statut != "Livree" && p.Commande != null)
                 .AsNoTracking()
                 .ToListAsync();
 
-            return commandes
-                .Select(c => CreerAlerte(c, maintenant))
-                .Where(a => a != null)
-                .OrderBy(a => a!.DateRendezVous)
-                .ToList()!;
+            var resultat = new List<AlerteRendezVous>();
+            foreach (var piece in pieces)
+            {
+                var commande = piece.Commande!;
+                var dateRdv = ObtenirDateRendezVous(piece, commande);
+                if (dateRdv <= maintenant) continue;
+
+                resultat.Add(ConstruireAlerte(piece, commande, dateRdv, maintenant, "RendezVousProche"));
+            }
+
+            return resultat.OrderBy(a => a.DateRendezVous).ToList();
         }
 
-        private static AlerteRendezVous? CreerAlerte(Commande c, DateTime maintenant)
+        // CORRECTIF (audit) : centralise la règle "rendez-vous de la pièce" —
+        // honore désormais PieceCommande.RendezVousException (Point 5, cas
+        // d'exception) au lieu d'utiliser systématiquement le rendez-vous
+        // global de la commande, comme le faisait l'ancienne version.
+        private static DateTime ObtenirDateRendezVous(PieceCommande piece, Commande commande)
         {
-            // Heure de rendez-vous : HeureFin si renseignée, sinon 17h par défaut
-            var heureFin = c.HeureFin ?? new TimeSpan(17, 0, 0);
-            var dateRdv = c.DateFin.Date + heureFin;
+            if (piece.RendezVousException.HasValue)
+                return piece.RendezVousException.Value;
 
-            // On ne crée l'alerte que si le RDV est encore dans le futur
-            if (dateRdv <= maintenant)
-                return null;
+            var heureFin = commande.HeureFin ?? new TimeSpan(17, 0, 0);
+            return commande.DateFin.Date + heureFin;
+        }
 
+        private static AlerteRendezVous ConstruireAlerte(
+            PieceCommande piece, Commande commande, DateTime dateRdv,
+            DateTime maintenant, string typeAlerte)
+        {
             var tempsRestant = dateRdv - maintenant;
-            var premierePiece = c.Pieces.FirstOrDefault();
-            var couturier = premierePiece?.Couturier;
 
             return new AlerteRendezVous
             {
-                IdCommande = c.IdCommande,
-                NomClient = c.Client != null
-                    ? $"{c.Client.Prenom} {c.Client.Nom}"
+                IdCommande = commande.IdCommande,
+                IdPieceCommande = piece.IdPieceCommande,
+                NomClient = commande.Client != null
+                    ? $"{commande.Client.Prenom} {commande.Client.Nom}"
                     : "(client inconnu)",
-                Telephone = c.Client?.Telephone ?? "",
-                TypeVetement = c.TypeVetementAffiche,
+                Telephone = commande.Client?.Telephone ?? "",
+                TypeVetement = piece.TypeVetement,
                 DateRendezVous = dateRdv,
                 HeureRendezVous = dateRdv.ToString("HH:mm"),
-                Statut = c.StatutGlobalAffiche,
+                Statut = piece.StatutAffiche,
                 TempsRestant = FormaterTempsRestant(tempsRestant),
-                NomCouturier = couturier != null
-                    ? couturier.NomComplet
-                    : "(non assigné)",
-                EstUrgent = tempsRestant.TotalHours <= 1
+                NomCouturier = piece.Couturier?.NomComplet ?? "(non assigné)",
+                EstUrgent = tempsRestant.TotalHours <= 1,
+                ProposerContactWhatsApp = piece.Statut == "Terminee" && dateRdv <= maintenant,
+                TypeAlerte = typeAlerte
             };
         }
 

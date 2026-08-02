@@ -24,6 +24,9 @@ namespace GestionCoutureApp.Services
         /// <summary>Faire passer un retour à "Résolu".</summary>
         void Resoudre(int idRetour, int idOperateur, string nomOperateur);
 
+        /// <summary>CORRECTIF (audit) : annuler un retour signalé par erreur (jamais de suppression).</summary>
+        void Annuler(int idRetour, string motif, string nomAnnulateur);
+
         /// <summary>Rechercher par mot-clé (nom client, description, statut).</summary>
         List<Retour> Rechercher(string motCle);
 

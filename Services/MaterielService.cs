@@ -71,9 +71,26 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             var materiel = context.MaterielsSupplements
+                .Include(m => m.Commande)
+                    .ThenInclude(c => c!.Paiements)
                 .FirstOrDefault(m => m.IdMateriel == idMateriel);
 
             if (materiel == null) return;
+
+            // CORRECTIF (audit) : aucune garde ne protégeait une ligne de
+            // matériel déjà facturée au client. Le montant total encaissable
+            // d'une pièce (Point 2) inclut couture + matériel — supprimer une
+            // ligne de matériel après encaissement changerait silencieusement
+            // le total d'une commande déjà payée, exactement le genre de
+            // dérive que CommandeService.Modifier interdit déjà côté couture.
+            bool aPaiements = materiel.Commande?.Paiements.Any(p => !p.EstAnnule) ?? false;
+            if (aPaiements)
+            {
+                throw new InvalidOperationException(
+                    "Impossible de supprimer cette ligne de matériel : des paiements ont déjà " +
+                    "été encaissés sur cette commande. Le total facturé au client ne doit pas " +
+                    "changer après encaissement.");
+            }
 
             context.MaterielsSupplements.Remove(materiel);
             context.SaveChanges();

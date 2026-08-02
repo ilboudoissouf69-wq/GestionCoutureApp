@@ -122,25 +122,48 @@ namespace GestionCoutureApp.Views
             }
         }
 
+        // CORRECTIF (audit) : IDepenseService.Supprimer n'existe plus (Décision
+        // 3.1 — une dépense ne disparaît jamais physiquement, elle est
+        // annulée avec motif obligatoire et trace, comme un paiement ou une
+        // commission). Le bouton XAML garde le nom "BtnSupprimer_Click" pour
+        // ne pas modifier le XAML, mais son comportement est maintenant celui
+        // d'une annulation.
         private void BtnSupprimer_Click(object sender, RoutedEventArgs e)
         {
             if (GridDepenses.SelectedItem is not Depense depense)
             {
-                MessageBox.Show("Selectionnez une depense a supprimer.",
+                MessageBox.Show("Selectionnez une depense a annuler.",
                     "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            if (depense.EstAnnulee)
+            {
+                MessageBox.Show("Cette depense est deja annulee.",
+                    "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string? motif = DemanderMotifAnnulation(depense);
+            if (motif == null) return; // la secretaire/le Boss a annule l'annulation
+
             var result = MessageBox.Show(
-                $"Supprimer cette depense de {depense.Montant:N0} FCFA ({depense.TypeDepense}) ?",
-                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                $"Confirmer l'annulation de cette depense de {depense.Montant:N0} FCFA " +
+                $"({depense.TypeDepense}) ?\n\nMotif : {motif}",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
             if (result != MessageBoxResult.Yes) return;
 
             try
             {
-                _depenseService.Supprimer(depense.IdDepense);
-                TxtMessage.Text = "Depense supprimee.";
+                var authService = App.Services.GetRequiredService<IAuthService>();
+                var operateur = authService.UtilisateurConnecte;
+                string nomAnnulateur = operateur != null
+                    ? $"{operateur.Prenom} {operateur.Nom}"
+                    : "";
+
+                _depenseService.Annuler(depense.IdDepense, motif, nomAnnulateur);
+                TxtMessage.Text = "Depense annulee.";
                 TxtMessage.Foreground = System.Windows.Media.Brushes.Green;
                 ChargerDonnees();
             }
@@ -149,6 +172,84 @@ namespace GestionCoutureApp.Views
                 TxtMessage.Text = "Erreur : " + ex.Message;
                 TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
             }
+        }
+
+        // CORRECTIF (audit) : petit dialogue de saisie du motif, sur le même
+        // principe que PaiementsView.DemanderMotifAnnulation — simplifié ici
+        // (pas de confirmation par mot de passe : la Décision 3.1 exige un
+        // motif obligatoire, pas une double authentification, contrairement
+        // à l'annulation d'un paiement qui touche directement la caisse).
+        private string? DemanderMotifAnnulation(Depense depense)
+        {
+            var dialog = new Window
+            {
+                Title = "Motif d'annulation",
+                Width = 420,
+                Height = 220,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.NoResize
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(16) };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"Depense : {depense.Montant:N0} FCFA ({depense.TypeDepense})",
+                Margin = new Thickness(0, 0, 0, 8),
+                FontWeight = System.Windows.FontWeights.Bold
+            });
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Motif d'annulation * (obligatoire, 10 caracteres minimum)",
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+
+            var txMotif = new TextBox
+            {
+                Height = 60,
+                TextWrapping = System.Windows.TextWrapping.Wrap,
+                AcceptsReturn = true,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            panel.Children.Add(txMotif);
+
+            var btnPanel = new StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right
+            };
+
+            var btnValider = new Button
+            {
+                Content = "Confirmer",
+                Width = 100,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            btnValider.Click += (s, ev) =>
+            {
+                if (string.IsNullOrWhiteSpace(txMotif.Text) || txMotif.Text.Trim().Length < 10)
+                {
+                    MessageBox.Show("Le motif doit contenir au moins 10 caracteres.",
+                        "Motif insuffisant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    txMotif.Focus();
+                    return;
+                }
+                dialog.Tag = txMotif.Text.Trim();
+                dialog.DialogResult = true;
+            };
+
+            var btnAnnulerDialog = new Button { Content = "Annuler", Width = 100 };
+            btnAnnulerDialog.Click += (s, ev) => { dialog.DialogResult = false; };
+
+            btnPanel.Children.Add(btnValider);
+            btnPanel.Children.Add(btnAnnulerDialog);
+            panel.Children.Add(btnPanel);
+
+            dialog.Content = panel;
+
+            return dialog.ShowDialog() == true ? (string)dialog.Tag : null;
         }
     }
 }

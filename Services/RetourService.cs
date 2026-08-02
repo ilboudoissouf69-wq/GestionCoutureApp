@@ -50,8 +50,47 @@ namespace GestionCoutureApp.Services
         public void Ajouter(Retour retour)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // CORRECTIF (audit) : le cahier des charges est explicite — "Après
+            // livraison, si un client revient...". Rien n'empêchait jusqu'ici
+            // de signaler un retour sur une pièce qui n'a même pas encore été
+            // livrée (voire pas commencée), ce qui n'a pas de sens métier :
+            // un retour, par définition, concerne un travail déjà rendu au
+            // client que celui-ci juge insatisfaisant.
+            var piece = context.PiecesCommande.Find(retour.IdPieceCommande)
+                ?? throw new InvalidOperationException("Pièce introuvable.");
+
+            if (piece.Statut != "Livree")
+                throw new InvalidOperationException(
+                    "Impossible d'enregistrer un retour : cette pièce n'a pas encore été " +
+                    "livrée au client (statut actuel : " + piece.StatutAffiche + ").");
+
             retour.DateSignalement = DateTime.Now;
             context.Retours.Add(retour);
+            context.SaveChanges();
+        }
+
+        // CORRECTIF (audit) : méthode manquante malgré la documentation du
+        // modèle Retour qui l'annonçait déjà. Même mécanisme que Paiement,
+        // Commission et Depense — jamais de suppression, annulation tracée.
+        public void Annuler(int idRetour, string motif, string nomAnnulateur)
+        {
+            if (string.IsNullOrWhiteSpace(motif))
+                throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
+
+            using var context = _contextFactory.CreateDbContext();
+
+            var retour = context.Retours.Find(idRetour)
+                ?? throw new InvalidOperationException("Retour introuvable.");
+
+            if (retour.EstAnnule)
+                throw new InvalidOperationException("Ce retour est déjà annulé.");
+
+            retour.EstAnnule = true;
+            retour.MotifAnnulation = motif.Trim();
+            retour.DateAnnulation = DateTime.Now;
+            retour.NomAnnulateur = nomAnnulateur;
+
             context.SaveChanges();
         }
 

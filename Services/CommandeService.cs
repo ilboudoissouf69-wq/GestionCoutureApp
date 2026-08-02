@@ -82,13 +82,26 @@ namespace GestionCoutureApp.Services
                         "(avec motif) si le montant doit vraiment être corrigé.");
                 }
 
-                // Garde financière : le montant ne peut pas descendre sous l'encaissé
+                // CORRECTIF (audit) : BUG — cette garde ne comparait que le montant de
+                // LA PREMIÈRE pièce à l'encaissé total de la commande. Si la commande a
+                // déjà plusieurs pièces (AjouterPiece est utilisable dès aujourd'hui,
+                // voir CommandesView.BtnAjouterPiece_Click), cette méthode Modifier() ne
+                // touche que Pieces.FirstOrDefault() et pouvait donc soit bloquer à tort
+                // une modification valide, soit — plus grave — laisser passer une baisse
+                // qui fait descendre le TOTAL de la commande sous l'encaissé, parce que
+                // les autres pièces n'étaient jamais comptées. ModifierPiece() calculait
+                // déjà ça correctement (totalAutresPieces) ; on applique la même logique
+                // ici pour que les deux chemins de modification soient cohérents.
                 decimal dejaEncaisse = existante.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
-                if (piece.MontantCouture < dejaEncaisse)
+                decimal totalAutresPieces = existante.Pieces
+                    .Where(p => p.IdPieceCommande != pieceExistante.IdPieceCommande)
+                    .Sum(p => p.MontantCouture);
+
+                if (totalAutresPieces + piece.MontantCouture < dejaEncaisse)
                 {
                     throw new InvalidOperationException(
-                        $"Le montant total ({piece.MontantCouture:N0} FCFA) ne peut pas être inférieur " +
-                        $"au montant déjà encaissé sur cette commande ({dejaEncaisse:N0} FCFA).");
+                        $"Le montant total de la commande ({(totalAutresPieces + piece.MontantCouture):N0} FCFA) " +
+                        $"ne peut pas être inférieur au montant déjà encaissé ({dejaEncaisse:N0} FCFA).");
                 }
 
                 pieceExistante.TypeVetement = piece.TypeVetement;
