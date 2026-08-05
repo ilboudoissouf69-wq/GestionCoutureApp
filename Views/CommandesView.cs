@@ -17,6 +17,12 @@ namespace GestionCoutureApp.Views
         private readonly ApplicationDbContext _context;
         private int _commandeSelectionneeId;
         private int? _pieceSelectionneeId; // null = aucune pièce sélectionnée
+        // CORRECTIF (audit) : le motif saisi lors de l'exception Boss (ajout de
+        // pièce après encaissement) doit survivre jusqu'à BtnSauvegarderPiece_Click,
+        // qui est le seul endroit où AjouterPiece() est réellement appelé. Sans ce
+        // champ, le motif capturé dans BtnAjouterPiece_Click se perdait et
+        // AjouterPiece() finissait toujours par rejeter l'enregistrement.
+        private string? _motifExceptionAjoutPiece;
         private decimal _prixBaseActuel;
         private List<TypeVetement> _typesVetement;
         private bool _chargementEnCours = false;
@@ -469,6 +475,11 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private void BtnAjouterPiece_Click(object sender, RoutedEventArgs e)
         {
+            // CORRECTIF (audit) : toujours repartir de zéro à chaque clic, pour ne
+            // jamais réutiliser par erreur le motif d'une exception précédente sur
+            // une autre commande/pièce.
+            _motifExceptionAjoutPiece = null;
+
             if (_commandeSelectionneeId == 0)
             {
                 MessageBox.Show("Selectionnez d'abord une commande.",
@@ -495,9 +506,10 @@ namespace GestionCoutureApp.Views
                     string? motifSaisi = DemanderMotif("Motif de l'ajout apres encaissement");
                     if (string.IsNullOrWhiteSpace(motifSaisi)) return;
 
-                    // On ne fait rien de spécial avec le motif ici : il est passé au service
-                    // pour traçabilité. La pièce sera ajoutée normalement.
-                    // (Le motif pourrait être stocké dans un log ou une table d'audit)
+                    // CORRECTIF (audit) : on mémorise le motif pour qu'il soit
+                    // réellement transmis au service lors du clic sur
+                    // "Sauvegarder la piece" (voir BtnSauvegarderPiece_Click).
+                    _motifExceptionAjoutPiece = motifSaisi;
                 }
                 else
                 {
@@ -581,10 +593,15 @@ namespace GestionCoutureApp.Views
                 }
                 else if (_commandeSelectionneeId > 0)
                 {
-                    // Ajout d'une pièce à une commande existante
+                    // CORRECTIF (audit) : le motif capturé lors de l'exception Boss
+                    // (BtnAjouterPiece_Click) est maintenant réellement transmis ici.
+                    // S'il n'y a pas eu d'exception (cas normal, pas d'acompte encaissé),
+                    // _motifExceptionAjoutPiece est null et AjouterPiece l'ignore.
                     _commandeService.AjouterPiece(
                         _commandeSelectionneeId, piece, mesures,
-                        _roleUtilisateur == "Boss");
+                        _roleUtilisateur == "Boss",
+                        _motifExceptionAjoutPiece);
+                    _motifExceptionAjoutPiece = null;
                     MessageBox.Show("Piece ajoutee avec succes !", "Succes",
                         MessageBoxButton.OK, MessageBoxImage.Information);
                 }

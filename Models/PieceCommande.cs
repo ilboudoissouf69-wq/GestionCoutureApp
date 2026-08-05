@@ -51,6 +51,14 @@ namespace GestionCoutureApp.Models
 
         public List<MaterielSupplement> MaterielSupplements { get; set; } = new();
 
+        // CORRECTIF (audit) : le cahier (Point 1) exige une "traçabilité" pour
+        // l'exception Boss d'ajout de pièce après encaissement — jusqu'ici, le
+        // motif saisi à l'écran était validé (non vide) puis jeté, sans jamais
+        // être conservé nulle part. Ce champ le conserve avec la pièce
+        // concernée. Reste null pour toutes les pièces ajoutées normalement
+        // (sans acompte déjà encaissé).
+        public string? MotifAjoutApresEncaissement { get; set; }
+
         // Propriété [NotMapped] pour la réutilisation des mesures
         // dans la ComboBox de CommandesView.
         [NotMapped]

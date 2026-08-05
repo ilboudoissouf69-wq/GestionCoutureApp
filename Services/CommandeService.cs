@@ -240,6 +240,15 @@ namespace GestionCoutureApp.Services
             piece.IdCommande = idCommande;
             if (string.IsNullOrWhiteSpace(piece.Statut))
                 piece.Statut = "A faire";
+
+            // CORRECTIF (audit) : conserver le motif avec la pièce, pas seulement
+            // le vérifier au passage. Sans ça, rien ne prouve après coup pourquoi
+            // cette pièce a été ajoutée après un encaissement — la "traçabilité"
+            // promise par le cahier n'existait que dans un message de dialogue
+            // qui disparaissait dès qu'on cliquait "OK".
+            if (aPaiements)
+                piece.MotifAjoutApresEncaissement = motifException!.Trim();
+
             context.PiecesCommande.Add(piece);
             context.SaveChanges();
 
