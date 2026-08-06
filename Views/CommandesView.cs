@@ -1,5 +1,3 @@
-using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using GestionCoutureApp.Data;
@@ -93,6 +91,12 @@ namespace GestionCoutureApp.Views
             TxtHeureDebut.Text = DateTime.Now.ToString("HH:mm");
 
             ChargerCommandes();
+
+            // CORRECTIF : sans cet appel, les champs de la 1ere piece
+            // (Type de vetement, Montant, etc.) restent invisibles tant
+            // qu'aucune commande n'est encore selectionnee dans le tableau —
+            // impossible de creer la toute premiere commande d'une base vide.
+            ViderChamps();
         }
 
         // ==================================================================
@@ -903,9 +907,33 @@ namespace GestionCoutureApp.Views
             {
                 _commandeService.Ajouter(commande, piece, CollecterMesures());
                 ChargerCommandes();
-                ViderChamps();
-                MessageBox.Show("Commande creee avec succes !", "Succes",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // NOUVEAU : methode professionnelle en 2 temps.
+                // - 1 seul vetement -> la commande est deja complete, rien d'autre a faire.
+                // - Plusieurs vetements -> on repart directement sur la meme commande,
+                //   deja selectionnee, avec un formulaire "nouvelle piece" vierge ouvert,
+                //   pret a recevoir le couturier/montant/mesures du vetement suivant.
+                var autrePiece = MessageBox.Show(
+                    "Commande creee avec succes !\n\nLe client a-t-il d'autres vetements a ajouter a cette meme commande ?",
+                    "Piece supplementaire ?",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (autrePiece == MessageBoxResult.Yes)
+                {
+                    var commandeCreee = ((List<Commande>)GridCommandes.ItemsSource)
+                        ?.FirstOrDefault(c => c.IdCommande == commande.IdCommande);
+
+                    if (commandeCreee != null)
+                    {
+                        GridCommandes.SelectedItem = commandeCreee; // charge la commande + ses pieces
+                        BtnAjouterPiece_Click(this, new RoutedEventArgs()); // ouvre le formulaire vierge
+                    }
+                }
+                else
+                {
+                    ViderChamps();
+                }
             }
             catch (InvalidOperationException ex)
             {
@@ -1052,7 +1080,6 @@ namespace GestionCoutureApp.Views
         {
             try
             {
-                using var fs = System.IO.File.OpenRead(chemin);
                 var header = new byte[8];
                 int lu = fs.Read(header, 0, header.Length);
                 if (lu < 3) return false;
