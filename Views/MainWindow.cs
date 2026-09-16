@@ -33,7 +33,6 @@ namespace GestionCoutureApp.Views
                     BtnParametres.Visibility = Visibility.Visible;
                     BtnAlertes.Visibility = Visibility.Visible;
                     BtnDepenses.Visibility = Visibility.Visible;
-                    BtnMateriels.Visibility = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -49,8 +48,7 @@ namespace GestionCoutureApp.Views
                     BtnCommissions.Visibility = Visibility.Collapsed;
                     BtnParametres.Visibility = Visibility.Collapsed;
                     BtnAlertes.Visibility = Visibility.Visible;
-                    BtnDepenses.Visibility = Visibility.Visible;
-                    BtnMateriels.Visibility = Visibility.Visible;
+                    BtnDepenses.Visibility = Visibility.Collapsed;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -202,13 +200,13 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        private void BtnMateriels_Click(object sender, RoutedEventArgs e)
+        private void BtnDepenses_Click(object sender, RoutedEventArgs e)
         {
-            if (!RoleAutorise("Boss", "Secretaire")) return;
+            if (!RoleAutorise("Boss")) return;
             try
             {
-                ContentFrame.Navigate(new MaterielsView());
-                SetBoutonActif(BtnMateriels);
+                ContentFrame.Navigate(new DepensesView());
+                SetBoutonActif(BtnDepenses);
             }
             catch (UnauthorizedAccessException)
             {
@@ -227,20 +225,6 @@ namespace GestionCoutureApp.Views
             catch (UnauthorizedAccessException)
             {
                 MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void BtnDepenses_Click(object sender, RoutedEventArgs e)
-        {
-            if (!RoleAutorise("Boss")) return;
-            try
-            {
-                ContentFrame.Navigate(new DepensesView());
-                SetBoutonActif(BtnDepenses);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                MessageBox.Show("Acces refuse.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

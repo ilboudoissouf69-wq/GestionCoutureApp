@@ -1,3 +1,5 @@
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using GestionCoutureApp.Data;
@@ -13,6 +15,7 @@ namespace GestionCoutureApp.Views
         private readonly ICommandeService _commandeService;
         private readonly IClientService _clientService;
         private readonly ApplicationDbContext _context;
+        private readonly IMaterielService _materielService;
         private int _commandeSelectionneeId;
         private int? _pieceSelectionneeId; // null = aucune pièce sélectionnée
         // CORRECTIF (audit) : le motif saisi lors de l'exception Boss (ajout de
@@ -35,6 +38,7 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _clientService = App.Services.GetRequiredService<IClientService>();
+            _materielService = App.Services.GetRequiredService<IMaterielService>();
 
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
@@ -276,8 +280,30 @@ namespace GestionCoutureApp.Views
             LblPhoto.Visibility = Visibility.Visible;
             PanelBoutonsPhoto.Visibility = Visibility.Visible;
             PanelPhoto.Visibility = Visibility.Visible;
-            BtnSauvegarderPiece.Visibility = Visibility.Visible;
+            SepPhoto.Visibility = Visibility.Visible;
 
+            // Matériaux — section entière dans son propre Border
+            PanelMateriaux.Visibility = Visibility.Visible;
+            PanelAjoutMateriau.Visibility = Visibility.Collapsed;
+            SepAvantFormulaireMat.Visibility = Visibility.Collapsed;
+
+            if (modeCreation)
+            {
+                // En création : pièce pas encore sauvée → on ne peut pas rattacher
+                // des matériaux. On masque le bouton d'ajout et on vide la liste.
+                BtnAjouterMateriau.Visibility = Visibility.Collapsed;
+                ListeMateriaux.ItemsSource = null;
+                PanelListeMateriaux.Visibility = Visibility.Collapsed;
+                TxtAucunMateriau.Text = "Sauvegardez la pièce pour pouvoir ajouter des matériaux.";
+                TxtAucunMateriau.Visibility = Visibility.Visible;
+                TxtTotalMateriaux.Text = "0 FCFA";
+            }
+            else
+            {
+                BtnAjouterMateriau.Visibility = Visibility.Visible;
+            }
+
+            BtnSauvegarderPiece.Visibility = Visibility.Visible;
             PanelActionsPiece.Visibility = modeCreation ? Visibility.Collapsed : Visibility.Visible;
 
             // Réutilisation des mesures : visible uniquement en création
@@ -305,7 +331,11 @@ namespace GestionCoutureApp.Views
             LblPhoto.Visibility = Visibility.Collapsed;
             PanelBoutonsPhoto.Visibility = Visibility.Collapsed;
             PanelPhoto.Visibility = Visibility.Collapsed;
-            BtnSauvegarderPiece.Visibility = Visibility.Collapsed;
+            SepPhoto.Visibility = Visibility.Collapsed;
+            // Matériaux — section entière
+            PanelMateriaux.Visibility = Visibility.Collapsed;
+            PanelAjoutMateriau.Visibility = Visibility.Collapsed;
+            ListeMateriaux.ItemsSource = null;
             PanelActionsPiece.Visibility = Visibility.Collapsed;
             LblReutilisationMesures.Visibility = Visibility.Collapsed;
             CmbMesuresAnterieures.Visibility = Visibility.Collapsed;
@@ -422,6 +452,9 @@ namespace GestionCoutureApp.Views
             {
                 _chargementEnCours = false;
             }
+
+            // Charger les matériaux de la pièce maintenant que _pieceSelectionneeId est défini
+            RafraichirMateriaux();
         }
 
         // ==================================================================
@@ -432,7 +465,12 @@ namespace GestionCoutureApp.Views
             CmbMesuresAnterieures.ItemsSource = null;
             CmbMesuresAnterieures.SelectedIndex = -1;
 
-            if (CmbClient.SelectedValue == null || CmbTypeVetement.SelectedValue == null) return;
+            // Besoin d'un client ET d'un type pour interroger les pièces antérieures
+            if (CmbClient.SelectedValue == null || CmbTypeVetement.SelectedValue == null)
+            {
+                LblReutilisationMesures.Text = "Reprendre les mesures — choisissez d'abord un type de vêtement";
+                return;
+            }
 
             int idClient = (int)CmbClient.SelectedValue;
             int idType = (int)CmbTypeVetement.SelectedValue;
@@ -440,7 +478,24 @@ namespace GestionCoutureApp.Views
             if (type == null) return;
 
             var piecesAnterieures = _commandeService.ObtenirPiecesAnterieuresClient(
-                idClient, type.Nom, _commandeSelectionneeId > 0 ? _commandeSelectionneeId : (int?)null);
+                idClient,
+                type.Nom,
+                // On n'exclut PAS la commande courante : ses pièces existantes
+                // (ex. un Boubou déjà dans le panier) sont les meilleures
+                // mesures de référence pour la même pièce à dupliquer.
+                // On passe null pour tout inclure.
+                null);
+
+            if (piecesAnterieures.Count == 0)
+            {
+                LblReutilisationMesures.Text =
+                    $"Aucune pièce {type.Nom} enregistrée pour ce client";
+            }
+            else
+            {
+                LblReutilisationMesures.Text =
+                    $"Reprendre les mesures d'une pièce {type.Nom} existante ({piecesAnterieures.Count} trouvée(s))";
+            }
 
             CmbMesuresAnterieures.ItemsSource = piecesAnterieures;
         }
@@ -626,6 +681,189 @@ namespace GestionCoutureApp.Views
                 MessageBox.Show(ex.Message, "Operation impossible",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        // ==================================================================
+        // Boutons inline dans les lignes du DataGrid des pièces
+        // (clic sur ✏️ Éditer — charge la pièce dans le formulaire)
+        // ==================================================================
+        private void BtnEditerPiece_Click(object sender, RoutedEventArgs e)
+        {
+            // Remonter jusqu'à la DataGridRow pour récupérer la pièce
+            if (sender is Button btn && btn.DataContext is PieceCommande piece)
+            {
+                _pieceSelectionneeId = piece.IdPieceCommande;
+                // Simuler un clic sur la ligne — réutilise la logique existante
+                PieceItem_MouseLeftButtonUp(btn, new MouseButtonEventArgs(
+                    Mouse.PrimaryDevice, 0, MouseButton.Left)
+                { RoutedEvent = UIElement.PreviewMouseLeftButtonUpEvent });
+            }
+        }
+
+        // Clic sur 🗑️ Supprimer inline dans la ligne du panier
+        private void BtnSupprimerPieceLigne_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is PieceCommande piece)
+            {
+                _pieceSelectionneeId = piece.IdPieceCommande;
+                BtnSupprimerPiece_Click(sender, e);
+            }
+        }
+
+        // ==================================================================
+        // MATÉRIAUX / SUPPLÉMENTS — gestion inline dans le formulaire pièce
+        // ==================================================================
+
+        // Charge et affiche les matériaux de la pièce sélectionnée
+        private void RafraichirMateriaux()
+        {
+            if (!_pieceSelectionneeId.HasValue) return;
+
+            var materiaux = _materielService.ObtenirParPiece(_pieceSelectionneeId.Value);
+            ListeMateriaux.ItemsSource = null;
+            ListeMateriaux.ItemsSource = materiaux;
+
+            // Afficher / masquer la liste et le message vide
+            bool aDesMateriaux = materiaux.Count > 0;
+            PanelListeMateriaux.Visibility = aDesMateriaux ? Visibility.Visible : Visibility.Collapsed;
+            TxtAucunMateriau.Text = "Aucun matériau ajouté pour cette pièce.";
+            TxtAucunMateriau.Visibility = aDesMateriaux ? Visibility.Collapsed : Visibility.Visible;
+
+            // Mettre à jour le total matériaux affiché dans l'en-tête de la section
+            decimal totalMat = materiaux.Sum(m => m.Quantite * m.PrixUnitaire);
+            TxtTotalMateriaux.Text = totalMat > 0
+                ? $"{totalMat:N0} FCFA"
+                : "0 FCFA";
+        }
+
+        // Ferme le formulaire d'ajout matériau sans rien enregistrer
+        private void BtnAnnulerFormulaireMateriau_Click(object sender, RoutedEventArgs e)
+        {
+            PanelAjoutMateriau.Visibility = Visibility.Collapsed;
+            SepAvantFormulaireMat.Visibility = Visibility.Collapsed;
+            TxtMatDesignation.Text = string.Empty;
+            TxtMatQuantite.Text = "1";
+            TxtMatPrix.Text = string.Empty;
+        }
+
+        // Ouvre / ferme le mini-formulaire d'ajout matériau
+        private void BtnAjouterMateriau_Click(object sender, RoutedEventArgs e)
+        {
+            bool visible = PanelAjoutMateriau.Visibility == Visibility.Visible;
+            PanelAjoutMateriau.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+            SepAvantFormulaireMat.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+            if (!visible)
+            {
+                // Réinitialiser les champs à l'ouverture
+                TxtMatDesignation.Text = string.Empty;
+                TxtMatQuantite.Text = "1";
+                TxtMatPrix.Text = string.Empty;
+                TxtMatDesignation.Focus();
+            }
+        }
+
+        // Valide et enregistre le matériau en base
+        private void BtnConfirmerMateriau_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_pieceSelectionneeId.HasValue)
+            {
+                MessageBox.Show("Sauvegardez d'abord la pièce avant d'ajouter un matériau.",
+                    "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string designation = TxtMatDesignation.Text.Trim();
+            if (string.IsNullOrEmpty(designation))
+            {
+                MessageBox.Show("La désignation du matériau est obligatoire.",
+                    "Champ manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                TxtMatDesignation.Focus();
+                return;
+            }
+
+            if (!int.TryParse(TxtMatQuantite.Text.Trim(), out int quantite) || quantite <= 0)
+            {
+                MessageBox.Show("La quantité doit être un entier positif.",
+                    "Valeur invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                TxtMatQuantite.Focus();
+                return;
+            }
+
+            if (!decimal.TryParse(TxtMatPrix.Text.Trim().Replace(" ", ""), out decimal prix) || prix < 0)
+            {
+                MessageBox.Show("Le prix unitaire doit être un nombre positif.",
+                    "Valeur invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                TxtMatPrix.Focus();
+                return;
+            }
+
+            try
+            {
+                var materiau = new MaterielSupplement
+                {
+                    IdCommande = _commandeSelectionneeId,
+                    IdPieceCommande = _pieceSelectionneeId.Value,
+                    Designation = designation,
+                    Quantite = quantite,
+                    PrixUnitaire = prix
+                };
+
+                _materielService.Ajouter(materiau);
+
+                // Réinitialiser le formulaire
+                TxtMatDesignation.Text = string.Empty;
+                TxtMatQuantite.Text = "1";
+                TxtMatPrix.Text = string.Empty;
+                PanelAjoutMateriau.Visibility = Visibility.Collapsed;
+
+                // Rafraîchir la liste et le total
+                RafraichirMateriaux();
+                RafraichirTotalAvecMateriaux();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur : " + ex.Message, "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Supprime un matériau depuis la liste inline
+        private void BtnSupprimerMateriau_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+            if (btn.Tag is not int idMateriel) return;
+
+            var confirmation = MessageBox.Show(
+                "Supprimer ce matériau ?",
+                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (confirmation != MessageBoxResult.Yes) return;
+
+            try
+            {
+                _materielService.Supprimer(idMateriel);
+                RafraichirMateriaux();
+                RafraichirTotalAvecMateriaux();
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Suppression impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // Met à jour TxtTotalPieces en incluant les matériaux de toutes les pièces
+        private void RafraichirTotalAvecMateriaux()
+        {
+            decimal totalCouture = _piecesCommande.Sum(p => p.MontantCouture);
+            decimal totalMateriaux = _commandeSelectionneeId > 0
+                ? _materielService.TotalParCommande(_commandeSelectionneeId)
+                : 0m;
+            decimal total = totalCouture + totalMateriaux;
+
+            TxtTotalPieces.Text = totalMateriaux > 0
+                ? $"{total:N0} FCFA  (dont {totalMateriaux:N0} mat.)"
+                : $"{total:N0} FCFA";
         }
 
         // ==================================================================
@@ -1080,6 +1318,7 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                using var fs = new System.IO.FileStream(chemin, System.IO.FileMode.Open, System.IO.FileAccess.Read);
                 var header = new byte[8];
                 int lu = fs.Read(header, 0, header.Length);
                 if (lu < 3) return false;

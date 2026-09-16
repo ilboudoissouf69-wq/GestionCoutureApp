@@ -84,9 +84,11 @@ namespace GestionCoutureApp.Models
         // par CommandeService à partir de maintenant : continuer à l'utiliser
         // ici afficherait silencieusement 0 FCFA de reste à payer pour toute
         // nouvelle commande.
+        // ResteAPayer se base sur MontantTotalAvecMateriaux (couture + matériaux)
+        // car c'est le montant total facturé au client que PaiementsView doit solder.
         [NotMapped]
         public decimal ResteAPayer =>
-            MontantTotalCalcule - Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+            MontantTotalAvecMateriaux - Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
 
         // Total réellement encaissé (paiements valides) — base pour les commissions
         [NotMapped]
@@ -112,6 +114,20 @@ namespace GestionCoutureApp.Models
 
         [NotMapped]
         public decimal MontantTotalCalcule => Pieces.Sum(p => p.MontantCouture);
+
+        // Point 2 — Matériaux/suppléments (cahier des charges V2)
+        // Ce montant est celui que le CLIENT paie réellement sur sa facture :
+        //   couture (commission du couturier calculée dessus) + matériaux
+        //   (remboursement de l'atelier, jamais inclus dans la commission).
+        // C'est ce total — et non MontantTotalCalcule — qui doit être affiché
+        // dans PaiementsView comme "montant total de la facture".
+        [NotMapped]
+        public decimal MontantTotalAvecMateriaux =>
+            MontantTotalCalcule + MaterielSupplements.Sum(m => m.Montant);
+
+        // Montant uniquement matériaux (pour affichage informatif)
+        [NotMapped]
+        public decimal TotalMateriaux => MaterielSupplements.Sum(m => m.Montant);
 
         [NotMapped]
         public string TypeVetementAffiche => Pieces.Count switch

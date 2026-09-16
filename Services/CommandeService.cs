@@ -21,6 +21,8 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
+                .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
+                .Include(c => c.MaterielSupplements)
                 .OrderByDescending(c => c.DateDebut)
                 .ToList();
         }
@@ -33,6 +35,8 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Client)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
+                .Include(c => c.MaterielSupplements)
                 .FirstOrDefault(c => c.IdCommande == id);
         }
 
@@ -179,6 +183,8 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
+                .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
+                .Include(c => c.MaterielSupplements)
                 .Where(c => c.Client != null && (
                          c.Client.Nom.Contains(motCle)
                          || c.Client.Prenom.Contains(motCle)
@@ -443,6 +449,7 @@ namespace GestionCoutureApp.Services
             return context.PiecesCommande
                 .Include(p => p.Couturier)
                 .Include(p => p.Mesures)
+                .Include(p => p.MaterielSupplements)
                 .Where(p => p.IdCommande == idCommande)
                 .ToList();
         }
@@ -455,8 +462,9 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Commande)
                 .Where(p => p.Commande != null
                     && p.Commande.IdClient == idClient
-                    && p.TypeVetement == typeVetement
-                    && (p.Statut == "Terminee" || p.Statut == "Livree"));
+                    && p.TypeVetement == typeVetement);
+            // Pas de filtre sur le statut : une pièce "En cours" ou "À faire"
+            // a déjà des mesures utiles à réutiliser.
 
             if (exclureIdCommande.HasValue)
                 query = query.Where(p => p.IdCommande != exclureIdCommande.Value);

@@ -229,22 +229,71 @@ namespace GestionCoutureApp.Views
                 Espace(p, 6);
             }
 
+            // ===== DETAILS PAR PIÈCE =====
+            if (_commande.Pieces.Count > 0)
+            {
+                Ligne(p, "DETAIL COUTURE", 11, TextAlignment.Left, Noir, FontWeights.Bold);
+                decimal totalCouture = 0m;
+                foreach (var piece in _commande.Pieces)
+                {
+                    string couturier = piece.Couturier != null
+                        ? piece.Couturier.Prenom + " " + piece.Couturier.Nom
+                        : "Non assigne";
+                    LigneMontant(p, "   " + piece.TypeVetement, Fcfa(piece.MontantCouture), 10, Noir);
+                    Ligne(p, "   Couturier : " + couturier, 9, TextAlignment.Left, Gris);
+                    totalCouture += piece.MontantCouture;
+                }
+                if (_commande.Pieces.Count > 1)
+                {
+                    Ligne(p, "   " + new string('-', 26), 9);
+                    LigneMontant(p, "   S/T Couture", Fcfa(totalCouture), 10, Noir, true);
+                }
+                Espace(p, 4);
+            }
+
+            // ===== MATÉRIAUX / SUPPLÉMENTS =====
+            var materiaux = _commande.MaterielSupplements ?? new List<MaterielSupplement>();
+            if (materiaux.Any())
+            {
+                Ligne(p, "MATERIAUX / SUPPLEMENTS", 11, TextAlignment.Left, Noir, FontWeights.Bold);
+                decimal totalMateriaux = 0m;
+                foreach (var mat in materiaux)
+                {
+                    string qte = mat.Quantite > 1 ? $"{mat.Quantite} x {mat.PrixUnitaire:N0}" : "";
+                    string label = "   " + mat.Designation + (qte.Length > 0 ? $" ({qte})" : "");
+                    LigneMontant(p, label, Fcfa(mat.Montant), 10, Gris);
+                    totalMateriaux += mat.Montant;
+                }
+                Ligne(p, "   " + new string('-', 26), 9);
+                LigneMontant(p, "   S/T Materiaux", Fcfa(totalMateriaux), 10, Gris, true);
+                Espace(p, 4);
+            }
+
             // ===== SEPARATEUR FINANCIER =====
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 6);
 
-            // Montants financiers en decimal
-            // CORRECTIF (Étape 1b-i) : _commande.MontantTotal n'est plus
-            // jamais renseigné — utiliser MontantTotalCalcule (somme des
-            // Pieces.MontantCouture) comme repli, au lieu d'un 0 silencieux.
-            decimal montantTotal = _paiement.MontantTotalCommande > 0
-                ? _paiement.MontantTotalCommande : _commande.MontantTotalCalcule;
-            decimal resteAvant     = _paiement.ResteAvantPaiement;
-            decimal montantCePai   = _paiement.MontantPaye;
-            decimal resteApres     = Math.Max(0m, resteAvant - montantCePai);
-            decimal totalPaye      = montantTotal - resteApres;
+            // Montants financiers
+            decimal montantCoutureTotale = _commande.Pieces.Sum(p2 => p2.MontantCouture);
+            decimal montantMateriauxTotal = (_commande.MaterielSupplements ?? new List<MaterielSupplement>()).Sum(m => m.Montant);
+            decimal montantTotal = montantCoutureTotale + montantMateriauxTotal;
 
-            LigneMontant(p, "Montant commande", Fcfa(montantTotal), 10, Noir);
+            // Si le reçu a été créé avant l'ajout des matériaux, on utilise
+            // MontantTotalCommande (couture seule) + matériaux actuels
+            if (_paiement.MontantTotalCommande > 0 && montantTotal <= 0)
+                montantTotal = _paiement.MontantTotalCommande;
+
+            decimal resteAvant   = _paiement.ResteAvantPaiement;
+            decimal montantCePai = _paiement.MontantPaye;
+            decimal resteApres   = Math.Max(0m, resteAvant - montantCePai);
+            decimal totalPaye    = montantTotal - resteApres;
+
+            if (montantMateriauxTotal > 0)
+            {
+                LigneMontant(p, "Frais couture", Fcfa(montantCoutureTotale), 10, Noir);
+                LigneMontant(p, "Materiaux", Fcfa(montantMateriauxTotal), 10, Gris);
+            }
+            LigneMontant(p, "TOTAL FACTURE", Fcfa(montantTotal), 11, Noir, true);
             LigneMontant(p, "Reste avant paiement", Fcfa(resteAvant), 10, Orange);
             LigneMontant(p, "Ce paiement", Fcfa(montantCePai), 10, Vert, true);
             LigneMontant(p, "Mode", " " + _paiement.ModePaiement, 10, Gris);

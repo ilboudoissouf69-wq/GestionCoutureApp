@@ -52,12 +52,11 @@ namespace GestionCoutureApp.Views
             CmbCommande.ItemsSource = commandes.Select(c => new
             {
                 c.IdCommande,
-                // TypeVetementAffiche et MontantTotalCalcule sont les propriétés
-                // calculées depuis Pieces (Étape 1b-i) — MontantTotal/TypeVetement
-                // sont toujours 0/vide pour les commandes créées après la migration.
+                // MontantTotalAvecMateriaux = couture + matériaux (Point 2) :
+                // c'est le montant réel que le client doit payer sur sa facture.
                 DisplayText = (c.Client?.Nom ?? "") + " " + (c.Client?.Prenom ?? "")
                               + " — " + c.TypeVetementAffiche
-                              + "  (" + c.MontantTotalCalcule.ToString("N0") + " FCFA)"
+                              + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA)"
             }).ToList();
             CmbCommande.SelectedValuePath = "IdCommande";
         }
@@ -86,12 +85,19 @@ namespace GestionCoutureApp.Views
                 + (_commandeSelectionnee.Client?.Prenom ?? "");
 
             decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
-            // MontantTotalCalcule = somme des PieceCommande.MontantCouture (Étape 1b-i).
-            // L'ancien MontantTotal est toujours 0 pour les nouvelles commandes.
-            decimal montantTotal = _commandeSelectionnee.MontantTotalCalcule;
+
+            // MontantTotalAvecMateriaux = couture + matériaux (Point 2).
+            // C'est le montant total de la FACTURE que le client doit régler.
+            // La commission du couturier sera calculée séparément sur MontantTotalCalcule
+            // (couture seule) — les matériaux n'y entrent jamais.
+            decimal montantTotal = _commandeSelectionnee.MontantTotalAvecMateriaux;
+            decimal montantCouture = _commandeSelectionnee.MontantTotalCalcule;
+            decimal montantMateriaux = _commandeSelectionnee.TotalMateriaux;
             decimal reste = montantTotal - totalValide;
 
-            TxtInfoMontant.Text = "Montant total : " + montantTotal.ToString("N0") + " FCFA";
+            TxtInfoMontant.Text = montantMateriaux > 0
+                ? $"Total facture : {montantTotal:N0} FCFA  (couture {montantCouture:N0} + materiaux {montantMateriaux:N0})"
+                : $"Total facture : {montantTotal:N0} FCFA";
             TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
             TxtInfoReste.Text = "Reste : " + Math.Max(0m, reste).ToString("N0") + " FCFA";
 
@@ -135,9 +141,10 @@ namespace GestionCoutureApp.Views
             if (_operateurConnecte == null)
             { Alerte("Aucun operateur connecte."); return; }
 
-            // Verification solde en temps reel
+            // Verification solde en temps reel sur le montant total facture
+            // (couture + materiaux) — c'est ce que le client doit rembourser.
             decimal totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
-            decimal reste = _commandeSelectionnee.MontantTotalCalcule - totalValide;
+            decimal reste = _commandeSelectionnee.MontantTotalAvecMateriaux - totalValide;
 
             if (reste <= 0.01m)
             { Alerte("Cette commande est deja entierement payee."); return; }
@@ -150,9 +157,16 @@ namespace GestionCoutureApp.Views
 
             // Confirmation avant enregistrement
             string modeChoisi = ((ComboBoxItem)CmbModePaiement.SelectedItem).Content?.ToString() ?? "Especes";
+            decimal totalFacture = _commandeSelectionnee.MontantTotalAvecMateriaux;
+            decimal totalMateriaux = _commandeSelectionnee.TotalMateriaux;
+            string ligneTotal = totalMateriaux > 0
+                ? $"Total facture : {totalFacture:N0} FCFA (dont {totalMateriaux:N0} materiaux)\n"
+                : $"Total facture : {totalFacture:N0} FCFA\n";
+
             var confirmation = MessageBox.Show(
                 $"Confirmer l'enregistrement du paiement ?\n\n" +
                 $"Client  : {_commandeSelectionnee.Client?.Nom} {_commandeSelectionnee.Client?.Prenom}\n" +
+                ligneTotal +
                 $"Montant : {montant:N0} FCFA\n" +
                 $"Mode    : {modeChoisi}\n" +
                 $"Reste apres : {(reste - montant):N0} FCFA\n\n" +
@@ -286,6 +300,7 @@ namespace GestionCoutureApp.Views
                 .Include(c => c.Client)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
+                .Include(c => c.MaterielSupplements)
                 .FirstOrDefault(c => c.IdCommande == paiement.IdCommande);
 
             if (commande == null) { Alerte("Commande introuvable."); return; }

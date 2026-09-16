@@ -90,13 +90,21 @@ namespace GestionCoutureApp.Services
                 // navigations (Pieces resterait vide) : on utilise donc une
                 // requête explicite avec Include, comme partout ailleurs dans
                 // l'application depuis le correctif équivalent sur ObtenirParId.
+                // ÉTAPE 1b-i + Point 2 (Matériaux) :
+                // - MontantTotalCommande sur le reçu = couture seule
+                //   (base de calcul de la commission du couturier)
+                // - resteReel = couture + matériaux — paiements déjà effectués
+                //   (c'est le montant total que le CLIENT doit rembourser)
                 var commande = context.Commandes
                     .Include(c => c.Pieces)
+                    .Include(c => c.MaterielSupplements)
                     .FirstOrDefault(c => c.IdCommande == paiement.IdCommande)
                     ?? throw new InvalidOperationException("Commande introuvable.");
 
-                decimal montantTotalCommande = commande.Pieces.Sum(p => p.MontantCouture);
-                decimal resteReel = montantTotalCommande - totalValide;
+                decimal montantCouture = commande.Pieces.Sum(p => p.MontantCouture);
+                decimal montantMateriaux = commande.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                decimal montantTotalFacture = montantCouture + montantMateriaux;
+                decimal resteReel = montantTotalFacture - totalValide;
 
                 if (paiement.MontantPaye <= 0)
                     throw new InvalidOperationException("Le montant doit être positif.");
@@ -106,7 +114,9 @@ namespace GestionCoutureApp.Services
                     throw new InvalidOperationException(
                         $"Montant ({paiement.MontantPaye:N0}) dépasse le reste réel ({resteReel:N0} FCFA).");
 
-                paiement.MontantTotalCommande = montantTotalCommande;
+                // MontantTotalCommande sur le reçu = couture seule
+                // (la commission sera calculée sur cette base uniquement)
+                paiement.MontantTotalCommande = montantCouture;
                 paiement.ResteAvantPaiement = resteReel;
                 paiement.IdOperateur = idOperateur;
                 paiement.NomOperateur = nomOperateur;
