@@ -1,14 +1,3 @@
-// Services/RetourService.cs
-// =============================================
-// Implémentation du service Retour (Point 4).
-//
-// Règles :
-//   - Un retour ne peut passer à "En reprise" que s'il est "Signalé".
-//   - Un retour ne peut passer à "Résolu" que s'il est "En reprise".
-//   - Jamais de suppression physique : la suppression n'existe pas dans
-//     l'interface (même philosophie que les paiements).
-// =============================================
-
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
@@ -24,72 +13,75 @@ namespace GestionCoutureApp.Services
             _contextFactory = contextFactory;
         }
 
+        private IQueryable<Retour> AvecIncludes(ApplicationDbContext context) =>
+            context.Retours
+                .Include(r => r.Commande).ThenInclude(c => c!.Client)
+                .Include(r => r.PieceCommande)
+                .Include(r => r.Couturier)
+                .Include(r => r.CouturierReprise);
+
         public List<Retour> ObtenirTous()
         {
             using var context = _contextFactory.CreateDbContext();
-            return context.Retours
-                .Include(r => r.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Include(r => r.PieceCommande)
-                .Include(r => r.Couturier)
-                .OrderByDescending(r => r.DateSignalement)
-                .ToList();
+            try
+            {
+                return AvecIncludes(context)
+                    .OrderByDescending(r => r.DateSignalement)
+                    .ToList();
+            }
+            catch
+            {
+                // Fallback si CouturierReprise pas encore en base
+                return context.Retours
+                    .Include(r => r.Commande).ThenInclude(c => c!.Client)
+                    .Include(r => r.PieceCommande)
+                    .Include(r => r.Couturier)
+                    .OrderByDescending(r => r.DateSignalement)
+                    .ToList();
+            }
         }
 
         public Retour? ObtenirParId(int id)
         {
             using var context = _contextFactory.CreateDbContext();
-            return context.Retours
-                .Include(r => r.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Include(r => r.PieceCommande)
-                .Include(r => r.Couturier)
-                .FirstOrDefault(r => r.IdRetour == id);
+            return AvecIncludes(context).FirstOrDefault(r => r.IdRetour == id);
         }
 
         public void Ajouter(Retour retour)
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // CORRECTIF (audit) : le cahier des charges est explicite — "Après
-            // livraison, si un client revient...". Rien n'empêchait jusqu'ici
-            // de signaler un retour sur une pièce qui n'a même pas encore été
-            // livrée (voire pas commencée), ce qui n'a pas de sens métier :
-            // un retour, par définition, concerne un travail déjà rendu au
-            // client que celui-ci juge insatisfaisant.
             var piece = context.PiecesCommande.Find(retour.IdPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
 
-            if (piece.Statut != "Livree")
+            // Un retour peut concerner une pièce Livrée OU Terminée
+            // (le boss peut accepter un retour avant livraison officielle)
+            if (piece.Statut != "Livree" && piece.Statut != "Terminee")
                 throw new InvalidOperationException(
-                    "Impossible d'enregistrer un retour : cette pièce n'a pas encore été " +
-                    "livrée au client (statut actuel : " + piece.StatutAffiche + ").");
+                    "Impossible d'enregistrer un retour : cette pièce n'est pas encore " +
+                    "terminée (statut : " + piece.StatutAffiche + ").");
 
             retour.DateSignalement = DateTime.Now;
             context.Retours.Add(retour);
             context.SaveChanges();
         }
 
-        // CORRECTIF (audit) : méthode manquante malgré la documentation du
-        // modèle Retour qui l'annonçait déjà. Même mécanisme que Paiement,
-        // Commission et Depense — jamais de suppression, annulation tracée.
-        public void Annuler(int idRetour, string motif, string nomAnnulateur)
+        public void Modifier(Retour retour)
         {
-            if (string.IsNullOrWhiteSpace(motif))
-                throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
-
             using var context = _contextFactory.CreateDbContext();
-
-            var retour = context.Retours.Find(idRetour)
+            var existant = context.Retours.Find(retour.IdRetour)
                 ?? throw new InvalidOperationException("Retour introuvable.");
 
-            if (retour.EstAnnule)
-                throw new InvalidOperationException("Ce retour est déjà annulé.");
+            if (existant.EstAnnule)
+                throw new InvalidOperationException("Un retour annulé ne peut pas être modifié.");
 
-            retour.EstAnnule = true;
-            retour.MotifAnnulation = motif.Trim();
-            retour.DateAnnulation = DateTime.Now;
-            retour.NomAnnulateur = nomAnnulateur;
+            existant.DescriptionProbleme = retour.DescriptionProbleme;
+            existant.IdCouturierReprise = retour.IdCouturierReprise;
+            existant.DateRdvReprise = retour.DateRdvReprise;
+            existant.HeureDebutReprise = retour.HeureDebutReprise;
+            existant.HeureFinReprise = retour.HeureFinReprise;
+            if (!string.IsNullOrEmpty(retour.CheminPhotoDefaut))
+                existant.CheminPhotoDefaut = retour.CheminPhotoDefaut;
 
             context.SaveChanges();
         }
@@ -102,7 +94,7 @@ namespace GestionCoutureApp.Services
 
             if (retour.Statut != "Signale")
                 throw new InvalidOperationException(
-                    "Seul un retour 'Signalé' peut passer en reprise. Actuel : " + retour.Statut);
+                    "Seul un retour 'Signalé' peut passer en reprise.");
 
             retour.Statut = "En reprise";
             context.SaveChanges();
@@ -116,56 +108,97 @@ namespace GestionCoutureApp.Services
 
             if (retour.Statut != "En reprise")
                 throw new InvalidOperationException(
-                    "Seul un retour 'En reprise' peut être résolu. Actuel : " + retour.Statut);
+                    "Seul un retour 'En reprise' peut être marqué Prêt.");
 
-            retour.Statut = "Resolu";
+            retour.Statut = "Pret";
             retour.DateResolution = DateTime.Now;
             retour.IdOperateurResolution = idOperateur;
             retour.NomOperateurResolution = nomOperateur;
             context.SaveChanges();
         }
 
+        public void MarquerRendu(int idRetour, int idOperateur, string nomOperateur)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var retour = context.Retours.Find(idRetour)
+                ?? throw new InvalidOperationException("Retour introuvable.");
+
+            if (retour.Statut != "Pret")
+                throw new InvalidOperationException(
+                    "Seul un retour 'Prêt' peut être marqué 'Rendu au client'.");
+
+            retour.Statut = "Rendu";
+            context.SaveChanges();
+        }
+
+        public void Annuler(int idRetour, string motif, string nomAnnulateur)
+        {
+            if (string.IsNullOrWhiteSpace(motif))
+                throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
+
+            using var context = _contextFactory.CreateDbContext();
+            var retour = context.Retours.Find(idRetour)
+                ?? throw new InvalidOperationException("Retour introuvable.");
+
+            if (retour.EstAnnule)
+                throw new InvalidOperationException("Ce retour est déjà annulé.");
+
+            retour.EstAnnule = true;
+            retour.MotifAnnulation = motif.Trim();
+            retour.DateAnnulation = DateTime.Now;
+            retour.NomAnnulateur = nomAnnulateur;
+            context.SaveChanges();
+        }
+
         public List<Retour> Rechercher(string motCle)
         {
             using var context = _contextFactory.CreateDbContext();
-            return context.Retours
-                .Include(r => r.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Include(r => r.PieceCommande)
-                .Include(r => r.Couturier)
+            string m = motCle.ToLower();
+            return AvecIncludes(context)
                 .Where(r =>
                     (r.Commande != null && r.Commande.Client != null &&
-                     (r.Commande.Client.Nom.Contains(motCle) ||
-                      r.Commande.Client.Prenom.Contains(motCle))) ||
-                    r.DescriptionProbleme.Contains(motCle) ||
-                    r.Statut.Contains(motCle) ||
+                     (r.Commande.Client.Nom.ToLower().Contains(m) ||
+                      r.Commande.Client.Prenom.ToLower().Contains(m))) ||
+                    r.DescriptionProbleme.ToLower().Contains(m) ||
+                    r.Statut.ToLower().Contains(m) ||
                     (r.Couturier != null &&
-                     (r.Couturier.Nom.Contains(motCle) ||
-                      r.Couturier.Prenom.Contains(motCle))))
+                     (r.Couturier.Nom.ToLower().Contains(m) ||
+                      r.Couturier.Prenom.ToLower().Contains(m))) ||
+                    (r.PieceCommande != null &&
+                     r.PieceCommande.TypeVetement.ToLower().Contains(m)))
                 .OrderByDescending(r => r.DateSignalement)
                 .ToList();
+        }
+
+        public List<Retour> FiltrerParStatut(string statut)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var query = AvecIncludes(context);
+            if (statut != "Tous")
+                query = query.Where(r => r.Statut == statut && !r.EstAnnule);
+            return query.OrderByDescending(r => r.DateSignalement).ToList();
         }
 
         public List<StatistiqueRetourCouturier> StatistiquesParCouturier(
             DateTime dateDebut, DateTime dateFin)
         {
             using var context = _contextFactory.CreateDbContext();
-
             var retours = context.Retours
                 .Include(r => r.Couturier)
-                .Where(r => r.DateSignalement.Date >= dateDebut.Date &&
+                .Where(r => !r.EstAnnule &&
+                            r.DateSignalement.Date >= dateDebut.Date &&
                             r.DateSignalement.Date <= dateFin.Date)
                 .ToList();
 
             return retours
-                .GroupBy(r => new { r.IdCouturier, r.Couturier!.Prenom, r.Couturier.Nom })
+                .GroupBy(r => new { r.IdCouturier, Prenom = r.Couturier?.Prenom ?? "", Nom = r.Couturier?.Nom ?? "" })
                 .Select(g => new StatistiqueRetourCouturier
                 {
                     IdCouturier = g.Key.IdCouturier,
-                    NomCouturier = g.Key.Prenom + " " + g.Key.Nom,
+                    NomCouturier = (g.Key.Prenom + " " + g.Key.Nom).Trim(),
                     NombreRetours = g.Count(),
-                    NombreResolus = g.Count(r => r.Statut == "Resolu"),
-                    NombreEnCours = g.Count(r => r.Statut != "Resolu")
+                    NombreResolus = g.Count(r => r.Statut == "Pret" || r.Statut == "Rendu"),
+                    NombreEnCours = g.Count(r => r.Statut == "Signale" || r.Statut == "En reprise")
                 })
                 .OrderByDescending(s => s.NombreRetours)
                 .ToList();

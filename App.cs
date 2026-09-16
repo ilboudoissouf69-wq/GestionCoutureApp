@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -77,6 +78,39 @@ namespace GestionCoutureApp
                 // si elle n'existe pas encore, sinon la met à jour sans perte de données).
                 // Remplace EnsureCreated() qui ne gérait jamais les évolutions de schéma.
                 context.Database.Migrate();
+
+                // ── Colonnes retours ajoutées progressivement (idempotent) ──
+                // ALTER TABLE en SQLite ne supporte pas IF NOT EXISTS.
+                // On utilise PRAGMA table_info pour tester l'existence avant d'ajouter.
+                var colonnesRetours = new (string col, string def)[]
+                {
+                    ("EstAnnule",          "INTEGER NOT NULL DEFAULT 0"),
+                    ("MotifAnnulation",    "TEXT"),
+                    ("DateAnnulation",     "TEXT"),
+                    ("NomAnnulateur",      "TEXT"),
+                    ("IdCouturierReprise", "INTEGER"),
+                    ("CheminPhotoDefaut",  "TEXT"),
+                    ("DateRdvReprise",     "TEXT"),
+                    ("HeureDebutReprise",  "TEXT"),
+                    ("HeureFinReprise",    "TEXT"),
+                };
+
+                foreach (var (col, def) in colonnesRetours)
+                {
+                    try
+                    {
+                        // Vérifier via ADO.NET direct (plus simple que SqlQueryRaw<T>)
+                        var conn = context.Database.GetDbConnection();
+                        if (conn.State != System.Data.ConnectionState.Open)
+                            conn.Open();
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('Retours') WHERE name='{col}'";
+                        long count = (long)(cmd.ExecuteScalar() ?? 0L);
+                        if (count == 0)
+                            context.Database.ExecuteSqlRaw($"ALTER TABLE Retours ADD COLUMN {col} {def};");
+                    }
+                    catch { /* colonne déjà présente ou table inexistante */ }
+                }
 
                 // CORRECTIF (robustesse concurrence) : le mode journal par défaut de
                 // SQLite ("DELETE" / rollback journal) bloque tous les lecteurs pendant
@@ -285,8 +319,13 @@ namespace GestionCoutureApp
         private void Application_DispatcherUnhandledException(object sender,
             System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
         {
-            MessageBox.Show(
-                "Erreur inattendue :\n" + e.Exception.Message,
+            var ex = e.Exception;
+            string details = ex.Message;
+            if (ex.InnerException != null)
+                details += "\n\nCause : " + ex.InnerException.Message;
+            details += "\n\n--- Stack ---\n" + ex.StackTrace;
+
+            MessageBox.Show("Erreur inattendue :\n" + details,
                 "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             e.Handled = true;
         }

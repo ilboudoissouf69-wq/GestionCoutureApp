@@ -161,6 +161,15 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<Employe>()
                 .Property(e => e.Statut)
                 .HasDefaultValue("Actif");
+
+            // ── Retour : relation CouturierReprise (nullable, auto-découverte
+            // par EF Core impossible car 2 FK vers Employe sur la même entité)
+            modelBuilder.Entity<Retour>()
+                .HasOne(r => r.CouturierReprise)
+                .WithMany()
+                .HasForeignKey(r => r.IdCouturierReprise)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
         }
     }
 }

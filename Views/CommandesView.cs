@@ -784,11 +784,14 @@ namespace GestionCoutureApp.Views
                     return;
                 }
 
-                // Recharger les pièces et rafraîchir
+                // Recharger les pièces et rafraîchir (avec matériaux pour RowDetailsTemplate)
                 _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                 RafraichirListePieces();
                 ChargerCommandes();
-                MasquerFormulairePiece();
+                // Ne pas masquer le formulaire après modification — rester en mode édition
+                // pour que l'utilisateur puisse enchaîner les changements
+                if (!_pieceSelectionneeId.HasValue)
+                    MasquerFormulairePiece();
             }
             catch (InvalidOperationException ex)
             {

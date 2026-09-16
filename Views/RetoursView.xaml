@@ -4,75 +4,350 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{StaticResource BackgroundBrush}">
 
-    <Grid Margin="28,24,28,28">
+    <Grid Margin="28,24,28,24">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Titre -->
-        <Grid Grid.Row="0"
-              Margin="0,0,0,20">
+        <!-- ══ TITRE + BOUTON ══════════════════════════════════════════════ -->
+        <Grid Grid.Row="0" Margin="0,0,0,20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
+
             <StackPanel Grid.Column="0">
-                <TextBlock Text="Gestion des Retours"
-                           FontSize="22"
-                           FontWeight="Bold"
+                <TextBlock Text="Retours &amp; Reprises Gratuites"
+                           FontSize="22" FontWeight="Bold"
                            Foreground="{StaticResource PrimaryBrush}"/>
-                <Border Height="3"
-                        Width="48"
-                        CornerRadius="2"
+                <Border Height="3" Width="48" CornerRadius="2"
                         Background="#CC0000"
                         HorizontalAlignment="Left"
-                        Margin="0,6,0,0"/>
+                        Margin="0,6,0,4"/>
+                <TextBlock x:Name="TxtCompteur"
+                           Text="— retour(s) enregistré(s)"
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
             </StackPanel>
+
             <Button Grid.Column="1"
-                    Content="+ Nouveau retour"
+                    x:Name="BtnNouveauRetour"
+                    Content="🔄  + Nouveau retour"
                     Style="{StaticResource BtnPrimary}"
-                    Padding="16,8"
+                    Height="40" Padding="18,0"
+                    FontSize="13" FontWeight="SemiBold"
                     VerticalAlignment="Top"
                     Click="BtnNouveauRetour_Click"/>
         </Grid>
 
-        <!-- Recherche -->
-        <TextBox Grid.Row="1"
-                 x:Name="TxtRecherche"
-                 Style="{StaticResource ModernTextBox}"
-                 Margin="0,0,0,14"
-                 TextChanged="TxtRecherche_TextChanged"/>
+        <!-- ══ BARRE FILTRES ════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="160"/>
+            </Grid.ColumnDefinitions>
 
-        <!-- Tableau -->
-        <Border Grid.Row="2"
+            <TextBox Grid.Column="0"
+                     x:Name="TxtRecherche"
+                     Style="{StaticResource ModernTextBox}"
+                     Tag="🔍  Rechercher (client, pièce, couturier, motif…)"
+                     TextChanged="TxtRecherche_TextChanged"/>
+
+            <!-- Filtre statut -->
+            <ComboBox Grid.Column="2"
+                      x:Name="CmbFiltreStatut"
+                      Height="38" FontSize="13"
+                      SelectionChanged="CmbFiltreStatut_SelectionChanged">
+                <ComboBoxItem Content="Tous" IsSelected="True"/>
+                <ComboBoxItem Content="Signalé"/>
+                <ComboBoxItem Content="En reprise"/>
+                <ComboBoxItem Content="Prêt ✓"/>
+                <ComboBoxItem Content="Rendu au client"/>
+            </ComboBox>
+        </Grid>
+
+        <!-- ══ BADGES STATISTIQUES ══════════════════════════════════════════ -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,16">
+            <!-- Signalé -->
+            <Border Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1"
+                    CornerRadius="8" Padding="14,8" Margin="0,0,10,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🔴" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TxtNbSignale" Text="0"
+                                   FontSize="18" FontWeight="Bold" Foreground="#DC2626"/>
+                        <TextBlock Text="Signalés" FontSize="10" Foreground="#EF4444"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <!-- En reprise -->
+            <Border Background="#FFFBEB" BorderBrush="#FDE68A" BorderThickness="1"
+                    CornerRadius="8" Padding="14,8" Margin="0,0,10,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🟡" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TxtNbEnReprise" Text="0"
+                                   FontSize="18" FontWeight="Bold" Foreground="#D97706"/>
+                        <TextBlock Text="En reprise" FontSize="10" Foreground="#F59E0B"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <!-- Prêt -->
+            <Border Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1"
+                    CornerRadius="8" Padding="14,8" Margin="0,0,10,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🟢" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TxtNbPret" Text="0"
+                                   FontSize="18" FontWeight="Bold" Foreground="#059669"/>
+                        <TextBlock Text="Prêts" FontSize="10" Foreground="#10B981"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <!-- Rendu -->
+            <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1"
+                    CornerRadius="8" Padding="14,8">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="⚫" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TxtNbRendu" Text="0"
+                                   FontSize="18" FontWeight="Bold" Foreground="#6B7280"/>
+                        <TextBlock Text="Rendus" FontSize="10" Foreground="#9CA3AF"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- ══ TABLEAU ═══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="3"
                 Style="{StaticResource Card}"
                 Padding="0">
             <DataGrid x:Name="GridRetours"
                       Style="{StaticResource ModernGrid}"
-                      SelectionChanged="GridRetours_SelectionChanged"
-                      MouseDoubleClick="GridRetours_MouseDoubleClick"
-                      AutoGenerateColumns="False">
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      IsReadOnly="True"
+                      SelectionMode="Single"
+                      GridLinesVisibility="Horizontal"
+                      HorizontalGridLinesBrush="#F3F4F6"
+                      RowBackground="White"
+                      AlternatingRowBackground="#FAFAFA"
+                      BorderThickness="0">
+
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#1A1A1A"/>
+                        <Setter Property="Foreground" Value="White"/>
+                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="Padding" Value="12,9"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                    </Style>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#FFF0EB"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#FDF5F2"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.Resources>
+
                 <DataGrid.Columns>
+
+                    <!-- Date -->
                     <DataGridTextColumn Header="Date"
                                         Binding="{Binding DateSignalementAffichee}"
-                                        Width="90"/>
-                    <DataGridTextColumn Header="Client"
-                                        Binding="{Binding Commande.Client.Nom}"
-                                        Width="*"/>
-                    <DataGridTextColumn Header="Piece"
-                                        Binding="{Binding PieceCommande.TypeVetement}"
-                                        Width="100"/>
-                    <DataGridTextColumn Header="Couturier"
-                                        Binding="{Binding Couturier.Nom}"
-                                        Width="*"/>
-                    <DataGridTextColumn Header="Probleme"
-                                        Binding="{Binding DescriptionProbleme}"
-                                        Width="*"/>
-                    <DataGridTextColumn Header="Statut"
-                                        Binding="{Binding StatutAffiche}"
-                                        Width="100"/>
+                                        Width="88"/>
+
+                    <!-- Client -->
+                    <DataGridTemplateColumn Header="Client" Width="130">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="4,3">
+                                    <TextBlock Text="{Binding ClientAffiche}"
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="#111827"/>
+                                    <TextBlock Text="{Binding Commande.Client.Telephone}"
+                                               FontSize="10" Foreground="#6B7280"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Pièce + Commande -->
+                    <DataGridTemplateColumn Header="Commande / Pièce" Width="140">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="4,3">
+                                    <TextBlock FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="CMD-{0}">
+                                                <Binding Path="IdCommande"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding PieceCommande.TypeVetement}"
+                                               FontSize="11" Foreground="#374151"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Couturier initial -->
+                    <DataGridTemplateColumn Header="Couturier initial" Width="110">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Margin="4,0"
+                                           FontSize="12" VerticalAlignment="Center">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="{}{0} {1}">
+                                            <Binding Path="Couturier.Prenom"/>
+                                            <Binding Path="Couturier.Nom"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Motif -->
+                    <DataGridTemplateColumn Header="Motif / Problème" Width="*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DescriptionProbleme}"
+                                           Margin="4,0"
+                                           FontSize="12"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           Foreground="#374151"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- RDV reprise -->
+                    <DataGridTextColumn Header="RDV reprise"
+                                        Binding="{Binding DateRdvAffichee}"
+                                        Width="110"/>
+
+                    <!-- Statut -->
+                    <DataGridTemplateColumn Header="Statut" Width="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="4" Padding="8,4"
+                                        Margin="4,3" HorizontalAlignment="Left">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#6B7280"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Statut}" Value="Signale">
+                                                    <Setter Property="Background" Value="#DC2626"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Statut}" Value="En reprise">
+                                                    <Setter Property="Background" Value="#D97706"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Statut}" Value="Pret">
+                                                    <Setter Property="Background" Value="#059669"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Statut}" Value="Rendu">
+                                                    <Setter Property="Background" Value="#6B7280"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                    <Setter Property="Background" Value="#9CA3AF"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding StatutAffiche}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="White"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Actions -->
+                    <DataGridTemplateColumn Header="Actions" Width="140">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                    <!-- Éditer -->
+                                    <Button Content="✏️"
+                                            Width="28" Height="26"
+                                            FontSize="13"
+                                            ToolTip="Modifier / voir détails"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Margin="2,0"
+                                            Click="BtnEditerRetour_Click"/>
+                                    <!-- Avancer statut -->
+                                    <Button x:Name="BtnAvancerStatut"
+                                            Width="28" Height="26"
+                                            FontSize="13"
+                                            ToolTip="Avancer le statut"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Margin="2,0"
+                                            Click="BtnAvancerStatut_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Content" Value="▶"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Statut}" Value="Pret">
+                                                        <Setter Property="Content" Value="✅"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Statut}" Value="Rendu">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <!-- Annuler -->
+                                    <Button Content="🚫"
+                                            Width="28" Height="26"
+                                            FontSize="13"
+                                            ToolTip="Annuler ce retour"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Margin="2,0"
+                                            Click="BtnAnnulerRetour_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
                 </DataGrid.Columns>
             </DataGrid>
         </Border>
