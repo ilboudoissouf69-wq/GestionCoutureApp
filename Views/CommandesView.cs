@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -32,6 +34,10 @@ namespace GestionCoutureApp.Views
 
         // Pièces chargées pour la commande sélectionnée
         private List<PieceCommande> _piecesCommande = new();
+
+        // Buffer temporaire des matériaux saisis AVANT que la pièce soit sauvegardée en base
+        // (mode création uniquement). Vidé et persisté lors de BtnSauvegarderPiece_Click.
+        private readonly List<MaterielSupplement> _materiauxTemporaires = new();
 
         public CommandesView()
         {
@@ -218,19 +224,100 @@ namespace GestionCoutureApp.Views
                 _piecesCommande = _commandeService.ObtenirPiecesCommande(cmd.IdCommande);
                 RafraichirListePieces();
 
-                // Afficher les champs de pièce en mode "ajout" (première pièce vide)
-                // ou afficher la première pièce si la commande a des pièces
                 if (_piecesCommande.Count == 0)
                 {
+                    // Aucune pièce : ouvrir formulaire création
                     AfficherFormulairePiece(true);
                 }
                 else
                 {
-                    // Ne pas afficher le formulaire de pièce par défaut :
-                    // l'utilisateur doit cliquer sur une pièce pour la modifier
-                    MasquerFormulairePiece();
+                    // Au moins une pièce : afficher la première directement
+                    // pour voir tous les détails sans clic supplémentaire
+                    var premiere = _piecesCommande[0];
+                    _pieceSelectionneeId = premiere.IdPieceCommande;
 
-                    // Afficher le bouton forcer statut si plusieurs pièces
+                    AfficherFormulairePiece(false);
+
+                    // Remplir les champs de la première pièce
+                    var typeMatch = _typesVetement.FirstOrDefault(t => t.Nom == premiere.TypeVetement);
+                    if (typeMatch != null)
+                        CmbTypeVetement.SelectedValue = typeMatch.IdTypeVetement;
+
+                    TxtMontant.Text = premiere.MontantCouture.ToString();
+
+                    if (premiere.IdCouturier.HasValue)
+                        CmbCouturier.SelectedValue = premiere.IdCouturier.Value;
+                    else
+                        CmbCouturier.SelectedIndex = -1;
+
+                    if (CmbDescription.ItemsSource != null)
+                    {
+                        var descMatch = CmbDescription.Items
+                            .Cast<DescriptionCourante>()
+                            .FirstOrDefault(d => d.Texte == premiere.DescriptionPrecision);
+                        if (descMatch != null)
+                            CmbDescription.SelectedItem = descMatch;
+                        else
+                            CmbDescription.Text = premiere.DescriptionPrecision ?? "";
+                    }
+                    else
+                    {
+                        CmbDescription.Text = premiere.DescriptionPrecision ?? "";
+                    }
+
+                    for (int i = 0; i < CmbStatut.Items.Count; i++)
+                    {
+                        var item = (ComboBoxItem)CmbStatut.Items[i];
+                        if (item.Content.ToString() == premiere.Statut)
+                        { CmbStatut.SelectedIndex = i; break; }
+                    }
+
+                    // Mesures
+                    var mesures = _commandeService.ObtenirMesuresPiece(premiere.IdPieceCommande);
+                    foreach (var child in PanelMesuresDynamiques.Children)
+                    {
+                        var row = (StackPanel)child;
+                        var combo = (ComboBox)row.Children[1];
+                        string nomMesure = combo.Tag?.ToString() ?? "";
+                        var mesure = mesures.FirstOrDefault(m => m.NomMesure == nomMesure);
+                        if (mesure != null)
+                        {
+                            bool trouve = false;
+                            for (int j = 0; j < combo.Items.Count; j++)
+                            {
+                                string? item = combo.Items[j]?.ToString();
+                                if (item == mesure.Valeur + " cm" || item?.StartsWith(mesure.Valeur + " ") == true)
+                                { combo.SelectedIndex = j; trouve = true; break; }
+                            }
+                            if (!trouve) combo.Text = mesure.Valeur + " cm";
+                        }
+                    }
+
+                    // Photo
+                    _cheminPhotoTemporaire = premiere.CheminPhoto ?? string.Empty;
+                    if (!string.IsNullOrEmpty(_cheminPhotoTemporaire) && System.IO.File.Exists(_cheminPhotoTemporaire))
+                    {
+                        ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(_cheminPhotoTemporaire));
+                        TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
+                        BtnSupprimerPhoto.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        ImgPhoto.Source = null;
+                        _cheminPhotoTemporaire = string.Empty;
+                        TxtPhotoPlaceholder.Visibility = Visibility.Visible;
+                        BtnSupprimerPhoto.Visibility = Visibility.Collapsed;
+                    }
+
+                    // Ajustement
+                    if (typeMatch != null)
+                    {
+                        decimal ecart = premiere.MontantCouture - typeMatch.PrixBase;
+                        int idx = (int)Math.Round(ecart / 500m);
+                        CmbAjustement.SelectedIndex = (idx >= 0 && idx < CmbAjustement.Items.Count) ? idx : 0;
+                    }
+
+                    // Bouton forcer statut
                     BtnForcerStatut.Visibility = (_piecesCommande.Count > 1 && _roleUtilisateur == "Boss")
                         ? Visibility.Visible : Visibility.Collapsed;
                 }
@@ -243,6 +330,10 @@ namespace GestionCoutureApp.Views
             {
                 _chargementEnCours = false;
             }
+
+            // Si une pièce a été chargée (commande avec pièces), rafraîchir ses matériaux
+            if (_pieceSelectionneeId.HasValue)
+                RafraichirMateriaux();
         }
 
         // ==================================================================
@@ -289,12 +380,13 @@ namespace GestionCoutureApp.Views
 
             if (modeCreation)
             {
-                // En création : pièce pas encore sauvée → on ne peut pas rattacher
-                // des matériaux. On masque le bouton d'ajout et on vide la liste.
-                BtnAjouterMateriau.Visibility = Visibility.Collapsed;
+                // En création : la pièce n'est pas encore en base mais l'utilisateur
+                // peut déjà saisir des matériaux → buffer temporaire (_materiauxTemporaires).
+                BtnAjouterMateriau.Visibility = Visibility.Visible;
+                _materiauxTemporaires.Clear();
                 ListeMateriaux.ItemsSource = null;
                 PanelListeMateriaux.Visibility = Visibility.Collapsed;
-                TxtAucunMateriau.Text = "Sauvegardez la pièce pour pouvoir ajouter des matériaux.";
+                TxtAucunMateriau.Text = "Aucun matériau ajouté — facultatif.";
                 TxtAucunMateriau.Visibility = Visibility.Visible;
                 TxtTotalMateriaux.Text = "0 FCFA";
             }
@@ -583,6 +675,7 @@ namespace GestionCoutureApp.Views
 
             // Réinitialiser le formulaire pour une nouvelle pièce
             _pieceSelectionneeId = null;
+            _materiauxTemporaires.Clear();
             CmbTypeVetement.SelectedIndex = -1;
             CmbCouturier.SelectedIndex = -1;
             CmbDescription.Text = "";
@@ -661,6 +754,27 @@ namespace GestionCoutureApp.Views
                         _roleUtilisateur == "Boss",
                         _motifExceptionAjoutPiece);
                     _motifExceptionAjoutPiece = null;
+
+                    // Persister les matériaux du buffer temporaire (saisis avant la sauvegarde)
+                    if (_materiauxTemporaires.Count > 0)
+                    {
+                        // La pièce vient d'être créée — on doit retrouver son ID
+                        var piecesRechar = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
+                        var nouvellepiece = piecesRechar.LastOrDefault(p => p.TypeVetement == piece.TypeVetement);
+                        if (nouvellepiece != null)
+                        {
+                            foreach (var mat in _materiauxTemporaires)
+                            {
+                                // Remettre IdMateriel à 0 pour que EF Core génère l'ID en base
+                                mat.IdMateriel = 0;
+                                mat.IdCommande = _commandeSelectionneeId;
+                                mat.IdPieceCommande = nouvellepiece.IdPieceCommande;
+                                _materielService.Ajouter(mat);
+                            }
+                        }
+                        _materiauxTemporaires.Clear();
+                    }
+
                     MessageBox.Show("Piece ajoutee avec succes !", "Succes",
                         MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -762,16 +876,9 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        // Valide et enregistre le matériau en base
+        // Valide et enregistre le matériau en base (ou dans le buffer si pièce pas encore sauvée)
         private void BtnConfirmerMateriau_Click(object sender, RoutedEventArgs e)
         {
-            if (!_pieceSelectionneeId.HasValue)
-            {
-                MessageBox.Show("Sauvegardez d'abord la pièce avant d'ajouter un matériau.",
-                    "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
             string designation = TxtMatDesignation.Text.Trim();
             if (string.IsNullOrEmpty(designation))
             {
@@ -797,33 +904,42 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            try
+            var materiau = new MaterielSupplement
             {
-                var materiau = new MaterielSupplement
+                Designation = designation,
+                Quantite = quantite,
+                PrixUnitaire = prix
+            };
+
+            // Réinitialiser le formulaire
+            TxtMatDesignation.Text = string.Empty;
+            TxtMatQuantite.Text = "1";
+            TxtMatPrix.Text = string.Empty;
+            PanelAjoutMateriau.Visibility = Visibility.Collapsed;
+            SepAvantFormulaireMat.Visibility = Visibility.Collapsed;
+
+            if (_pieceSelectionneeId.HasValue)
+            {
+                // Pièce existante en base → persister directement
+                try
                 {
-                    IdCommande = _commandeSelectionneeId,
-                    IdPieceCommande = _pieceSelectionneeId.Value,
-                    Designation = designation,
-                    Quantite = quantite,
-                    PrixUnitaire = prix
-                };
-
-                _materielService.Ajouter(materiau);
-
-                // Réinitialiser le formulaire
-                TxtMatDesignation.Text = string.Empty;
-                TxtMatQuantite.Text = "1";
-                TxtMatPrix.Text = string.Empty;
-                PanelAjoutMateriau.Visibility = Visibility.Collapsed;
-
-                // Rafraîchir la liste et le total
-                RafraichirMateriaux();
-                RafraichirTotalAvecMateriaux();
+                    materiau.IdCommande = _commandeSelectionneeId;
+                    materiau.IdPieceCommande = _pieceSelectionneeId.Value;
+                    _materielService.Ajouter(materiau);
+                    RafraichirMateriaux();
+                    RafraichirTotalAvecMateriaux();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur : " + ex.Message, "Erreur",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                MessageBox.Show("Erreur : " + ex.Message, "Erreur",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                // Nouvelle pièce pas encore sauvée → stocker dans le buffer temporaire
+                _materiauxTemporaires.Add(materiau);
+                RafraichirListeMatériauxTemporaires();
             }
         }
 
@@ -833,12 +949,23 @@ namespace GestionCoutureApp.Views
             if (sender is not Button btn) return;
             if (btn.Tag is not int idMateriel) return;
 
-            var confirmation = MessageBox.Show(
-                "Supprimer ce matériau ?",
+            var confirmation = MessageBox.Show("Supprimer ce matériau ?",
                 "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
             if (confirmation != MessageBoxResult.Yes) return;
 
+            if (idMateriel < 0)
+            {
+                // Mode buffer temporaire : ID négatif = index -(id+1)
+                int idx = -(idMateriel + 1);
+                if (idx >= 0 && idx < _materiauxTemporaires.Count)
+                {
+                    _materiauxTemporaires.RemoveAt(idx);
+                    RafraichirListeMatériauxTemporaires();
+                }
+                return;
+            }
+
+            // Mode pièce existante en base
             try
             {
                 _materielService.Supprimer(idMateriel);
@@ -850,6 +977,33 @@ namespace GestionCoutureApp.Views
                 MessageBox.Show(ex.Message, "Suppression impossible",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        // Rafraîchit la liste et les totaux depuis le buffer temporaire (mode création)
+        private void RafraichirListeMatériauxTemporaires()
+        {
+            // Créer des copies pour l'affichage avec des IDs négatifs (pour identifier la suppression)
+            // Sans toucher aux objets originaux du buffer (leurs IdMateriel restent à 0)
+            var itemsAffichage = _materiauxTemporaires
+                .Select((m, i) => new MaterielSupplement
+                {
+                    IdMateriel = -(i + 1),   // négatif = item buffer, pour BtnSupprimerMateriau_Click
+                    Designation = m.Designation,
+                    Quantite = m.Quantite,
+                    PrixUnitaire = m.PrixUnitaire
+                })
+                .ToList();
+
+            ListeMateriaux.ItemsSource = null;
+            ListeMateriaux.ItemsSource = itemsAffichage;
+
+            bool aDesMateriaux = _materiauxTemporaires.Count > 0;
+            PanelListeMateriaux.Visibility = aDesMateriaux ? Visibility.Visible : Visibility.Collapsed;
+            TxtAucunMateriau.Text = "Aucun matériau ajouté — facultatif.";
+            TxtAucunMateriau.Visibility = aDesMateriaux ? Visibility.Collapsed : Visibility.Visible;
+
+            decimal totalMat = _materiauxTemporaires.Sum(m => m.Quantite * m.PrixUnitaire);
+            TxtTotalMateriaux.Text = totalMat > 0 ? $"{totalMat:N0} FCFA" : "0 FCFA";
         }
 
         // Met à jour TxtTotalPieces en incluant les matériaux de toutes les pièces
@@ -1094,7 +1248,6 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // Vérifier qu'au moins les champs pièce de base sont remplis
             if (CmbTypeVetement.SelectedValue == null)
             {
                 MessageBox.Show("Selectionnez un type de vetement pour la premiere piece.",
@@ -1108,15 +1261,36 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // Construire les objets (sans sauvegarder encore)
+            var clientChoisi = _clientService.ObtenirTous()
+                .FirstOrDefault(c => c.IdClient == (int)CmbClient.SelectedValue);
+            string nomClient = clientChoisi != null
+                ? $"{clientChoisi.Nom} {clientChoisi.Prenom}".Trim()
+                : "—";
+
+            string typeVetement = _typesVetement
+                .First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom;
+
+            string description = CmbDescription.SelectedItem is DescriptionCourante dcr
+                ? dcr.Texte : CmbDescription.Text;
+
+            string couturier = "—";
+            if (CmbCouturier.SelectedValue is int idCout)
+            {
+                var emp = _context.Employes.FirstOrDefault(e => e.IdEmploye == idCout);
+                if (emp != null) couturier = $"{emp.Prenom} {emp.Nom}".Trim();
+            }
+
+            var mesures = CollecterMesures();
+
+            // ── Afficher le récapitulatif ──────────────────────────────────
+            if (!AfficherRecapitulatif(nomClient, typeVetement, description, couturier,
+                montant, DateFin.SelectedDate!.Value, mesures, _materiauxTemporaires))
+                return;  // L'utilisateur a annulé
+
             // SECRETAIRE : confirmation + mot de passe
             if (_roleUtilisateur == "Secretaire")
             {
-                var confirm = MessageBox.Show(
-                    "Voulez-vous reellement enregistrer cette commande ?\n\nCette action est irreversible.",
-                    "Confirmation d'enregistrement",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-                if (confirm != MessageBoxResult.Yes) return;
                 if (!DemanderMotDePasse()) return;
             }
 
@@ -1132,25 +1306,39 @@ namespace GestionCoutureApp.Views
 
             var piece = new PieceCommande
             {
-                TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
-                DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc1
-                    ? dc1.Texte : CmbDescription.Text,
+                TypeVetement = typeVetement,
+                DescriptionPrecision = description,
                 IdCouturier = CmbCouturier.SelectedValue as int?,
-                MontantCouture = decimal.Parse(TxtMontant.Text),
+                MontantCouture = montant,
                 Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
             try
             {
-                _commandeService.Ajouter(commande, piece, CollecterMesures());
+                _commandeService.Ajouter(commande, piece, mesures);
+
+                // Persister les matériaux du buffer temporaire
+                if (_materiauxTemporaires.Count > 0)
+                {
+                    var piecesCreees = _commandeService.ObtenirPiecesCommande(commande.IdCommande);
+                    var premierePiece = piecesCreees.FirstOrDefault();
+                    if (premierePiece != null)
+                    {
+                        foreach (var mat in _materiauxTemporaires)
+                        {
+                            // Remettre IdMateriel à 0 pour que EF Core génère l'ID en base
+                            mat.IdMateriel = 0;
+                            mat.IdCommande = commande.IdCommande;
+                            mat.IdPieceCommande = premierePiece.IdPieceCommande;
+                            _materielService.Ajouter(mat);
+                        }
+                    }
+                    _materiauxTemporaires.Clear();
+                }
+
                 ChargerCommandes();
 
-                // NOUVEAU : methode professionnelle en 2 temps.
-                // - 1 seul vetement -> la commande est deja complete, rien d'autre a faire.
-                // - Plusieurs vetements -> on repart directement sur la meme commande,
-                //   deja selectionnee, avec un formulaire "nouvelle piece" vierge ouvert,
-                //   pret a recevoir le couturier/montant/mesures du vetement suivant.
                 var autrePiece = MessageBox.Show(
                     "Commande creee avec succes !\n\nLe client a-t-il d'autres vetements a ajouter a cette meme commande ?",
                     "Piece supplementaire ?",
@@ -1159,13 +1347,28 @@ namespace GestionCoutureApp.Views
 
                 if (autrePiece == MessageBoxResult.Yes)
                 {
-                    var commandeCreee = ((List<Commande>)GridCommandes.ItemsSource)
-                        ?.FirstOrDefault(c => c.IdCommande == commande.IdCommande);
+                    // Sélectionner la commande dans le tableau pour déclencher
+                    // GridCommandes_SelectionChanged et mettre à jour _commandeSelectionneeId
+                    var itemsSource = GridCommandes.ItemsSource as IEnumerable<Commande>
+                                      ?? GridCommandes.ItemsSource?.Cast<Commande>();
+                    var commandeCreee = itemsSource?.FirstOrDefault(c => c.IdCommande == commande.IdCommande);
 
                     if (commandeCreee != null)
                     {
-                        GridCommandes.SelectedItem = commandeCreee; // charge la commande + ses pieces
-                        BtnAjouterPiece_Click(this, new RoutedEventArgs()); // ouvre le formulaire vierge
+                        // Forcer _commandeSelectionneeId avant BtnAjouterPiece_Click
+                        // au cas où SelectionChanged serait asynchrone
+                        _commandeSelectionneeId = commande.IdCommande;
+                        GridCommandes.SelectedItem = commandeCreee;
+                        // Ouvrir le formulaire vierge pour la pièce suivante
+                        BtnAjouterPiece_Click(this, new RoutedEventArgs());
+                    }
+                    else
+                    {
+                        // Fallback : sélectionner via l'ID directement
+                        _commandeSelectionneeId = commande.IdCommande;
+                        _piecesCommande = _commandeService.ObtenirPiecesCommande(commande.IdCommande);
+                        RafraichirListePieces();
+                        BtnAjouterPiece_Click(this, new RoutedEventArgs());
                     }
                 }
                 else
@@ -1178,6 +1381,226 @@ namespace GestionCoutureApp.Views
                 MessageBox.Show(ex.Message, "Creation impossible",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        // ── Fenêtre de récapitulatif ───────────────────────────────────────
+        private bool AfficherRecapitulatif(
+            string client, string typeVetement, string description,
+            string couturier, decimal montant, DateTime dateRdv,
+            List<Mesure> mesures, List<MaterielSupplement> materiaux)
+        {
+            var dialog = new Window
+            {
+                Title = "Récapitulatif — Confirmer la commande",
+                Width = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.White,
+                SizeToContent = SizeToContent.Height
+            };
+
+            var scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = 580
+            };
+
+            var root = new StackPanel { Margin = new Thickness(28, 24, 28, 20) };
+
+            // ── En-tête rouge ──
+            root.Children.Add(new TextBlock
+            {
+                Text = "Récapitulatif de la commande",
+                FontSize = 16, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+            root.Children.Add(new Border
+            {
+                Height = 3, Width = 48, CornerRadius = new CornerRadius(2),
+                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 18)
+            });
+
+            // ── Bloc info commande ──
+            var blcCmd = CreerBlocRecap("📌  Commande");
+            AjouterLigneRecap(blcCmd, "Client", client);
+            AjouterLigneRecap(blcCmd, "Date RDV", dateRdv.ToString("dd/MM/yyyy"));
+            root.Children.Add(blcCmd);
+
+            // ── Bloc pièce ──
+            var blcPiece = CreerBlocRecap("🧵  Pièce");
+            AjouterLigneRecap(blcPiece, "Type", typeVetement);
+            AjouterLigneRecap(blcPiece, "Couturier", couturier);
+            AjouterLigneRecap(blcPiece, "Montant couture", $"{montant:N0} FCFA");
+            if (!string.IsNullOrWhiteSpace(description))
+                AjouterLigneRecap(blcPiece, "Description", description);
+            root.Children.Add(blcPiece);
+
+            // ── Bloc mesures ──
+            if (mesures.Count > 0)
+            {
+                var blcMes = CreerBlocRecap("📐  Mesures");
+                foreach (var m in mesures)
+                    AjouterLigneRecap(blcMes, m.NomMesure, m.Valeur + " cm");
+                root.Children.Add(blcMes);
+            }
+
+            // ── Bloc matériaux ──
+            decimal totalMat = 0;
+            if (materiaux.Count > 0)
+            {
+                var blcMat = CreerBlocRecap("📦  Matériaux & Suppléments");
+                foreach (var mat in materiaux)
+                {
+                    AjouterLigneRecap(blcMat, mat.Designation,
+                        $"{mat.Quantite} × {mat.PrixUnitaire:N0} F = {mat.Montant:N0} FCFA");
+                    totalMat += mat.Montant;
+                }
+                AjouterLigneRecap(blcMat, "Sous-total matériaux", $"{totalMat:N0} FCFA", gras: true);
+                root.Children.Add(blcMat);
+            }
+
+            // ── Total général ──
+            var totalGeneral = montant + totalMat;
+            var blcTotal = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16, 12, 16, 12),
+                Margin = new Thickness(0, 8, 0, 20)
+            };
+            var rowTotal = new Grid();
+            rowTotal.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            rowTotal.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var lblTotal = new TextBlock
+            {
+                Text = "TOTAL GÉNÉRAL",
+                FontSize = 13, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xA8, 0xA4)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var valTotal = new TextBlock
+            {
+                Text = $"{totalGeneral:N0} FCFA",
+                FontSize = 18, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(lblTotal, 0);
+            Grid.SetColumn(valTotal, 1);
+            rowTotal.Children.Add(lblTotal);
+            rowTotal.Children.Add(valTotal);
+            blcTotal.Child = rowTotal;
+            root.Children.Add(blcTotal);
+
+            // ── Boutons ──
+            var errMsg = new TextBlock
+            {
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                Height = 16,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            root.Children.Add(errMsg);
+
+            var btnRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var btnAnnuler = new Button
+            {
+                Content = "✎  Corriger",
+                Width = 110, Height = 38, FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+
+            var btnConfirmer = new Button
+            {
+                Content = "✔  Confirmer",
+                Width = 130, Height = 38, FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand
+            };
+
+            btnAnnuler.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+            btnConfirmer.Click += (s, ev) => { dialog.DialogResult = true; dialog.Close(); };
+
+            btnRow.Children.Add(btnAnnuler);
+            btnRow.Children.Add(btnConfirmer);
+            root.Children.Add(btnRow);
+
+            scroll.Content = root;
+            dialog.Content = scroll;
+            dialog.Owner = Window.GetWindow(this);
+
+            return dialog.ShowDialog() == true;
+        }
+
+        private static Border CreerBlocRecap(string titre)
+        {
+            var border = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xF8, 0xF5, 0xF3)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(14, 10, 14, 10),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock
+            {
+                Text = titre,
+                FontSize = 11, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x73, 0x55)),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            border.Child = stack;
+            return border;
+        }
+
+        private static void AjouterLigneRecap(Border bloc, string label, string valeur, bool gras = false)
+        {
+            var stack = (StackPanel)bloc.Child;
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var lbl = new TextBlock
+            {
+                Text = label,
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80)),
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            var val = new TextBlock
+            {
+                Text = valeur,
+                FontSize = 12,
+                FontWeight = gras ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            Grid.SetColumn(lbl, 0);
+            Grid.SetColumn(val, 1);
+            row.Children.Add(lbl);
+            row.Children.Add(val);
+            stack.Children.Add(row);
         }
 
         private void BtnModifier_Click(object sender, RoutedEventArgs e)
@@ -1370,6 +1793,7 @@ namespace GestionCoutureApp.Views
             _commandeSelectionneeId = 0;
             _pieceSelectionneeId = null;
             _piecesCommande = new List<PieceCommande>();
+            _materiauxTemporaires.Clear();
             CmbClient.SelectedIndex = -1;
             CmbCouturier.SelectedIndex = -1;
             CmbTypeVetement.SelectedIndex = -1;
@@ -1399,9 +1823,6 @@ namespace GestionCoutureApp.Views
             // Réafficher le formulaire pour la première pièce (mode création)
             AfficherFormulairePiece(true);
         }
-
-        // ==================================================================
-        // Demander un motif (pour les exceptions Boss)
         // ==================================================================
         private string? DemanderMotif(string titre)
         {
