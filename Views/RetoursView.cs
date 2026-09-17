@@ -28,13 +28,11 @@ namespace GestionCoutureApp.Views
             Unloaded += (s, e) => _context.Dispose();
 
             var authService = App.Services.GetRequiredService<IAuthService>();
-            // Sécurité : UtilisateurConnecte peut être null si on arrive ici sans être connecté
             _utilisateur = authService.UtilisateurConnecte
                 ?? throw new InvalidOperationException("Aucun utilisateur connecté.");
 
             try
             {
-                // Charger les commandes avec pièces + client pour la modale
                 _commandes = _context.Commandes
                     .Include(c => c.Client)
                     .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
@@ -43,7 +41,7 @@ namespace GestionCoutureApp.Views
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("RetoursView: erreur chargement commandes: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("RetoursView: erreur commandes: " + ex.Message);
                 _commandes = new List<Commande>();
             }
 
@@ -51,7 +49,7 @@ namespace GestionCoutureApp.Views
         }
 
         // ==================================================================
-        // Chargement & rafraîchissement
+        // Chargement
         // ==================================================================
         private void ChargerRetours()
         {
@@ -59,46 +57,31 @@ namespace GestionCoutureApp.Views
             {
                 _tousLesRetours = _retourService.ObtenirTous();
             }
-            catch (Exception ex)
+            catch
             {
-                // Si les colonnes ne sont pas encore en base (migration pas encore appliquée),
-                // on charge sans les includes problématiques
-                System.Diagnostics.Debug.WriteLine("ChargerRetours erreur: " + ex.Message);
                 try
                 {
-                    _tousLesRetours = ObtenirRetoursSansIncludeProblematique();
+                    var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                    using var ctx = factory.CreateDbContext();
+                    _tousLesRetours = ctx.Retours
+                        .Include(r => r.Commande).ThenInclude(c => c!.Client)
+                        .Include(r => r.PieceCommande)
+                        .Include(r => r.Couturier)
+                        .OrderByDescending(r => r.DateSignalement)
+                        .ToList();
                 }
-                catch
-                {
-                    _tousLesRetours = new List<Retour>();
-                }
+                catch { _tousLesRetours = new List<Retour>(); }
             }
             AppliquerFiltre();
             MettreAJourBadges();
         }
 
-        // Fallback : charge les retours sans Include sur CouturierReprise
-        // (utilisé si la colonne IdCouturierReprise n'existe pas encore en base)
-        private List<Retour> ObtenirRetoursSansIncludeProblematique()
-        {
-            var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-            using var ctx = factory.CreateDbContext();
-            return ctx.Retours
-                .Include(r => r.Commande).ThenInclude(c => c!.Client)
-                .Include(r => r.PieceCommande)
-                .Include(r => r.Couturier)
-                .OrderByDescending(r => r.DateSignalement)
-                .ToList();
-        }
-
         private void AppliquerFiltre()
         {
-            // Guard : appelé avant la fin d'InitializeComponent sur certains events XAML
             if (TxtRecherche == null || CmbFiltreStatut == null || GridRetours == null) return;
 
             var liste = _tousLesRetours;
 
-            // Filtre texte
             string motCle = TxtRecherche.Text.Trim().ToLower();
             if (!string.IsNullOrEmpty(motCle))
             {
@@ -106,20 +89,20 @@ namespace GestionCoutureApp.Views
                     r.ClientAffiche.ToLower().Contains(motCle) ||
                     (r.PieceCommande?.TypeVetement.ToLower().Contains(motCle) ?? false) ||
                     r.DescriptionProbleme.ToLower().Contains(motCle) ||
-                    (r.Couturier != null && (r.Couturier.Prenom + " " + r.Couturier.Nom).ToLower().Contains(motCle))
+                    (r.Couturier != null &&
+                     (r.Couturier.Prenom + " " + r.Couturier.Nom).ToLower().Contains(motCle))
                 ).ToList();
             }
 
-            // Filtre statut
             string statut = (CmbFiltreStatut.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Tous";
             if (statut != "Tous")
             {
                 var statutDb = statut switch
                 {
-                    "Signalé"        => "Signale",
-                    "Prêt ✓"         => "Pret",
-                    "Rendu au client"=> "Rendu",
-                    _                => statut
+                    "Signalé"         => "Signale",
+                    "Prêt ✓"          => "Pret",
+                    "Rendu au client" => "Rendu",
+                    _                 => statut
                 };
                 liste = liste.Where(r => r.Statut == statutDb && !r.EstAnnule).ToList();
             }
@@ -143,7 +126,7 @@ namespace GestionCoutureApp.Views
         private void CmbFiltreStatut_SelectionChanged(object sender, SelectionChangedEventArgs e) => AppliquerFiltre();
 
         // ==================================================================
-        // Handlers boutons du tableau
+        // Handlers tableau
         // ==================================================================
         private void BtnNouveauRetour_Click(object sender, RoutedEventArgs e)
             => OuvrirFenetreRetour(null);
@@ -156,8 +139,7 @@ namespace GestionCoutureApp.Views
 
         private void BtnAvancerStatut_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button btn) return;
-            if (btn.DataContext is not Retour retour) return;
+            if (sender is not Button btn || btn.DataContext is not Retour retour) return;
 
             string prochainStatut = retour.Statut switch
             {
@@ -166,31 +148,20 @@ namespace GestionCoutureApp.Views
                 "Pret"       => "Rendu au client",
                 _            => ""
             };
-
             if (string.IsNullOrEmpty(prochainStatut)) return;
 
-            var r = MessageBox.Show(
-                $"Faire passer ce retour à : « {prochainStatut} » ?",
-                "Avancer le statut",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
+            var r = MessageBox.Show($"Passer ce retour à : « {prochainStatut} » ?",
+                "Avancer le statut", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (r != MessageBoxResult.Yes) return;
 
             try
             {
-                string operateur = _utilisateur.Prenom + " " + _utilisateur.Nom;
+                string op = _utilisateur.Prenom + " " + _utilisateur.Nom;
                 switch (retour.Statut)
                 {
-                    case "Signale":
-                        _retourService.DemarrerReprise(retour.IdRetour, _utilisateur.IdEmploye, operateur);
-                        break;
-                    case "En reprise":
-                        _retourService.Resoudre(retour.IdRetour, _utilisateur.IdEmploye, operateur);
-                        break;
-                    case "Pret":
-                        _retourService.MarquerRendu(retour.IdRetour, _utilisateur.IdEmploye, operateur);
-                        break;
+                    case "Signale":    _retourService.DemarrerReprise(retour.IdRetour, _utilisateur.IdEmploye, op); break;
+                    case "En reprise": _retourService.Resoudre(retour.IdRetour, _utilisateur.IdEmploye, op); break;
+                    case "Pret":       _retourService.MarquerRendu(retour.IdRetour, _utilisateur.IdEmploye, op); break;
                 }
                 ChargerRetours();
             }
@@ -202,16 +173,12 @@ namespace GestionCoutureApp.Views
 
         private void BtnAnnulerRetour_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button btn) return;
-            if (btn.DataContext is not Retour retour) return;
-
+            if (sender is not Button btn || btn.DataContext is not Retour retour) return;
             string? motif = DemanderMotif("Motif d'annulation obligatoire");
             if (string.IsNullOrWhiteSpace(motif)) return;
-
             try
             {
-                _retourService.Annuler(retour.IdRetour, motif,
-                    _utilisateur.Prenom + " " + _utilisateur.Nom);
+                _retourService.Annuler(retour.IdRetour, motif, _utilisateur.Prenom + " " + _utilisateur.Nom);
                 ChargerRetours();
             }
             catch (Exception ex)
@@ -221,29 +188,33 @@ namespace GestionCoutureApp.Views
         }
 
         // ==================================================================
-        // Fenêtre modale — Création / Édition
+        // Modale création / édition
         // ==================================================================
         public void OuvrirFenetreRetour(Retour? retourExistant)
         {
             bool modeEdition = retourExistant != null;
 
-            // En création : filtrer les commandes éligibles (pièce Livrée ou Terminée)
             var commandesEligibles = modeEdition
                 ? _commandes
-                : _commandes.Where(c => c.Pieces.Any(p => p.Statut == "Livree" || p.Statut == "Terminee")).ToList();
+                : _commandes.Where(c =>
+                    c.Pieces.Any(p => p.Statut == "Livree" || p.Statut == "Terminee")).ToList();
 
             if (!modeEdition && commandesEligibles.Count == 0)
             {
                 MessageBox.Show(
-                    "Aucune commande avec pièce livrée ou terminée n'est disponible pour un retour.",
+                    "Aucune commande avec pièce livrée ou terminée disponible.",
                     "Information", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
+            // ── Fenêtre ──────────────────────────────────────────────────
             var fenetre = new Window
             {
-                Title = modeEdition ? $"Retour #{retourExistant!.IdRetour} — Détails & Modification" : "🔄  Enregistrer un retour (reprise gratuite)",
-                Width = 580,
+                Title = modeEdition
+                    ? $"Retour #{retourExistant!.IdRetour} — Détails & Modification"
+                    : "🔄  Nouveau retour — Reprise gratuite",
+                Width = 620,
+                MaxHeight = 800,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 ResizeMode = ResizeMode.NoResize,
                 Background = Brushes.White,
@@ -254,12 +225,12 @@ namespace GestionCoutureApp.Views
             var scroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                MaxHeight = 700
+                MaxHeight = 800
             };
 
             var root = new StackPanel { Margin = new Thickness(28, 24, 28, 20) };
 
-            // ── En-tête ──────────────────────────────────────────────────
+            // ── Titre ─────────────────────────────────────────────────────
             root.Children.Add(new TextBlock
             {
                 Text = modeEdition ? $"Retour #{retourExistant!.IdRetour}" : "Nouveau retour (reprise gratuite)",
@@ -276,7 +247,7 @@ namespace GestionCoutureApp.Views
             });
 
             // ══════════════════════════════════════════════════════════════
-            // SECTION 1 — PIÈCE INITIALE
+            // SECTION 1 — PIÈCE CONCERNÉE
             // ══════════════════════════════════════════════════════════════
             AjouterSectionTitre(root, "1.  Pièce concernée");
 
@@ -296,7 +267,7 @@ namespace GestionCoutureApp.Views
             cmbCommande.SelectedValuePath = "IdCommande";
             root.Children.Add(cmbCommande);
 
-            AjouterLabel(root, "Commande / Pièce concernée *");
+            AjouterLabel(root, "Pièce concernée *");
             var cmbPiece = new ComboBox
             {
                 Height = 36, FontSize = 13,
@@ -307,7 +278,7 @@ namespace GestionCoutureApp.Views
             cmbPiece.SelectedValuePath = "IdPieceCommande";
             root.Children.Add(cmbPiece);
 
-            // Couturier initial (lecture seule)
+            // Couturier initial
             AjouterLabel(root, "Couturier initial (responsable)");
             var txtCouturierInitial = new TextBox
             {
@@ -320,36 +291,91 @@ namespace GestionCoutureApp.Views
             };
             root.Children.Add(txtCouturierInitial);
 
-            // Montant payé (lecture seule)
             var txtMontantOrigine = new TextBlock
             {
                 FontSize = 11, FontStyle = FontStyles.Italic,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
-                Margin = new Thickness(0, 0, 0, 14)
+                Margin = new Thickness(0, 0, 0, 10)
             };
             root.Children.Add(txtMontantOrigine);
 
+            // ── Photo de la pièce (affichage automatique) ─────────────────
+            AjouterLabel(root, "📸  Photo de la pièce d'origine");
+            var borderPhotoPiece = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xF8, 0xF5, 0xF3)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Height = 160,
+                Margin = new Thickness(0, 0, 0, 16),
+                ClipToBounds = true
+            };
+            var imgPhotoPiece = new System.Windows.Controls.Image
+            {
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(6)
+            };
+            var txtPhotoPiecePlaceholder = new TextBlock
+            {
+                Text = "Aucune photo — sélectionnez une pièce",
+                FontSize = 12, FontStyle = FontStyles.Italic,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var gridPhotoPiece = new Grid();
+            gridPhotoPiece.Children.Add(imgPhotoPiece);
+            gridPhotoPiece.Children.Add(txtPhotoPiecePlaceholder);
+            borderPhotoPiece.Child = gridPhotoPiece;
+            root.Children.Add(borderPhotoPiece);
+
             int? idCouturierInitial = null;
 
-            // Peupler les pièces quand on choisit la commande
+            // Peupler les pièces + photo automatique
             void ChargerPieces()
             {
                 cmbPiece.ItemsSource = null;
                 idCouturierInitial = null;
                 txtCouturierInitial.Text = "— (sélectionnez une pièce)";
                 txtMontantOrigine.Text = "";
+                imgPhotoPiece.Source = null;
+                txtPhotoPiecePlaceholder.Visibility = Visibility.Visible;
+
                 if (cmbCommande.SelectedValue == null) return;
                 int idCmd = (int)cmbCommande.SelectedValue;
                 var cmd = commandesEligibles.FirstOrDefault(c => c.IdCommande == idCmd);
                 if (cmd == null) return;
+
                 var pieces = modeEdition
                     ? cmd.Pieces.ToList()
                     : cmd.Pieces.Where(p => p.Statut == "Livree" || p.Statut == "Terminee").ToList();
+
                 cmbPiece.ItemsSource = pieces.Select(p => new
                 {
                     p.IdPieceCommande,
                     DisplayText = $"{p.TypeVetement}  —  {p.Couturier?.Prenom} {p.Couturier?.Nom}  ({p.MontantCouture:N0} FCFA)  [{p.StatutAffiche}]"
                 }).ToList();
+            }
+
+            void AfficherPhotoPiece(PieceCommande? piece)
+            {
+                imgPhotoPiece.Source = null;
+                txtPhotoPiecePlaceholder.Visibility = Visibility.Visible;
+                if (piece == null || string.IsNullOrEmpty(piece.CheminPhoto)) return;
+                if (!System.IO.File.Exists(piece.CheminPhoto)) return;
+                try
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(piece.CheminPhoto, UriKind.Absolute);
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    imgPhotoPiece.Source = bmp;
+                    txtPhotoPiecePlaceholder.Visibility = Visibility.Collapsed;
+                }
+                catch { /* photo corrompue ou inaccessible */ }
             }
 
             cmbCommande.SelectionChanged += (s, ev) => ChargerPieces();
@@ -358,19 +384,24 @@ namespace GestionCoutureApp.Views
             {
                 idCouturierInitial = null;
                 txtCouturierInitial.Text = "—";
+                imgPhotoPiece.Source = null;
+                txtPhotoPiecePlaceholder.Visibility = Visibility.Visible;
+
                 if (cmbPiece.SelectedValue == null || cmbCommande.SelectedValue == null) return;
                 int idCmd = (int)cmbCommande.SelectedValue;
                 int idPiece = (int)cmbPiece.SelectedValue;
                 var cmd = commandesEligibles.FirstOrDefault(c => c.IdCommande == idCmd);
                 var piece = cmd?.Pieces.FirstOrDefault(p => p.IdPieceCommande == idPiece);
-                if (piece != null)
-                {
-                    idCouturierInitial = piece.IdCouturier;
-                    txtCouturierInitial.Text = piece.Couturier != null
-                        ? $"{piece.Couturier.Prenom} {piece.Couturier.Nom}"
-                        : "Non assigné";
-                    txtMontantOrigine.Text = $"Montant d'origine : {piece.MontantCouture:N0} FCFA  —  Reprise : 0 FCFA (garantie)";
-                }
+                if (piece == null) return;
+
+                idCouturierInitial = piece.IdCouturier;
+                txtCouturierInitial.Text = piece.Couturier != null
+                    ? $"{piece.Couturier.Prenom} {piece.Couturier.Nom}"
+                    : "Non assigné";
+                txtMontantOrigine.Text =
+                    $"Montant d'origine : {piece.MontantCouture:N0} FCFA  —  Reprise : 0 FCFA (garantie)";
+
+                AfficherPhotoPiece(piece);
             };
 
             // Pré-remplir en mode édition
@@ -382,11 +413,15 @@ namespace GestionCoutureApp.Views
                 idCouturierInitial = retourExistant.IdCouturier;
                 if (retourExistant.Couturier != null)
                     txtCouturierInitial.Text = $"{retourExistant.Couturier.Prenom} {retourExistant.Couturier.Nom}";
-                txtMontantOrigine.Text = $"Montant d'origine : {retourExistant.PieceCommande?.MontantCouture:N0} FCFA  —  Reprise : 0 FCFA (garantie)";
+                txtMontantOrigine.Text =
+                    $"Montant d'origine : {retourExistant.PieceCommande?.MontantCouture:N0} FCFA  —  Reprise : 0 FCFA (garantie)";
+                // Afficher la photo de la pièce en édition
+                if (retourExistant.PieceCommande != null)
+                    AfficherPhotoPiece(retourExistant.PieceCommande);
             }
 
             // ══════════════════════════════════════════════════════════════
-            // SECTION 2 — MOTIF
+            // SECTION 2 — MOTIF + PHOTO DU DÉFAUT
             // ══════════════════════════════════════════════════════════════
             AjouterSectionTitre(root, "2.  Motif du retour");
 
@@ -397,37 +432,142 @@ namespace GestionCoutureApp.Views
                 TextWrapping = TextWrapping.Wrap,
                 AcceptsReturn = true,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Margin = new Thickness(0, 0, 0, 10),
+                Margin = new Thickness(0, 0, 0, 14),
                 Padding = new Thickness(10, 8, 10, 8),
                 Text = modeEdition ? retourExistant!.DescriptionProbleme : ""
             };
             root.Children.Add(txtDescription);
 
-            // Photo du défaut
-            AjouterLabel(root, "Photo du défaut (optionnel)");
-            string cheminPhoto = modeEdition ? retourExistant!.CheminPhotoDefaut ?? "" : "";
+            // ── Photo du défaut — WEBCAM + IMPORT ─────────────────────────
+            AjouterLabel(root, "📷  Photo du défaut (optionnel — webcam recommandée)");
 
-            var panelPhoto = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
-            var btnPhoto = new Button
+            string cheminPhotoDefaut = modeEdition ? retourExistant!.CheminPhotoDefaut ?? "" : "";
+
+            // Prévisualisation photo défaut
+            var borderPhotoDefaut = new Border
             {
-                Content = "📷  Importer une photo",
-                Height = 32, Padding = new Thickness(12, 0, 12, 0),
-                FontSize = 12,
+                Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Height = 160,
+                Margin = new Thickness(0, 0, 0, 8),
+                ClipToBounds = true,
+                Visibility = Visibility.Collapsed   // caché jusqu'à ce qu'une photo soit prise
+            };
+            var imgPhotoDefaut = new System.Windows.Controls.Image
+            {
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(4)
+            };
+            borderPhotoDefaut.Child = imgPhotoDefaut;
+            root.Children.Add(borderPhotoDefaut);
+
+            // Charger la photo défaut existante (mode édition)
+            if (!string.IsNullOrEmpty(cheminPhotoDefaut) && System.IO.File.Exists(cheminPhotoDefaut))
+            {
+                try
+                {
+                    var bmpDef = new BitmapImage();
+                    bmpDef.BeginInit();
+                    bmpDef.UriSource = new Uri(cheminPhotoDefaut, UriKind.Absolute);
+                    bmpDef.CacheOption = BitmapCacheOption.OnLoad;
+                    bmpDef.EndInit();
+                    bmpDef.Freeze();
+                    imgPhotoDefaut.Source = bmpDef;
+                    borderPhotoDefaut.Visibility = Visibility.Visible;
+                }
+                catch { }
+            }
+
+            // Boutons photo défaut
+            var panelBtnsPhoto = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 0, 16)
+            };
+
+            // Bouton Webcam (prioritaire)
+            var btnWebcam = new Button
+            {
+                Content = "📷  Webcam",
+                Height = 36, Padding = new Thickness(16, 0, 16, 0),
+                FontSize = 12, FontWeight = FontWeights.SemiBold,
                 Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x40, 0xAF)),
+                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Margin = new Thickness(0, 0, 10, 0)
             };
-            var lblPhoto = new TextBlock
+
+            // Bouton Importer
+            var btnImporter = new Button
             {
-                Text = string.IsNullOrEmpty(cheminPhoto) ? "Aucune photo" : System.IO.Path.GetFileName(cheminPhoto),
+                Content = "📁  Importer",
+                Height = 36, Padding = new Thickness(14, 0, 14, 0),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+
+            // Label nom fichier
+            var lblPhotoDefaut = new TextBlock
+            {
+                Text = string.IsNullOrEmpty(cheminPhotoDefaut)
+                    ? "Aucune photo — utilisez la webcam ou importez"
+                    : "✔  " + System.IO.Path.GetFileName(cheminPhotoDefaut),
                 FontSize = 11, FontStyle = FontStyles.Italic,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80)),
+                Foreground = new SolidColorBrush(
+                    string.IsNullOrEmpty(cheminPhotoDefaut)
+                        ? Color.FromRgb(0x9C, 0xA3, 0xAF)
+                        : Color.FromRgb(0x05, 0x96, 0x69)),
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            btnPhoto.Click += (s, ev) =>
+            // Helper : mettre à jour la prévisualisation après capture/import
+            void MettreAJourPhotoDefaut(string chemin)
+            {
+                cheminPhotoDefaut = chemin;
+                lblPhotoDefaut.Text = "✔  " + System.IO.Path.GetFileName(chemin);
+                lblPhotoDefaut.Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
+                try
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(chemin, UriKind.Absolute);
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    imgPhotoDefaut.Source = bmp;
+                    borderPhotoDefaut.Visibility = Visibility.Visible;
+                }
+                catch { }
+            }
+
+            btnWebcam.Click += (s, ev) =>
+            {
+                try
+                {
+                    var webcam = new WebcamCaptureWindow();
+                    webcam.Owner = fenetre;
+                    if (webcam.ShowDialog() == true &&
+                        !string.IsNullOrEmpty(webcam.CapturedFilePath))
+                    {
+                        MettreAJourPhotoDefaut(webcam.CapturedFilePath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur webcam : " + ex.Message,
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            };
+
+            btnImporter.Click += (s, ev) =>
             {
                 var dlg = new Microsoft.Win32.OpenFileDialog
                 {
@@ -435,18 +575,33 @@ namespace GestionCoutureApp.Views
                     Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp"
                 };
                 if (dlg.ShowDialog() != true) return;
-                cheminPhoto = dlg.FileName;
-                lblPhoto.Text = System.IO.Path.GetFileName(cheminPhoto);
+                try
+                {
+                    // Copier dans le dossier photos pour cohérence
+                    string dossierPhotos = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
+                    string ext = System.IO.Path.GetExtension(dlg.FileName).ToLowerInvariant();
+                    string suffixe = Guid.NewGuid().ToString("N")[..8];
+                    string dest = System.IO.Path.Combine(dossierPhotos,
+                        $"defaut_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixe}{ext}");
+                    System.IO.File.Copy(dlg.FileName, dest, overwrite: true);
+                    MettreAJourPhotoDefaut(dest);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur import : " + ex.Message,
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             };
 
-            panelPhoto.Children.Add(btnPhoto);
-            panelPhoto.Children.Add(lblPhoto);
-            root.Children.Add(panelPhoto);
+            panelBtnsPhoto.Children.Add(btnWebcam);
+            panelBtnsPhoto.Children.Add(btnImporter);
+            panelBtnsPhoto.Children.Add(lblPhotoDefaut);
+            root.Children.Add(panelBtnsPhoto);
 
             // ══════════════════════════════════════════════════════════════
             // SECTION 3 — ATTRIBUTION & RDV
             // ══════════════════════════════════════════════════════════════
-            AjouterSectionTitre(root, "3.  Attribution &amp; Rendez-vous de reprise");
+            AjouterSectionTitre(root, "3.  Attribution & Rendez-vous de reprise");
 
             AjouterLabel(root, "Couturier pour la reprise");
             var employes = _context.Employes.Where(e => e.Statut == "Actif").ToList();
@@ -474,13 +629,14 @@ namespace GestionCoutureApp.Views
             {
                 for (int i = 1; i < cmbCouturierReprise.Items.Count; i++)
                 {
-                    if ((int)((ComboBoxItem)cmbCouturierReprise.Items[i]).Tag == retourExistant.IdCouturierReprise.Value)
+                    if ((int)((ComboBoxItem)cmbCouturierReprise.Items[i]).Tag
+                        == retourExistant.IdCouturierReprise.Value)
                     { cmbCouturierReprise.SelectedIndex = i; break; }
                 }
             }
             root.Children.Add(cmbCouturierReprise);
 
-            // Date + heures RDV
+            // Ligne RDV : Date + H début + H fin
             var gridRdv = new Grid { Margin = new Thickness(0, 0, 0, 12) };
             gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
@@ -488,33 +644,41 @@ namespace GestionCoutureApp.Views
             gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
             gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
 
+            TextBlock LblRdv(string t) => new()
+            {
+                Text = t, FontSize = 11, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+
+            TextBox TxtHeure(string valeur) => new()
+            {
+                Height = 36, FontSize = 13,
+                Padding = new Thickness(10, 0, 10, 0),
+                Text = valeur
+            };
+
             var spDate = new StackPanel();
-            spDate.Children.Add(new TextBlock { Text = "Date de rendez-vous", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)), Margin = new Thickness(0, 0, 0, 4) });
-            var dpRdv = new DatePicker { Height = 36, FontSize = 13, SelectedDate = modeEdition ? retourExistant!.DateRdvReprise : null };
+            spDate.Children.Add(LblRdv("Date de rendez-vous"));
+            var dpRdv = new DatePicker
+            {
+                Height = 36, FontSize = 13,
+                SelectedDate = modeEdition ? retourExistant!.DateRdvReprise : null
+            };
             spDate.Children.Add(dpRdv);
             Grid.SetColumn(spDate, 0);
 
             var spHdeb = new StackPanel();
-            spHdeb.Children.Add(new TextBlock { Text = "Heure début", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)), Margin = new Thickness(0, 0, 0, 4) });
-            var txtHdeb = new TextBox
-            {
-                Height = 36, FontSize = 13,
-                Padding = new Thickness(10, 0, 10, 0),
-                Text = modeEdition && retourExistant!.HeureDebutReprise.HasValue
-                    ? retourExistant.HeureDebutReprise.Value.ToString(@"hh\:mm") : ""
-            };
+            spHdeb.Children.Add(LblRdv("Heure début"));
+            var txtHdeb = TxtHeure(modeEdition && retourExistant!.HeureDebutReprise.HasValue
+                ? retourExistant.HeureDebutReprise.Value.ToString(@"hh\:mm") : "");
             spHdeb.Children.Add(txtHdeb);
             Grid.SetColumn(spHdeb, 2);
 
             var spHfin = new StackPanel();
-            spHfin.Children.Add(new TextBlock { Text = "Heure fin", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)), Margin = new Thickness(0, 0, 0, 4) });
-            var txtHfin = new TextBox
-            {
-                Height = 36, FontSize = 13,
-                Padding = new Thickness(10, 0, 10, 0),
-                Text = modeEdition && retourExistant!.HeureFinReprise.HasValue
-                    ? retourExistant.HeureFinReprise.Value.ToString(@"hh\:mm") : ""
-            };
+            spHfin.Children.Add(LblRdv("Heure fin"));
+            var txtHfin = TxtHeure(modeEdition && retourExistant!.HeureFinReprise.HasValue
+                ? retourExistant.HeureFinReprise.Value.ToString(@"hh\:mm") : "");
             spHfin.Children.Add(txtHfin);
             Grid.SetColumn(spHfin, 4);
 
@@ -524,27 +688,44 @@ namespace GestionCoutureApp.Views
             root.Children.Add(gridRdv);
 
             // ══════════════════════════════════════════════════════════════
-            // SECTION 4 — FACTURATION (info)
+            // SECTION 4 — FACTURATION
             // ══════════════════════════════════════════════════════════════
-            var blcFacturation = new Border
+            root.Children.Add(new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xFD, 0xF4)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0xBB, 0xF7, 0xD0)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(14, 10, 14, 10),
-                Margin = new Thickness(0, 4, 0, 20)
-            };
-            var rowFactu = new StackPanel { Orientation = Orientation.Horizontal };
-            rowFactu.Children.Add(new TextBlock { Text = "💰  Total à payer : ", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)), VerticalAlignment = VerticalAlignment.Center });
-            rowFactu.Children.Add(new TextBlock { Text = "0 FCFA  (Reprise sous garantie — Gratuite)", FontSize = 13, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)), VerticalAlignment = VerticalAlignment.Center });
-            blcFacturation.Child = rowFactu;
-            root.Children.Add(blcFacturation);
+                Margin = new Thickness(0, 4, 0, 20),
+                Child = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = "💰  Total à payer : ",
+                            FontSize = 13, FontWeight = FontWeights.SemiBold,
+                            Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                            VerticalAlignment = VerticalAlignment.Center
+                        },
+                        new TextBlock
+                        {
+                            Text = "0 FCFA  (Reprise sous garantie — Gratuite)",
+                            FontSize = 13, FontWeight = FontWeights.Bold,
+                            Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                            VerticalAlignment = VerticalAlignment.Center
+                        }
+                    }
+                }
+            });
 
-            // ── Message d'erreur ─────────────────────────────────────────
+            // ── Message erreur ────────────────────────────────────────────
             var lblErreur = new TextBlock
             {
-                FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
                 Height = 18, Margin = new Thickness(0, 0, 0, 10)
             };
             root.Children.Add(lblErreur);
@@ -558,7 +739,7 @@ namespace GestionCoutureApp.Views
 
             var btnAnnuler = new Button
             {
-                Content = "❌  Annuler",
+                Content = "❌  Fermer",
                 Width = 110, Height = 38, FontSize = 13,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
                 Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
@@ -571,7 +752,7 @@ namespace GestionCoutureApp.Views
 
             var btnEnregistrer = new Button
             {
-                Content = modeEdition ? "💾  Enregistrer les modifications" : "💾  Enregistrer le retour",
+                Content = modeEdition ? "💾  Enregistrer modifications" : "💾  Enregistrer le retour",
                 Height = 38, Padding = new Thickness(16, 0, 16, 0),
                 FontSize = 13, FontWeight = FontWeights.Bold,
                 Foreground = Brushes.White,
@@ -584,25 +765,19 @@ namespace GestionCoutureApp.Views
             {
                 lblErreur.Text = "";
 
-                // Validations
                 if (!modeEdition && cmbCommande.SelectedValue == null)
                 { lblErreur.Text = "Sélectionnez une commande."; return; }
-
                 if (!modeEdition && cmbPiece.SelectedValue == null)
                 { lblErreur.Text = "Sélectionnez une pièce."; return; }
-
                 if (string.IsNullOrWhiteSpace(txtDescription.Text))
                 { lblErreur.Text = "La description du problème est obligatoire."; return; }
-
                 if (!modeEdition && idCouturierInitial == null)
-                { lblErreur.Text = "La pièce sélectionnée n'a pas de couturier assigné."; return; }
+                { lblErreur.Text = "La pièce n'a pas de couturier assigné."; return; }
 
-                // Lire le couturier reprise
                 int? idCouturierReprise = null;
-                if (cmbCouturierReprise.SelectedItem is ComboBoxItem item && (int)item.Tag != -1)
-                    idCouturierReprise = (int)item.Tag;
+                if (cmbCouturierReprise.SelectedItem is ComboBoxItem ci && (int)ci.Tag != -1)
+                    idCouturierReprise = (int)ci.Tag;
 
-                // Lire les heures
                 TimeSpan? hDeb = TimeSpan.TryParse(txtHdeb.Text, out var h1) ? h1 : null;
                 TimeSpan? hFin = TimeSpan.TryParse(txtHfin.Text, out var h2) ? h2 : null;
 
@@ -611,12 +786,12 @@ namespace GestionCoutureApp.Views
                     if (modeEdition)
                     {
                         retourExistant!.DescriptionProbleme = txtDescription.Text.Trim();
-                        retourExistant.IdCouturierReprise = idCouturierReprise;
-                        retourExistant.DateRdvReprise = dpRdv.SelectedDate;
-                        retourExistant.HeureDebutReprise = hDeb;
-                        retourExistant.HeureFinReprise = hFin;
-                        if (!string.IsNullOrEmpty(cheminPhoto))
-                            retourExistant.CheminPhotoDefaut = cheminPhoto;
+                        retourExistant.IdCouturierReprise   = idCouturierReprise;
+                        retourExistant.DateRdvReprise       = dpRdv.SelectedDate;
+                        retourExistant.HeureDebutReprise    = hDeb;
+                        retourExistant.HeureFinReprise      = hFin;
+                        if (!string.IsNullOrEmpty(cheminPhotoDefaut))
+                            retourExistant.CheminPhotoDefaut = cheminPhotoDefaut;
                         _retourService.Modifier(retourExistant);
                         MessageBox.Show("Retour mis à jour avec succès !", "Succès",
                             MessageBoxButton.OK, MessageBoxImage.Information);
@@ -625,17 +800,17 @@ namespace GestionCoutureApp.Views
                     {
                         var retour = new Retour
                         {
-                            IdCommande = (int)cmbCommande.SelectedValue,
-                            IdPieceCommande = (int)cmbPiece.SelectedValue,
-                            IdCouturier = idCouturierInitial!.Value,
-                            IdCouturierReprise = idCouturierReprise,
-                            DescriptionProbleme = txtDescription.Text.Trim(),
-                            CheminPhotoDefaut = string.IsNullOrEmpty(cheminPhoto) ? null : cheminPhoto,
-                            DateRdvReprise = dpRdv.SelectedDate,
-                            HeureDebutReprise = hDeb,
-                            HeureFinReprise = hFin,
-                            Statut = "Signale",
-                            IdOperateurEnregistrement = _utilisateur.IdEmploye,
+                            IdCommande              = (int)cmbCommande.SelectedValue,
+                            IdPieceCommande         = (int)cmbPiece.SelectedValue,
+                            IdCouturier             = idCouturierInitial!.Value,
+                            IdCouturierReprise      = idCouturierReprise,
+                            DescriptionProbleme     = txtDescription.Text.Trim(),
+                            CheminPhotoDefaut       = string.IsNullOrEmpty(cheminPhotoDefaut) ? null : cheminPhotoDefaut,
+                            DateRdvReprise          = dpRdv.SelectedDate,
+                            HeureDebutReprise       = hDeb,
+                            HeureFinReprise         = hFin,
+                            Statut                  = "Signale",
+                            IdOperateurEnregistrement  = _utilisateur.IdEmploye,
                             NomOperateurEnregistrement = _utilisateur.Prenom + " " + _utilisateur.Nom
                         };
                         _retourService.Ajouter(retour);
@@ -669,7 +844,6 @@ namespace GestionCoutureApp.Views
         {
             parent.Children.Add(new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(0xF8, 0xF5, 0xF3)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
                 BorderThickness = new Thickness(0, 0, 0, 1),
                 Padding = new Thickness(0, 0, 0, 6),
@@ -707,7 +881,11 @@ namespace GestionCoutureApp.Views
                 Owner = Window.GetWindow(this)
             };
             var sp = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
-            sp.Children.Add(new TextBlock { Text = "Motif :", FontSize = 13, Margin = new Thickness(0, 0, 0, 8) });
+            sp.Children.Add(new TextBlock
+            {
+                Text = "Motif :", FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
             var txt = new TextBox
             {
                 Height = 70, FontSize = 13,
@@ -717,15 +895,24 @@ namespace GestionCoutureApp.Views
                 Margin = new Thickness(0, 0, 0, 12)
             };
             sp.Children.Add(txt);
-            var err = new TextBlock { Foreground = Brushes.Red, Height = 16, Margin = new Thickness(0, 0, 0, 10) };
+            var err = new TextBlock
+            {
+                Foreground = Brushes.Red,
+                Height = 16, Margin = new Thickness(0, 0, 0, 10)
+            };
             sp.Children.Add(err);
-            var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
             var btnOk = new Button
             {
                 Content = "Confirmer", Width = 110, Height = 36,
                 FontWeight = FontWeights.Bold, Foreground = Brushes.White,
                 Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
-                BorderThickness = new Thickness(0), Cursor = System.Windows.Input.Cursors.Hand,
+                BorderThickness = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand,
                 Margin = new Thickness(0, 0, 8, 0)
             };
             var btnCancel = new Button { Content = "Annuler", Width = 90, Height = 36 };
@@ -733,10 +920,12 @@ namespace GestionCoutureApp.Views
             {
                 if (string.IsNullOrWhiteSpace(txt.Text)) { err.Text = "Motif obligatoire."; return; }
                 resultat = txt.Text.Trim();
-                dlg.DialogResult = true; dlg.Close();
+                dlg.DialogResult = true;
+                dlg.Close();
             };
             btnCancel.Click += (s, e) => { dlg.DialogResult = false; dlg.Close(); };
-            row.Children.Add(btnOk); row.Children.Add(btnCancel);
+            row.Children.Add(btnOk);
+            row.Children.Add(btnCancel);
             sp.Children.Add(row);
             dlg.Content = sp;
             dlg.ShowDialog();
