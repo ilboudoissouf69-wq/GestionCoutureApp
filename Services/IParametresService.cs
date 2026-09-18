@@ -51,5 +51,13 @@ namespace GestionCoutureApp.Services
         Task         DefinirAdresseAtelier(string adresse);
         Task<string> ObtenirPiedRecu();
         Task         DefinirPiedRecu(string texte);
+
+        // ── Onglet 6 — Apparence ──────────────────────────────────────────
+        Task<string> ObtenirCouleurAccent();   // hex ex: "#CC0000"
+        Task         DefinirCouleurAccent(string hex);
+
+        // ── Onglet 7 — Langue ────────────────────────────────────────────
+        Task<string> ObtenirLangue();          // "fr" | "en"
+        Task         DefinirLangue(string code);
     }
 }

@@ -48,6 +48,7 @@ namespace GestionCoutureApp
                 options.UseSqlite(AppPaths.ChaineConnexionSqlite));
 
             // Services
+            services.AddSingleton<ILogService, LogService>();  // Service de logging
             services.AddSingleton<IAuthService, AuthService>();
             services.AddSingleton<IClientService, ClientService>();
             services.AddSingleton<ICommandeService, CommandeService>();
@@ -67,6 +68,14 @@ namespace GestionCoutureApp
             services.AddSingleton<GoogleDriveBackupService>();
 
             Services = services.BuildServiceProvider();
+
+            // Initialiser le service de logging
+            var logService = Services.GetRequiredService<ILogService>();
+            logService.LogInfo("═══════════════════════════════════════════════════");
+            logService.LogInfo("Application Gestion Couture démarrée");
+            logService.LogInfo($"Version: 2.0 - Retouche Choco");
+            logService.LogInfo($"Date de démarrage: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
+            logService.LogInfo("═══════════════════════════════════════════════════");
 
             // Démarre la sauvegarde automatique dès le lancement
             Services.GetRequiredService<BackupService>();
@@ -361,6 +370,14 @@ namespace GestionCoutureApp
                 details += "\n\nCause : " + ex.InnerException.Message;
             details += "\n\n--- Stack ---\n" + ex.StackTrace;
 
+            // Logger l'exception
+            try
+            {
+                var logService = Services?.GetService<ILogService>();
+                logService?.LogError("Exception non gérée dans le Dispatcher", ex);
+            }
+            catch { /* Si le logging échoue, on ne veut pas créer une nouvelle exception */ }
+
             MessageBox.Show("Erreur inattendue :\n" + details,
                 "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             e.Handled = true;
@@ -370,6 +387,14 @@ namespace GestionCoutureApp
         {
             if (e.ExceptionObject is Exception ex)
             {
+                // Logger l'exception critique
+                try
+                {
+                    var logService = Services?.GetService<ILogService>();
+                    logService?.LogError("Exception critique non gérée dans AppDomain", ex);
+                }
+                catch { /* Si le logging échoue, on ne veut pas créer une nouvelle exception */ }
+
                 MessageBox.Show(
                     "Erreur critique :\n" + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -378,6 +403,16 @@ namespace GestionCoutureApp
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // Logger la fermeture
+            try
+            {
+                var logService = Services?.GetService<ILogService>();
+                var authService = Services?.GetService<IAuthService>();
+                string utilisateur = authService?.UtilisateurConnecte?.Nom ?? "Inconnu";
+                logService?.LogInfo($"Fermeture de l'application par {utilisateur}");
+            }
+            catch { /* Si le logging échoue, on continue la fermeture normale */ }
+
             // Sauvegarde Google Drive automatique à la fermeture
             // (en tâche de fond, 2–3 secondes maximum)
             try

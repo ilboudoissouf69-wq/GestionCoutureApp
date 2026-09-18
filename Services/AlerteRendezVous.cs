@@ -32,23 +32,24 @@ namespace GestionCoutureApp.Services
         // même urgence ni le même message pour la secrétaire, elles ne
         // doivent pas être confondues dans une seule liste indifférenciée.
         public string TypeAlerte { get; set; } = string.Empty; // "PasEncorePriseEnCharge" | "RendezVousProche"
+
+        // Libellé lisible pour la colonne "Alerte" dans GridProduction
+        public string MotifAlerte => TypeAlerte switch
+        {
+            "PasEncorePriseEnCharge" => "⚠️  Colis stagnant — mi-délai dépassé, statut 'À faire'",
+            "RendezVousProche"       => "⏰  RDV proche — vêtement pas encore terminé",
+            _                       => TypeAlerte
+        };
+
+        // True si la pièce est terminée (même si le RDV est futur) — active le bouton orange
+        public bool PiecePrete => Statut is "Terminée" or "Terminee";
     }
 
     public interface IAlerteService
     {
-        /// <summary>
-        /// Toutes les alertes actives en ce moment (les deux types confondus,
-        /// triées par urgence) : "rendez-vous proche" (dans les N heures
-        /// réglées dans Paramètres) et "pas encore prise en charge" (mi-délai
-        /// entre dépôt et rendez-vous dépassé, pièce toujours "À faire").
-        /// </summary>
         Task<List<AlerteRendezVous>> ObtenirAlertesActuelles();
-
-        /// <summary>
-        /// Toutes les pièces dont le rendez-vous est à venir, avec au moins
-        /// un statut différent de "Livree", quel que soit le délai configuré
-        /// (utilisé par l'onglet Alertes pour la vue d'ensemble complète).
-        /// </summary>
         Task<List<AlerteRendezVous>> ObtenirTousRendezVousAVenir();
+        /// <summary>RDV de la semaine en cours (pour la section Retrait).</summary>
+        Task<List<AlerteRendezVous>> ObtenirRendezVousSemaine();
     }
 }

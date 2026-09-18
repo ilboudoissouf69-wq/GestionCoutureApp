@@ -13,6 +13,8 @@ namespace GestionCoutureApp.Views
     public partial class RetoursView : Page
     {
         private readonly IRetourService _retourService;
+        private readonly IParametresService _p;
+        private readonly IWhatsAppService _whatsApp;
         private readonly ApplicationDbContext _context;
         private readonly Employe _utilisateur;
         private List<Commande> _commandes = new();
@@ -24,6 +26,8 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
 
             _retourService = App.Services.GetRequiredService<IRetourService>();
+            _p = App.Services.GetRequiredService<IParametresService>();
+            _whatsApp = App.Services.GetRequiredService<IWhatsAppService>();
             var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = factory.CreateDbContext();
             Unloaded += (s, e) => _context.Dispose();
@@ -213,7 +217,8 @@ namespace GestionCoutureApp.Views
                         double taux   = nbPieces > 0
                             ? Math.Round(100.0 * (nbPieces - nbRetours) / nbPieces, 1)
                             : 100.0;
-                        bool eligible = nbPieces >= 5 && nbRetours == 0;
+                        // Éligible si : minimum 5 pièces ET qualité >= 95% (max 1 retour sur 20 pièces)
+                        bool eligible = nbPieces >= 5 && taux >= 95.0;
 
                         return new PerformanceCouturier
                         {
@@ -781,12 +786,34 @@ namespace GestionCoutureApp.Views
                 Text = valeur
             };
 
+            // Calcul RDV par défaut : maintenant + 24h, contraint à 08h-22h
+            DateTime dateRdvDef;
+            TimeSpan heureRdvDef;
+            {
+                var candidat = DateTime.Now.AddHours(24);
+                var h = candidat.TimeOfDay;
+                if (h >= new TimeSpan(22, 0, 0))
+                { dateRdvDef = candidat.Date.AddDays(1); heureRdvDef = new TimeSpan(8, 0, 0); }
+                else if (h < new TimeSpan(8, 0, 0))
+                { dateRdvDef = candidat.Date; heureRdvDef = new TimeSpan(8, 0, 0); }
+                else
+                {
+                    int min = ((h.Minutes / 30) + 1) * 30;
+                    heureRdvDef = min >= 60
+                        ? new TimeSpan(h.Hours + 1, 0, 0)
+                        : new TimeSpan(h.Hours, min, 0);
+                    dateRdvDef = candidat.Date;
+                }
+            }
+
             var spDate = new StackPanel();
             spDate.Children.Add(LblRdv("Date de rendez-vous"));
             var dpRdv = new DatePicker
             {
                 Height = 36, FontSize = 13,
-                SelectedDate = modeEdition ? retourExistant!.DateRdvReprise : null
+                SelectedDate = modeEdition
+                    ? retourExistant!.DateRdvReprise
+                    : dateRdvDef   // +24h par défaut en création
             };
             spDate.Children.Add(dpRdv);
             Grid.SetColumn(spDate, 0);
@@ -794,7 +821,8 @@ namespace GestionCoutureApp.Views
             var spHdeb = new StackPanel();
             spHdeb.Children.Add(LblRdv("Heure début"));
             var txtHdeb = TxtHeure(modeEdition && retourExistant!.HeureDebutReprise.HasValue
-                ? retourExistant.HeureDebutReprise.Value.ToString(@"hh\:mm") : "");
+                ? retourExistant.HeureDebutReprise.Value.ToString(@"hh\:mm")
+                : heureRdvDef.ToString(@"hh\:mm"));  // +24h par défaut en création
             spHdeb.Children.Add(txtHdeb);
             Grid.SetColumn(spHdeb, 2);
 
@@ -989,6 +1017,52 @@ namespace GestionCoutureApp.Views
                 Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
                 Margin = new Thickness(0, 0, 0, 4)
             });
+        }
+
+        // ==================================================================
+        // WhatsApp — retouche prête (bouton vert dans le tableau)
+        // ==================================================================
+        private async void BtnWhatsAppRetour_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.DataContext is not Retour retour) return;
+
+            string tel = retour.Commande?.Client?.Telephone ?? "";
+            if (string.IsNullOrWhiteSpace(tel))
+            {
+                MessageBox.Show("Ce client n'a pas de numéro de téléphone.",
+                    "WhatsApp", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                // Utiliser le modèle "Retouche prête" configuré dans Paramètres
+                string modele    = await _p.ObtenirMsgRetouchePrete();
+                string nomAtelier = await _p.ObtenirNomAtelier();
+
+                string nomClient = retour.ClientAffiche;
+                string rdvDate   = retour.DateRdvReprise.HasValue
+                    ? retour.DateRdvReprise.Value.ToString("dd/MM/yyyy")
+                    : "—";
+                string rdvHeure  = retour.HeureDebutReprise.HasValue
+                    ? retour.HeureDebutReprise.Value.ToString(@"hh\:mm")
+                    : "—";
+
+                string message = modele
+                    .Replace("{Nom}",      $"*{nomClient}*")
+                    .Replace("{Commande}", retour.IdCommande.ToString())
+                    .Replace("{Pieces}",   retour.PieceCommande?.TypeVetement ?? "vêtement")
+                    .Replace("{Atelier}",  nomAtelier)
+                    .Replace("{Date}",     $"*{rdvDate}*")
+                    .Replace("{Heure}",    $"*{rdvHeure}*");
+
+                _whatsApp.OuvrirConversation(tel, message);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Impossible d'ouvrir WhatsApp :\n" + ex.Message,
+                    "Erreur WhatsApp", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private string? DemanderMotif(string titre)

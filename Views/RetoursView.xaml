@@ -58,7 +58,6 @@
                      Tag="🔍  Rechercher (client, pièce, couturier, motif…)"
                      TextChanged="TxtRecherche_TextChanged"/>
 
-            <!-- Filtre statut -->
             <ComboBox Grid.Column="2"
                       x:Name="CmbFiltreStatut"
                       Height="38" FontSize="13"
@@ -75,93 +74,93 @@
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
                     Margin="0,0,0,16">
-            <!-- Signalé -->
             <Border Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1"
-                    CornerRadius="8" Padding="14,8" Margin="0,0,10,0">
+                    CornerRadius="8" Padding="12,6" Margin="0,0,10,0">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="🔴" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="🔴" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <StackPanel>
                         <TextBlock x:Name="TxtNbSignale" Text="0"
-                                   FontSize="18" FontWeight="Bold" Foreground="#DC2626"/>
-                        <TextBlock Text="Signalés" FontSize="10" Foreground="#EF4444"/>
+                                   FontSize="16" FontWeight="Bold" Foreground="#DC2626"/>
+                        <TextBlock Text="Signalés" FontSize="9" Foreground="#EF4444"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <!-- En reprise -->
             <Border Background="#FFFBEB" BorderBrush="#FDE68A" BorderThickness="1"
-                    CornerRadius="8" Padding="14,8" Margin="0,0,10,0">
+                    CornerRadius="8" Padding="12,6" Margin="0,0,10,0">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="🟡" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="🟡" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <StackPanel>
                         <TextBlock x:Name="TxtNbEnReprise" Text="0"
-                                   FontSize="18" FontWeight="Bold" Foreground="#D97706"/>
-                        <TextBlock Text="En reprise" FontSize="10" Foreground="#F59E0B"/>
+                                   FontSize="16" FontWeight="Bold" Foreground="#D97706"/>
+                        <TextBlock Text="En reprise" FontSize="9" Foreground="#F59E0B"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <!-- Prêt -->
             <Border Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1"
-                    CornerRadius="8" Padding="14,8" Margin="0,0,10,0">
+                    CornerRadius="8" Padding="12,6" Margin="0,0,10,0">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="🟢" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="🟢" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <StackPanel>
                         <TextBlock x:Name="TxtNbPret" Text="0"
-                                   FontSize="18" FontWeight="Bold" Foreground="#059669"/>
-                        <TextBlock Text="Prêts" FontSize="10" Foreground="#10B981"/>
+                                   FontSize="16" FontWeight="Bold" Foreground="#059669"/>
+                        <TextBlock Text="Prêts" FontSize="9" Foreground="#10B981"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <!-- Rendu -->
             <Border Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="1"
-                    CornerRadius="8" Padding="14,8">
+                    CornerRadius="8" Padding="12,6">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="⚫" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="⚫" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <StackPanel>
                         <TextBlock x:Name="TxtNbRendu" Text="0"
-                                   FontSize="18" FontWeight="Bold" Foreground="#6B7280"/>
-                        <TextBlock Text="Rendus" FontSize="10" Foreground="#9CA3AF"/>
+                                   FontSize="16" FontWeight="Bold" Foreground="#6B7280"/>
+                        <TextBlock Text="Rendus" FontSize="9" Foreground="#9CA3AF"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
         </StackPanel>
 
-        <!-- ══ PANNEAU PERFORMANCE QUALITÉ ══════════════════════════════════ -->
+        <!-- ══ PANNEAU PERFORMANCE QUALITÉ (COMPACTÉ) ═══════════════════════ -->
         <Border Grid.Row="3"
                 Background="#1A1A1A"
                 CornerRadius="10"
-                Padding="18,14"
+                Padding="16,12"
                 Margin="0,0,0,16">
             <StackPanel>
-                <!-- En-tête -->
-                <Grid Margin="0,0,0,12">
+                <Grid Margin="0,0,0,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <TextBlock Text="📈" FontSize="15" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="📈" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="PERFORMANCE QUALITÉ"
-                                   FontSize="12" FontWeight="Bold"
+                                   FontSize="11" FontWeight="Bold"
                                    Foreground="White" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <!-- Sélecteur période -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <TextBlock Text="Période :"
-                                   FontSize="11" Foreground="#B0A8A4"
+                                   FontSize="10" Foreground="#B0A8A4"
                                    VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox x:Name="CmbPeriodeQualite"
-                                  Width="140" Height="28" FontSize="11"
-                                  Background="#2D2D2D" Foreground="White"
+                                  Width="130" Height="26" FontSize="10"
+                                  Background="#2D2D2D"
+                                  Foreground="#E5E7EB"
                                   SelectionChanged="CmbPeriodeQualite_SelectionChanged">
-                            <ComboBoxItem Content="Ce mois-ci"    Tag="mois"      IsSelected="True"/>
-                            <ComboBoxItem Content="Ce trimestre"  Tag="trimestre"/>
-                            <ComboBoxItem Content="Cette année"   Tag="annee"/>
-                            <ComboBoxItem Content="Tout"          Tag="tout"/>
+                            <ComboBox.Resources>
+                                <Style TargetType="ComboBoxItem">
+                                    <Setter Property="Foreground" Value="#1F2937"/>
+                                    <Setter Property="Background" Value="White"/>
+                                </Style>
+                            </ComboBox.Resources>
+                            <ComboBoxItem Content="Ce mois-ci" Tag="mois" IsSelected="True"/>
+                            <ComboBoxItem Content="Ce trimestre" Tag="trimestre"/>
+                            <ComboBoxItem Content="Cette année" Tag="annee"/>
+                            <ComboBoxItem Content="Tout" Tag="tout"/>
                         </ComboBox>
                     </StackPanel>
                 </Grid>
 
-                <!-- Classement couturiers -->
                 <ItemsControl x:Name="ListePerformance">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -171,47 +170,44 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Background="#2A2A2A"
-                                    CornerRadius="8"
-                                    Padding="14,10"
-                                    Margin="0,0,0,6">
+                                    CornerRadius="6"
+                                    Padding="12,8"
+                                    Margin="0,0,0,4">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="30"/>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="90"/>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="100"/>
-                                        <ColumnDefinition Width="100"/>
-                                        <ColumnDefinition Width="110"/>
-                                        <ColumnDefinition Width="220"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Rang -->
                                     <TextBlock Grid.Column="0"
                                                Text="{Binding Medaille}"
-                                               FontSize="16"
+                                               FontSize="14"
                                                VerticalAlignment="Center"/>
 
-                                    <!-- Nom couturier -->
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding NomCouturier}"
-                                               FontSize="13" FontWeight="Bold"
+                                               FontSize="12" FontWeight="SemiBold"
                                                Foreground="White"
-                                               VerticalAlignment="Center"/>
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
 
-                                    <!-- Pièces cousues -->
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding NbPiecesAffiche}"
-                                                   FontSize="12" FontWeight="Bold"
+                                                   FontSize="11" FontWeight="Bold"
                                                    Foreground="#B0A8A4"
                                                    HorizontalAlignment="Center"/>
                                         <TextBlock Text="pièces"
-                                                   FontSize="10" Foreground="#6B7280"
+                                                   FontSize="9" Foreground="#6B7280"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
 
-                                    <!-- Retours -->
                                     <StackPanel Grid.Column="3" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding NbRetoursAffiche}"
-                                                   FontSize="12" FontWeight="Bold"
+                                                   FontSize="11" FontWeight="Bold"
                                                    HorizontalAlignment="Center">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
@@ -225,14 +221,13 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                         <TextBlock Text="retours"
-                                                   FontSize="10" Foreground="#6B7280"
+                                                   FontSize="9" Foreground="#6B7280"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
 
-                                    <!-- Taux qualité -->
                                     <StackPanel Grid.Column="4" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding TauxQualiteAffiche}"
-                                                   FontSize="13" FontWeight="Bold"
+                                                   FontSize="12" FontWeight="Bold"
                                                    HorizontalAlignment="Center">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
@@ -249,14 +244,13 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                         <TextBlock Text="qualité"
-                                                   FontSize="10" Foreground="#6B7280"
+                                                   FontSize="9" Foreground="#6B7280"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
 
-                                    <!-- Badge prime -->
                                     <Border Grid.Column="5"
-                                            CornerRadius="6"
-                                            Padding="10,4"
+                                            CornerRadius="5"
+                                            Padding="8,3"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Center">
                                         <Border.Style>
@@ -270,7 +264,7 @@
                                             </Style>
                                         </Border.Style>
                                         <TextBlock Text="{Binding BadgePrime}"
-                                                   FontSize="11" FontWeight="SemiBold"
+                                                   FontSize="10" FontWeight="SemiBold"
                                                    Foreground="White"/>
                                     </Border>
                                 </Grid>
@@ -279,18 +273,17 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Message si aucune donnée -->
                 <TextBlock x:Name="TxtAucunePerformance"
                            Text="Aucune donnée de performance pour cette période."
-                           FontSize="12" FontStyle="Italic"
+                           FontSize="11" FontStyle="Italic"
                            Foreground="#6B7280"
                            HorizontalAlignment="Center"
-                           Margin="0,8,0,0"
+                           Margin="0,6,0,0"
                            Visibility="Collapsed"/>
             </StackPanel>
         </Border>
 
-        <!-- ══ TABLEAU ═══════════════════════════════════════════════════════ -->
+        <!-- ══ TABLEAU (OPTIMISÉ) ═══════════════════════════════════════════ -->
         <Border Grid.Row="4"
                 Style="{StaticResource Card}"
                 Padding="0">
@@ -304,15 +297,16 @@
                       HorizontalGridLinesBrush="#F3F4F6"
                       RowBackground="White"
                       AlternatingRowBackground="#FAFAFA"
-                      BorderThickness="0">
+                      BorderThickness="0"
+                      RowHeight="48">
 
                 <DataGrid.Resources>
                     <Style TargetType="DataGridColumnHeader">
                         <Setter Property="Background" Value="#1A1A1A"/>
                         <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="FontSize" Value="10"/>
                         <Setter Property="FontWeight" Value="SemiBold"/>
-                        <Setter Property="Padding" Value="12,9"/>
+                        <Setter Property="Padding" Value="10,8"/>
                         <Setter Property="BorderThickness" Value="0"/>
                     </Style>
                     <Style TargetType="DataGridRow">
@@ -326,6 +320,10 @@
                             </Trigger>
                         </Style.Triggers>
                     </Style>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                    </Style>
                 </DataGrid.Resources>
 
                 <DataGrid.Columns>
@@ -333,29 +331,38 @@
                     <!-- Date -->
                     <DataGridTextColumn Header="Date"
                                         Binding="{Binding DateSignalementAffichee}"
-                                        Width="88"/>
+                                        Width="75">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="8,0"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
                     <!-- Client -->
-                    <DataGridTemplateColumn Header="Client" Width="130">
+                    <DataGridTemplateColumn Header="Client" Width="115">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <StackPanel Margin="4,3">
+                                <StackPanel Margin="8,2" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding ClientAffiche}"
-                                               FontSize="12" FontWeight="SemiBold"
-                                               Foreground="#111827"/>
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="#111827"
+                                               TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding Commande.Client.Telephone}"
-                                               FontSize="10" Foreground="#6B7280"/>
+                                               FontSize="9" Foreground="#9CA3AF"/>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- Pièce + Commande -->
-                    <DataGridTemplateColumn Header="Commande / Pièce" Width="140">
+                    <!-- Commande/Pièce -->
+                    <DataGridTemplateColumn Header="CMD/Pièce" Width="100">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <StackPanel Margin="4,3">
-                                    <TextBlock FontSize="12" FontWeight="SemiBold"
+                                <StackPanel Margin="8,2" VerticalAlignment="Center">
+                                    <TextBlock FontSize="11" FontWeight="SemiBold"
                                                Foreground="{StaticResource PrimaryBrush}">
                                         <TextBlock.Text>
                                             <MultiBinding StringFormat="CMD-{0}">
@@ -364,18 +371,20 @@
                                         </TextBlock.Text>
                                     </TextBlock>
                                     <TextBlock Text="{Binding PieceCommande.TypeVetement}"
-                                               FontSize="11" Foreground="#374151"/>
+                                               FontSize="9" Foreground="#6B7280"
+                                               TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- Couturier initial -->
-                    <DataGridTemplateColumn Header="Couturier initial" Width="110">
+                    <!-- Couturier -->
+                    <DataGridTemplateColumn Header="Couturier" Width="95">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Margin="4,0"
-                                           FontSize="12" VerticalAlignment="Center">
+                                <TextBlock Margin="8,0" VerticalAlignment="Center"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis">
                                     <TextBlock.Text>
                                         <MultiBinding StringFormat="{}{0} {1}">
                                             <Binding Path="Couturier.Prenom"/>
@@ -388,30 +397,39 @@
                     </DataGridTemplateColumn>
 
                     <!-- Motif -->
-                    <DataGridTemplateColumn Header="Motif / Problème" Width="*">
+                    <DataGridTemplateColumn Header="Motif" Width="*" MinWidth="120">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding DescriptionProbleme}"
-                                           Margin="4,0"
-                                           FontSize="12"
+                                           Margin="8,0"
+                                           FontSize="11"
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
-                                           Foreground="#374151"/>
+                                           Foreground="#374151"
+                                           ToolTip="{Binding DescriptionProbleme}"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- RDV reprise -->
-                    <DataGridTextColumn Header="RDV reprise"
-                                        Binding="{Binding DateRdvAffichee}"
-                                        Width="110"/>
+                    <!-- RDV -->
+                    <DataGridTextColumn Header="RDV" Width="85"
+                                        Binding="{Binding DateRdvAffichee}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="10"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="8,0"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
                     <!-- Statut -->
-                    <DataGridTemplateColumn Header="Statut" Width="120">
+                    <DataGridTemplateColumn Header="Statut" Width="100">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Border CornerRadius="4" Padding="8,4"
-                                        Margin="4,3" HorizontalAlignment="Left">
+                                <Border CornerRadius="4" Padding="6,3"
+                                        Margin="4,0" HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Background" Value="#6B7280"/>
@@ -435,7 +453,7 @@
                                         </Style>
                                     </Border.Style>
                                     <TextBlock Text="{Binding StatutAffiche}"
-                                               FontSize="11" FontWeight="SemiBold"
+                                               FontSize="10" FontWeight="SemiBold"
                                                Foreground="White"/>
                                 </Border>
                             </DataTemplate>
@@ -443,31 +461,29 @@
                     </DataGridTemplateColumn>
 
                     <!-- Actions -->
-                    <DataGridTemplateColumn Header="Actions" Width="140">
+                    <DataGridTemplateColumn Header="Actions" Width="145">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center">
-                                    <!-- Éditer -->
                                     <Button Content="✏️"
-                                            Width="28" Height="26"
-                                            FontSize="13"
-                                            ToolTip="Modifier / voir détails"
+                                            Width="26" Height="26"
+                                            FontSize="12"
+                                            ToolTip="Modifier"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Cursor="Hand"
-                                            Margin="2,0"
+                                            Margin="1,0"
                                             Click="BtnEditerRetour_Click"/>
-                                    <!-- Avancer statut -->
                                     <Button x:Name="BtnAvancerStatut"
-                                            Width="28" Height="26"
-                                            FontSize="13"
-                                            ToolTip="Avancer le statut"
+                                            Width="26" Height="26"
+                                            FontSize="12"
+                                            ToolTip="Avancer"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Cursor="Hand"
-                                            Margin="2,0"
+                                            Margin="1,0"
                                             Click="BtnAvancerStatut_Click">
                                         <Button.Style>
                                             <Style TargetType="Button">
@@ -488,15 +504,53 @@
                                             </Style>
                                         </Button.Style>
                                     </Button>
-                                    <!-- Annuler -->
+                                    <Button Width="50" Height="26"
+                                            FontSize="9" FontWeight="SemiBold"
+                                            Foreground="White"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Margin="1,0"
+                                            ToolTip="Notifier via WhatsApp"
+                                            Click="BtnWhatsAppRetour_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Content" Value="💬"/>
+                                                <Setter Property="Background" Value="#9CA3AF"/>
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                                    CornerRadius="4"
+                                                                    Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                  VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Statut}" Value="Pret">
+                                                        <Setter Property="Background" Value="#25D366"/>
+                                                        <Setter Property="Content" Value="💬 Prêt"/>
+                                                        <Setter Property="IsEnabled" Value="True"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
                                     <Button Content="🚫"
-                                            Width="28" Height="26"
-                                            FontSize="13"
-                                            ToolTip="Annuler ce retour"
+                                            Width="26" Height="26"
+                                            FontSize="12"
+                                            ToolTip="Annuler"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Cursor="Hand"
-                                            Margin="2,0"
+                                            Margin="1,0"
                                             Click="BtnAnnulerRetour_Click">
                                         <Button.Style>
                                             <Style TargetType="Button">

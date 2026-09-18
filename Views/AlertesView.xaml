@@ -4,198 +4,476 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{StaticResource BackgroundBrush}">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="28,24,28,28">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-            <!-- TITRE -->
-            <StackPanel Margin="0,0,0,20">
-                <TextBlock Text="Alertes Rendez-vous"
-                           FontSize="22"
-                           FontWeight="Bold"
-                           Foreground="{StaticResource PrimaryBrush}"/>
-                <Border Height="3"
-                        Width="48"
-                        CornerRadius="2"
-                        Background="#CC0000"
-                        HorizontalAlignment="Left"
-                        Margin="0,6,0,0"/>
-                <TextBlock Text="Commandes dont le retrait ou l'essayage approche"
-                           FontSize="12"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           Margin="0,8,0,0"/>
-            </StackPanel>
-
-            <!-- 3 Cartes statistiques -->
-            <UniformGrid Columns="3"
-                         Margin="0,0,0,20">
-
-                <!-- Alertes actives — rouge marque -->
-                <Border CornerRadius="8"
-                        Padding="18,14"
-                        Margin="0,0,8,0"
-                        Background="#CC0000">
-                    <StackPanel>
-                        <TextBlock Text="ALERTE(S) ACTIVE(S)"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="#FFCCCC"/>
-                        <TextBlock x:Name="TxtNbAlertes"
-                                   Text="0"
-                                   FontSize="28"
-                                   FontWeight="Bold"
-                                   Foreground="White"
-                                   Margin="0,4,0,2"/>
-                        <TextBlock Text="dans le delai parametre"
-                                   FontSize="11"
-                                   Foreground="#FFCCCC"/>
+        <!-- ══ EN-TÊTE ════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Background="White"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="28,16,28,0">
+            <StackPanel>
+                <Grid Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Alertes &amp; Rendez-vous"
+                                   FontSize="22" FontWeight="Bold"
+                                   Foreground="{StaticResource PrimaryBrush}"/>
+                        <Border Height="3" Width="48" CornerRadius="2"
+                                Background="{StaticResource AccentBrush}"
+                                HorizontalAlignment="Left" Margin="0,5,0,4"/>
+                        <TextBlock Text="Suivi en temps réel de la production et des retraits clients"
+                                   FontSize="12"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
-                </Border>
-
-                <!-- Aujourd'hui — orange -->
-                <Border CornerRadius="8"
-                        Padding="18,14"
-                        Margin="0,0,8,0"
-                        Background="#D97706">
-                    <StackPanel>
-                        <TextBlock Text="AUJOURD'HUI"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="#FFF3CD"/>
-                        <TextBlock x:Name="TxtAujourdhui"
-                                   Text="0"
-                                   FontSize="28"
-                                   FontWeight="Bold"
-                                   Foreground="White"
-                                   Margin="0,4,0,2"/>
-                        <TextBlock Text="rendez-vous prevus"
-                                   FontSize="11"
-                                   Foreground="#FFF3CD"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Cette semaine — noir charbon -->
-                <Border CornerRadius="8"
-                        Padding="18,14"
-                        Background="#1A1A1A">
-                    <StackPanel>
-                        <TextBlock Text="CETTE SEMAINE"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="#B0A8A4"/>
-                        <TextBlock x:Name="TxtSemaine"
-                                   Text="0"
-                                   FontSize="28"
-                                   FontWeight="Bold"
-                                   Foreground="White"
-                                   Margin="0,4,0,2"/>
-                        <TextBlock Text="rendez-vous a venir"
-                                   FontSize="11"
-                                   Foreground="#B0A8A4"/>
-                    </StackPanel>
-                </Border>
-            </UniformGrid>
-
-            <!-- Filtres -->
-            <Border Style="{StaticResource Card}"
-                    Margin="0,0,0,16">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Filtrer : "
-                               VerticalAlignment="Center"
-                               FontSize="13"
-                               Margin="0,0,10,0"
-                               Foreground="{StaticResource PrimaryBrush}"/>
-                    <RadioButton x:Name="RbTous"
-                                 Content="Tous les RDV"
-                                 GroupName="FiltreAlerte"
-                                 IsChecked="True"
-                                 Margin="0,0,16,0"
-                                 FontSize="13"
-                                 Checked="Filtre_Changed"/>
-                    <RadioButton x:Name="RbAlertes"
-                                 Content="Alertes uniquement"
-                                 GroupName="FiltreAlerte"
-                                 Margin="0,0,16,0"
-                                 FontSize="13"
-                                 Checked="Filtre_Changed"/>
-                    <RadioButton x:Name="RbUrgentes"
-                                 Content="Urgentes (&lt; 1h)"
-                                 GroupName="FiltreAlerte"
-                                 FontSize="13"
-                                 Checked="Filtre_Changed"/>
-                    <Button Content="Actualiser"
+                    <Button Grid.Column="1" Content="🔄  Actualiser"
                             Style="{StaticResource BtnGhost}"
-                            Margin="16,0,0,0"
-                            Height="32"
-                            FontSize="12"
+                            Height="36" Padding="14,0"
+                            VerticalAlignment="Top"
                             Click="BtnActualiser_Click"/>
-                </StackPanel>
-            </Border>
+                </Grid>
 
-            <!-- Liste des alertes -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Text="Rendez-vous a venir"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="{StaticResource PrimaryBrush}"
-                               Margin="0,0,0,10"/>
-                    <DataGrid x:Name="GridAlertes"
-                              Style="{StaticResource ModernGrid}"
-                              IsReadOnly="True"
-                              AutoGenerateColumns="False">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Client"
-                                                Binding="{Binding NomClient}"
-                                                Width="*"/>
-                            <DataGridTextColumn Header="Telephone"
-                                                Binding="{Binding Telephone}"
-                                                Width="110"/>
-                            <DataGridTextColumn Header="Vetement"
-                                                Binding="{Binding TypeVetement}"
-                                                Width="120"/>
-                            <DataGridTextColumn Header="Date"
-                                                Binding="{Binding DateRendezVous, StringFormat=\{0:dd/MM/yyyy\}}"
-                                                Width="100"/>
-                            <DataGridTextColumn Header="Heure"
-                                                Binding="{Binding HeureRendezVous}"
-                                                Width="60"/>
-                            <DataGridTextColumn Header="Temps restant"
-                                                Binding="{Binding TempsRestant}"
-                                                Width="110"/>
-                            <DataGridTextColumn Header="Couturier"
-                                                Binding="{Binding NomCouturier}"
-                                                Width="*"/>
-                            <DataGridTextColumn Header="Statut"
-                                                Binding="{Binding Statut}"
-                                                Width="100"/>
-                            <DataGridTemplateColumn Header="Action"
-                                                    Width="110">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Content="WhatsApp"
-                                                Padding="8,4"
-                                                Margin="4"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Background="#25D366"
-                                                Foreground="White"
-                                                BorderThickness="0"
-                                                Cursor="Hand"
-                                                IsEnabled="{Binding ProposerContactWhatsApp}"
-                                                Click="BtnContacterWhatsApp_Click"/>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                <!-- 4 badges KPI -->
+                <UniformGrid Columns="4">
+                    <Border CornerRadius="8,8,0,0" Padding="16,10"
+                            Margin="0,0,6,0" Background="#CC0000">
+                        <StackPanel>
+                            <TextBlock Text="🔴 PROD. URGENTS"
+                                       FontSize="9" FontWeight="Bold" Foreground="#FFCCCC"/>
+                            <TextBlock x:Name="TxtNbProdUrgent" Text="0"
+                                       FontSize="24" FontWeight="Bold"
+                                       Foreground="White" Margin="0,2,0,0"/>
+                            <TextBlock Text="non commencés / bloqués"
+                                       FontSize="10" Foreground="#FFCCCC"/>
+                        </StackPanel>
+                    </Border>
+                    <Border CornerRadius="8,8,0,0" Padding="16,10"
+                            Margin="0,0,6,0" Background="#D97706">
+                        <StackPanel>
+                            <TextBlock Text="🟡 PROD. À SURVEILLER"
+                                       FontSize="9" FontWeight="Bold" Foreground="#FFF3CD"/>
+                            <TextBlock x:Name="TxtNbProdSurveiller" Text="0"
+                                       FontSize="24" FontWeight="Bold"
+                                       Foreground="White" Margin="0,2,0,0"/>
+                            <TextBlock Text="mi-délai dépassé"
+                                       FontSize="10" Foreground="#FFF3CD"/>
+                        </StackPanel>
+                    </Border>
+                    <Border CornerRadius="8,8,0,0" Padding="16,10"
+                            Margin="0,0,6,0" Background="#059669">
+                        <StackPanel>
+                            <TextBlock Text="🟢 PRÊTS À RETIRER"
+                                       FontSize="9" FontWeight="Bold" Foreground="#D1FAE5"/>
+                            <TextBlock x:Name="TxtNbPrets" Text="0"
+                                       FontSize="24" FontWeight="Bold"
+                                       Foreground="White" Margin="0,2,0,0"/>
+                            <TextBlock Text="RDV aujourd'hui / passés"
+                                       FontSize="10" Foreground="#D1FAE5"/>
+                        </StackPanel>
+                    </Border>
+                    <Border CornerRadius="8,8,0,0" Padding="16,10"
+                            Background="#1A1A1A">
+                        <StackPanel>
+                            <TextBlock Text="📅 RDV À VENIR"
+                                       FontSize="9" FontWeight="Bold" Foreground="#B0A8A4"/>
+                            <TextBlock x:Name="TxtNbRdvAVenir" Text="0"
+                                       FontSize="24" FontWeight="Bold"
+                                       Foreground="White" Margin="0,2,0,0"/>
+                            <TextBlock Text="cette semaine"
+                                       FontSize="10" Foreground="#B0A8A4"/>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+            </StackPanel>
+        </Border>
 
-                    <TextBlock x:Name="TxtMessage"
-                               FontSize="11"
-                               Margin="0,8,0,0"
-                               TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
+        <!-- ══ CONTENU ═══════════════════════════════════════════════════ -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      Padding="28,20,28,28">
+            <StackPanel>
 
-        </StackPanel>
-    </ScrollViewer>
+                <!-- ═══════════════════════════════════════════════════════
+                     SECTION 1 — 🧵 ALERTES PRODUCTION (INTERNE)
+                ═══════════════════════════════════════════════════════ -->
+                <Border Background="White" CornerRadius="12"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1" Margin="0,0,0,20">
+                    <StackPanel>
+
+                        <!-- En-tête -->
+                        <Border CornerRadius="12,12,0,0"
+                                Padding="20,14" Background="#1A1A1A">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="🧵  Alertes Production — Interne Atelier"
+                                               FontSize="14" FontWeight="Bold"
+                                               Foreground="White"/>
+                                    <TextBlock Text="Vêtements non commencés ou en retard · Relancer le couturier"
+                                               FontSize="11" Foreground="#9CA3AF"
+                                               Margin="0,3,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Border Background="#CC0000" CornerRadius="4"
+                                            Padding="8,3" Margin="0,0,8,0">
+                                        <TextBlock Text="🔴 Urgent"
+                                                   FontSize="10" Foreground="White"/>
+                                    </Border>
+                                    <Border Background="#D97706" CornerRadius="4"
+                                            Padding="8,3">
+                                        <TextBlock Text="🟡 Mi-délai"
+                                                   FontSize="10" Foreground="White"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- ItemsControl pour éviter les styles DataGrid problématiques -->
+                        <Grid x:Name="GridProdHeader" Background="#F8F5F3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="46"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="" Padding="12,8"/>
+                            <TextBlock Grid.Column="1" Text="Client"    Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                            <TextBlock Grid.Column="2" Text="Pièce"     Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                            <TextBlock Grid.Column="3" Text="Couturier" Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                            <TextBlock Grid.Column="4" Text="Statut"    Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                            <TextBlock Grid.Column="5" Text="RDV prévu" Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                            <TextBlock Grid.Column="6" Text="Restant"   Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                            <TextBlock Grid.Column="7" Text="Alerte"    Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#6B7280"/>
+                        </Grid>
+                        <Border Height="1" Background="#E5E0DC"/>
+
+                        <ItemsControl x:Name="ListeProduction">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="LigneProd"
+                                            BorderBrush="#F3F4F6"
+                                            BorderThickness="0,0,0,1"
+                                            Padding="0,2">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="White"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding EstUrgent}" Value="True">
+                                                        <Setter Property="Background" Value="#FFF5F5"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="46"/>
+                                                <ColumnDefinition Width="130"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="130"/>
+                                                <ColumnDefinition Width="110"/>
+                                                <ColumnDefinition Width="130"/>
+                                                <ColumnDefinition Width="110"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Badge urgence -->
+                                            <Border Grid.Column="0" CornerRadius="4"
+                                                    Margin="8,6" Padding="4,2"
+                                                    HorizontalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#D97706"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EstUrgent}" Value="True">
+                                                                <Setter Property="Background" Value="#CC0000"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock FontSize="10" Foreground="White">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="🟡"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding EstUrgent}" Value="True">
+                                                                    <Setter Property="Text" Value="🔴"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+
+                                            <TextBlock Grid.Column="1" Text="{Binding NomClient}"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="#111827"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding TypeVetement}"
+                                                       FontSize="12" Foreground="#374151"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding NomCouturier}"
+                                                       FontSize="12" Foreground="#374151"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding Statut}"
+                                                       FontSize="12" Foreground="#6B7280"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="5"
+                                                       Text="{Binding DateRendezVous, StringFormat=\{0:dd/MM/yy HH:mm\}}"
+                                                       FontSize="12" Foreground="#374151"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="{Binding TempsRestant}"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Padding="4,8" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#D97706"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EstUrgent}" Value="True">
+                                                                <Setter Property="Foreground" Value="#CC0000"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Grid.Column="7" Text="{Binding MotifAlerte}"
+                                                       FontSize="11" TextWrapping="Wrap"
+                                                       Padding="4,8" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#D97706"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EstUrgent}" Value="True">
+                                                                <Setter Property="Foreground" Value="#CC0000"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Vide -->
+                        <TextBlock x:Name="TxtVideProduction"
+                                   Text="✅  Aucune alerte — tous les vêtements sont en cours ou terminés."
+                                   FontSize="12" FontStyle="Italic" Foreground="#059669"
+                                   Margin="20,12,20,16" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     SECTION 2 — 🛍️ ALERTES RETRAIT & RDV (CLIENT)
+                ═══════════════════════════════════════════════════════ -->
+                <Border Background="White" CornerRadius="12"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1">
+                    <StackPanel>
+
+                        <!-- En-tête -->
+                        <Border CornerRadius="12,12,0,0"
+                                Padding="20,14" Background="#065F46">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="🛍️  Alertes Retrait &amp; RDV — Communication Client"
+                                               FontSize="14" FontWeight="Bold"
+                                               Foreground="White"/>
+                                    <TextBlock Text="Vêtements terminés ou RDV confirmés · Notifiez le client en 1 clic"
+                                               FontSize="11" Foreground="#6EE7B7"
+                                               Margin="0,3,0,0"/>
+                                </StackPanel>
+                                <Border Grid.Column="1" Background="#059669"
+                                        CornerRadius="6" Padding="10,4"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="💬  WhatsApp activé uniquement si terminé"
+                                               FontSize="10" FontWeight="SemiBold"
+                                               Foreground="White"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- En-tête colonnes -->
+                        <Grid Background="#F0FDF4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="46"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="" Padding="12,8"/>
+                            <TextBlock Grid.Column="1" Text="Client"    Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                            <TextBlock Grid.Column="2" Text="Pièce"     Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                            <TextBlock Grid.Column="3" Text="Couturier" Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                            <TextBlock Grid.Column="4" Text="Statut"    Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                            <TextBlock Grid.Column="5" Text="RDV"       Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                            <TextBlock Grid.Column="6" Text="Restant"   Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                            <TextBlock Grid.Column="7" Text="Notifier"  Padding="12,8" FontSize="11" FontWeight="SemiBold" Foreground="#065F46"/>
+                        </Grid>
+                        <Border Height="1" Background="#BBF7D0"/>
+
+                        <ItemsControl x:Name="ListeRetrait">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#F0FDF4"
+                                            BorderThickness="0,0,0,1"
+                                            Background="White" Padding="0,2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="46"/>
+                                                <ColumnDefinition Width="150"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="110"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="130"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Icône statut -->
+                                            <TextBlock Grid.Column="0" FontSize="16"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Margin="4,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="📅"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ProposerContactWhatsApp}" Value="True">
+                                                                <Setter Property="Text" Value="✅"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding PiecePrete}" Value="True">
+                                                                <Setter Property="Text" Value="🟢"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <!-- Client + téléphone -->
+                                            <StackPanel Grid.Column="1" Margin="4,6">
+                                                <TextBlock Text="{Binding NomClient}"
+                                                           FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="#111827"/>
+                                                <TextBlock Text="{Binding Telephone}"
+                                                           FontSize="10" Foreground="#6B7280"/>
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Column="2" Text="{Binding TypeVetement}"
+                                                       FontSize="12" Foreground="#374151"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding NomCouturier}"
+                                                       FontSize="12" Foreground="#374151"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding Statut}"
+                                                       FontSize="12" Foreground="#059669"
+                                                       FontWeight="SemiBold"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="5"
+                                                       Text="{Binding DateRendezVous, StringFormat=\{0:dd/MM/yy HH:mm\}}"
+                                                       FontSize="12" Foreground="#374151"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="6" Text="{Binding TempsRestant}"
+                                                       FontSize="12" Foreground="#6B7280"
+                                                       Padding="4,8" VerticalAlignment="Center"/>
+
+                                            <!-- Bouton WhatsApp sans style implicite -->
+                                            <Button Grid.Column="7"
+                                                    Height="30" Margin="6,4"
+                                                    FontSize="11" FontWeight="SemiBold"
+                                                    Foreground="White"
+                                                    BorderThickness="0"
+                                                    Cursor="Hand"
+                                                    Click="BtnContacterWhatsApp_Click">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Background" Value="#9CA3AF"/>
+                                                        <Setter Property="IsEnabled"  Value="False"/>
+                                                        <Setter Property="Content"    Value="📅 RDV à venir"/>
+                                                        <Setter Property="Padding"    Value="10,0"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border Background="{TemplateBinding Background}"
+                                                                            CornerRadius="6"
+                                                                            Padding="{TemplateBinding Padding}"
+                                                                            Height="{TemplateBinding Height}">
+                                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                                          VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ProposerContactWhatsApp}" Value="True">
+                                                                <Setter Property="Content"    Value="💬 WhatsApp"/>
+                                                                <Setter Property="Background" Value="#25D366"/>
+                                                                <Setter Property="IsEnabled"  Value="True"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding PiecePrete}" Value="True">
+                                                                <Setter Property="Content"    Value="💬 Notifier"/>
+                                                                <Setter Property="Background" Value="#D97706"/>
+                                                                <Setter Property="IsEnabled"  Value="True"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Vide -->
+                        <TextBlock x:Name="TxtVideRetrait"
+                                   Text="Aucun rendez-vous à venir cette semaine."
+                                   FontSize="12" FontStyle="Italic"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Margin="20,12,20,8" Visibility="Collapsed"/>
+
+                        <!-- Note bas -->
+                        <Border Background="#F0FDF4" BorderBrush="#BBF7D0"
+                                BorderThickness="0,1,0,0"
+                                CornerRadius="0,0,12,12"
+                                Padding="20,12">
+                            <TextBlock FontSize="11" Foreground="#065F46"
+                                       TextWrapping="Wrap">
+                                <Run FontWeight="Bold">⚠️  Règle de l'atelier :</Run>
+                                <Run> Le bouton WhatsApp s'active uniquement quand le vêtement est marqué </Run>
+                                <Run FontWeight="Bold">"Terminée"</Run>
+                                <Run> — le client n'est jamais contacté pour signaler un retard.</Run>
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </Page>

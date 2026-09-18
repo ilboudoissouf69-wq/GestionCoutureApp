@@ -132,5 +132,17 @@ namespace GestionCoutureApp.Services
             => await ObtenirValeur(ClePiedRecu)
                ?? "Les articles non retirés après 30 jours seront vendus. Merci de votre confiance !";
         public Task DefinirPiedRecu(string v) => SetStr(ClePiedRecu, v);
+
+        // ── Apparence ────────────────────────────────────────────────────
+        public const string CleCouleurAccent = "CouleurAccent";
+        public async Task<string> ObtenirCouleurAccent()
+            => await ObtenirValeur(CleCouleurAccent) ?? "#CC0000";
+        public Task DefinirCouleurAccent(string hex) => SetStr(CleCouleurAccent, hex);
+
+        // ── Langue ───────────────────────────────────────────────────────
+        public const string CleLangue = "Langue";
+        public async Task<string> ObtenirLangue()
+            => await ObtenirValeur(CleLangue) ?? "fr";
+        public Task DefinirLangue(string code) => SetStr(CleLangue, code);
     }
 }

@@ -40,6 +40,9 @@ namespace GestionCoutureApp.Views
         // (mode création uniquement). Vidé et persisté lors de BtnSauvegarderPiece_Click.
         private readonly List<MaterielSupplement> _materiauxTemporaires = new();
 
+        // Date de RDV par défaut calculée (maintenant + 24h, règle 08h-22h)
+        private DateTime _dateRdvDefaut = DateTime.Today.AddDays(1);
+
         public CommandesView()
         {
             InitializeComponent();
@@ -99,8 +102,13 @@ namespace GestionCoutureApp.Views
                 CmbAjustement.Items.Add(i * 500);
             CmbAjustement.SelectedIndex = 0;
 
-            // Heure debut auto
+            // Date et heure de RDV par défaut : now + 24h, contraint à 08h-22h
+            var (dateRdvDef, heureRdvDef) = CalculerRdvParDefaut();
             TxtHeureDebut.Text = DateTime.Now.ToString("HH:mm");
+            TxtHeureFin.Text   = heureRdvDef.ToString(@"hh\:mm");
+
+            // Pré-remplir la date de RDV (+24h avec règle 08h-22h) — modifiable
+            _dateRdvDefaut = dateRdvDef;
 
             ChargerCommandes();
 
@@ -738,6 +746,35 @@ namespace GestionCoutureApp.Views
 
             var mesures = CollecterMesures();
 
+            // ── Récapitulatif avant sauvegarde (uniquement en mode création de pièce) ──
+            if (!_pieceSelectionneeId.HasValue && _commandeSelectionneeId > 0)
+            {
+                string nomClient = "—";
+                try
+                {
+                    var client = _clientService.ObtenirTous()
+                        .FirstOrDefault(c => c.IdClient == (int)(CmbClient.SelectedValue ?? 0));
+                    if (client != null) nomClient = $"{client.Nom} {client.Prenom}".Trim();
+                }
+                catch { }
+
+                string typeVet = _typesVetement.First(t =>
+                    t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom;
+                string description = CmbDescription.SelectedItem is DescriptionCourante dcr2
+                    ? dcr2.Texte : CmbDescription.Text;
+                string couturier = "—";
+                if (CmbCouturier.SelectedValue is int idCout2)
+                {
+                    var emp2 = _context.Employes.FirstOrDefault(e => e.IdEmploye == idCout2);
+                    if (emp2 != null) couturier = $"{emp2.Prenom} {emp2.Nom}".Trim();
+                }
+
+                if (!AfficherRecapitulatif(nomClient, typeVet, description, couturier,
+                        montant, DateFin.SelectedDate ?? DateTime.Today,
+                        mesures, _materiauxTemporaires))
+                    return; // L'utilisateur a annulé
+            }
+
             try
             {
                 if (_pieceSelectionneeId.HasValue)
@@ -1292,8 +1329,10 @@ namespace GestionCoutureApp.Views
             var mesures = CollecterMesures();
 
             // ── Afficher le récapitulatif ──────────────────────────────────
+            // Passer une copie de la liste pour que l'affichage soit stable
             if (!AfficherRecapitulatif(nomClient, typeVetement, description, couturier,
-                montant, DateFin.SelectedDate!.Value, mesures, _materiauxTemporaires))
+                montant, DateFin.SelectedDate!.Value, mesures,
+                _materiauxTemporaires.ToList()))
                 return;  // L'utilisateur a annulé
 
             // SECRETAIRE : confirmation + mot de passe
@@ -1457,18 +1496,31 @@ namespace GestionCoutureApp.Views
 
             // ── Bloc matériaux ──
             decimal totalMat = 0;
+            var blcMat = CreerBlocRecap("📦  Matériaux & Suppléments");
             if (materiaux.Count > 0)
             {
-                var blcMat = CreerBlocRecap("📦  Matériaux & Suppléments");
                 foreach (var mat in materiaux)
                 {
                     AjouterLigneRecap(blcMat, mat.Designation,
                         $"{mat.Quantite} × {mat.PrixUnitaire:N0} F = {mat.Montant:N0} FCFA");
                     totalMat += mat.Montant;
                 }
-                AjouterLigneRecap(blcMat, "Sous-total matériaux", $"{totalMat:N0} FCFA", gras: true);
-                root.Children.Add(blcMat);
+                AjouterLigneRecap(blcMat, "Sous-total matériaux",
+                    $"{totalMat:N0} FCFA", gras: true);
             }
+            else
+            {
+                // Afficher explicitement "aucun matériau" pour que la section soit visible
+                var sp = (System.Windows.Controls.StackPanel)blcMat.Child;
+                sp.Children.Add(new System.Windows.Controls.TextBlock
+                {
+                    Text = "Aucun matériau — 0 FCFA",
+                    FontSize = 12,
+                    FontStyle = System.Windows.FontStyles.Italic,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))
+                });
+            }
+            root.Children.Add(blcMat);
 
             // ── Total général ──
             var totalGeneral = montant + totalMat;
@@ -1479,6 +1531,15 @@ namespace GestionCoutureApp.Views
                 Padding = new Thickness(16, 12, 16, 12),
                 Margin = new Thickness(0, 8, 0, 20)
             };
+            var spTotal = new StackPanel();
+            // Décomposition si matériaux
+            if (totalMat > 0)
+            {
+                var spDec = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+                spDec.Children.Add(new TextBlock { Text = $"Couture : {montant:N0}  +  Matériaux : {totalMat:N0}  =",
+                    FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)) });
+                spTotal.Children.Add(spDec);
+            }
             var rowTotal = new Grid();
             rowTotal.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             rowTotal.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -1500,7 +1561,8 @@ namespace GestionCoutureApp.Views
             Grid.SetColumn(valTotal, 1);
             rowTotal.Children.Add(lblTotal);
             rowTotal.Children.Add(valTotal);
-            blcTotal.Child = rowTotal;
+            spTotal.Children.Add(rowTotal);
+            blcTotal.Child = spTotal;
             root.Children.Add(blcTotal);
 
             // ── Boutons ──
@@ -1916,6 +1978,39 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Vider tous les champs
         // ==================================================================
+        // ==================================================================
+        // Calcul RDV par défaut : heure actuelle + 24h, contraint à 08h-22h
+        // Règle métier : pas de RDV entre 22h01 et 07h59.
+        //   - Si +24h tombe entre 22h01 et minuit  → lendemain à 08h00
+        //   - Si +24h tombe entre 00h00 et 07h59   → même jour à 08h00
+        //   - Sinon on garde l'heure calculée
+        // ==================================================================
+        private static (DateTime date, TimeSpan heure) CalculerRdvParDefaut()
+        {
+            var candidat = DateTime.Now.AddHours(24);
+            var h = candidat.TimeOfDay;
+
+            // Plage interdite : < 08h00 ou >= 22h00
+            if (h >= new TimeSpan(22, 0, 0))
+            {
+                // Lendemain à 08h00
+                return (candidat.Date.AddDays(1), new TimeSpan(8, 0, 0));
+            }
+            if (h < new TimeSpan(8, 0, 0))
+            {
+                // Même jour que le candidat à 08h00
+                return (candidat.Date, new TimeSpan(8, 0, 0));
+            }
+            // Heure valide → on arrondit à la demi-heure supérieure
+            int minutesArr = ((h.Minutes / 30) + 1) * 30;
+            if (minutesArr >= 60)
+                h = new TimeSpan(h.Hours + 1, 0, 0);
+            else
+                h = new TimeSpan(h.Hours, minutesArr, 0);
+
+            return (candidat.Date, h);
+        }
+
         private void ViderChamps()
         {
             _commandeSelectionneeId = 0;
@@ -1931,8 +2026,11 @@ namespace GestionCoutureApp.Views
             TxtPrixTotal.Text = "Prix total : -";
             TxtMontant.Text = "";
             TxtHeureDebut.Text = DateTime.Now.ToString("HH:mm");
-            TxtHeureFin.Text = "";
-            DateFin.SelectedDate = null;
+            // Recalculer le RDV par défaut (+24h, règle 08h-22h)
+            var (dateRdv, heureRdv) = CalculerRdvParDefaut();
+            _dateRdvDefaut          = dateRdv;
+            DateFin.SelectedDate    = dateRdv;
+            TxtHeureFin.Text        = heureRdv.ToString(@"hh\:mm");
             CmbStatut.SelectedIndex = 0;
             _prixBaseActuel = 0;
             PanelMesuresDynamiques.Children.Clear();

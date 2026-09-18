@@ -122,10 +122,10 @@
                 <!-- 1 — Total encaissé client -->
                 <Border CornerRadius="8" Padding="14,12" Margin="0,0,6,0" Background="#1A1A1A">
                     <StackPanel>
-                        <TextBlock Text="TOTAL CA ENCAISSÉ" FontSize="9" FontWeight="Bold" Foreground="#B0A8A4"/>
+                        <TextBlock Text="TOTAL ENCAISSÉ CLIENT" FontSize="9" FontWeight="Bold" Foreground="#B0A8A4"/>
                         <TextBlock x:Name="TxtCaEncaisseTotal" Text="0"
                                    FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA (facture totale)" FontSize="10" Foreground="#B0A8A4"/>
+                        <TextBlock Text="FCFA — paiements reçus (couture + matériaux)" FontSize="10" Foreground="#B0A8A4" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
@@ -135,37 +135,37 @@
                         <TextBlock Text="DONT MATÉRIAUX" FontSize="9" FontWeight="Bold" Foreground="#9CA3AF"/>
                         <TextBlock x:Name="TxtTotalMateriauxKpi" Text="0"
                                    FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA (100% atelier)" FontSize="10" Foreground="#9CA3AF"/>
+                        <TextBlock Text="FCFA — revient 100% à l'atelier" FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- 3 — CA couture base commission -->
+                <!-- 3 — Couture seule (base de la commission) -->
                 <Border CornerRadius="8" Padding="14,12" Margin="0,0,6,0" Background="#1E3A5F">
                     <StackPanel>
-                        <TextBlock Text="CA COUTURE (BASE)" FontSize="9" FontWeight="Bold" Foreground="#93C5FD"/>
+                        <TextBlock Text="COUTURE — BASE COMMISSION" FontSize="9" FontWeight="Bold" Foreground="#93C5FD"/>
                         <TextBlock x:Name="TxtCaTotal" Text="0"
                                    FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA (assujetti comm.)" FontSize="10" Foreground="#93C5FD"/>
+                        <TextBlock Text="FCFA — seule cette part est commissionnée" FontSize="10" Foreground="#93C5FD" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- 4 — Commissions à reverser -->
+                <!-- 4 — Commissions à reverser aux couturiers -->
                 <Border CornerRadius="8" Padding="14,12" Margin="0,0,6,0" Background="#CC0000">
                     <StackPanel>
-                        <TextBlock Text="COMMISSIONS" FontSize="9" FontWeight="Bold" Foreground="#FFCCCC"/>
+                        <TextBlock Text="COMMISSIONS COUTURIERS" FontSize="9" FontWeight="Bold" Foreground="#FFCCCC"/>
                         <TextBlock x:Name="TxtTotalCommissions" Text="0"
                                    FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA à reverser" FontSize="10" Foreground="#FFCCCC"/>
+                        <TextBlock Text="FCFA — à reverser aux couturiers" FontSize="10" Foreground="#FFCCCC" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- 5 — Reste atelier (matériaux + part couture atelier) -->
+                <!-- 5 — Ce qui reste pour l'atelier -->
                 <Border CornerRadius="8" Padding="14,12" Background="#3D3530">
                     <StackPanel>
-                        <TextBlock Text="RESTE ATELIER" FontSize="9" FontWeight="Bold" Foreground="#C8B8B0"/>
+                        <TextBlock Text="BÉNÉFICE ATELIER" FontSize="9" FontWeight="Bold" Foreground="#C8B8B0"/>
                         <TextBlock x:Name="TxtResteAtelier" Text="0"
                                    FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA (mat. + part atelier)" FontSize="10" Foreground="#C8B8B0"/>
+                        <TextBlock Text="FCFA — matériaux + part couture atelier" FontSize="10" Foreground="#C8B8B0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </UniformGrid>
@@ -182,7 +182,7 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock Text="Cet aperçu ne porte que sur les commandes pas encore rattachées à une commission déjà enregistrée. Une fois «Enregistrer» cliqué, ces commandes sont verrouillées et ne réapparaîtront plus dans un futur calcul."
+            <TextBlock Text="Cet aperçu ne porte que sur les pièces pas encore rattachées à une commission déjà enregistrée. Une fois «Enregistrer» cliqué, ces pièces sont verrouillées et ne réapparaîtront plus dans un futur calcul de commission."
                        FontSize="11"
                     Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap"
@@ -192,7 +192,7 @@
             <Border Style="{StaticResource Card}"
                     Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Detail par Couturier (aperçu, pas encore enregistré)"
+                    <TextBlock Text="Détail par Couturier — Aperçu (rien n'est encore enregistré)"
                                FontSize="14"
                             FontWeight="Bold"
                                Foreground="{StaticResource PrimaryBrush}"
@@ -203,24 +203,24 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Couturier"
                                     Binding="{Binding Nom}" Width="*"/>
-                            <DataGridTextColumn Header="Pièces"
-                                    Binding="{Binding NbCommandes}" Width="60"/>
-                            <DataGridTextColumn Header="CA encaissé"
-                                    Binding="{Binding TotalEncaisseAffiche}" Width="100"/>
-                            <DataGridTextColumn Header="Matériaux"
-                                    Binding="{Binding TotalMateriauxAffiche}" Width="90"/>
-                            <DataGridTextColumn Header="CA couture"
-                                    Binding="{Binding CaTotalAffiche}" Width="90"/>
-                            <DataGridTextColumn Header="Encaissé couture"
-                                    Binding="{Binding CaEncaisseAffiche}" Width="110"/>
-                            <DataGridTextColumn Header="Base retenue"
+                            <DataGridTextColumn Header="Nb pièces cousues"
+                                    Binding="{Binding NbCommandes}" Width="80"/>
+                            <DataGridTextColumn Header="Total encaissé client"
+                                    Binding="{Binding TotalEncaisseAffiche}" Width="120"/>
+                            <DataGridTextColumn Header="Dont matériaux"
+                                    Binding="{Binding TotalMateriauxAffiche}" Width="100"/>
+                            <DataGridTextColumn Header="Total couture"
+                                    Binding="{Binding CaTotalAffiche}" Width="100"/>
+                            <DataGridTextColumn Header="Encaissé couture seule"
+                                    Binding="{Binding CaEncaisseAffiche}" Width="130"/>
+                            <DataGridTextColumn Header="Base de calcul"
                                     Binding="{Binding BaseAffichee}" Width="100"/>
-                            <DataGridTextColumn Header="Commission"
-                                    Binding="{Binding CommissionAffichee}" Width="100"/>
+                            <DataGridTextColumn Header="Commission due"
+                                    Binding="{Binding CommissionAffichee}" Width="110"/>
                             <!-- Qualité -->
-                            <DataGridTextColumn Header="Retours"
-                                    Binding="{Binding NbRetours}" Width="65"/>
-                            <DataGridTemplateColumn Header="Qualité" Width="75">
+                            <DataGridTextColumn Header="Nb retours"
+                                    Binding="{Binding NbRetours}" Width="75"/>
+                            <DataGridTemplateColumn Header="Taux qualité" Width="85">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding TauxQualiteAffiche}"
@@ -241,7 +241,7 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="🎁 Prime" Width="100">
+                            <DataGridTemplateColumn Header="🎁 Prime qualité" Width="110">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border CornerRadius="4" Padding="6,2"
@@ -263,7 +263,7 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="TOTAL" Width="100">
+                            <DataGridTemplateColumn Header="Total à verser" Width="110">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding TotalAffiche}"
@@ -274,7 +274,7 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="Reste atelier" Width="100">
+                            <DataGridTemplateColumn Header="Part atelier" Width="100">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding ResteAtelierAffiche}"
@@ -289,7 +289,7 @@
                     </DataGrid>
 
                     <Button x:Name="BtnEnregistrer"
-                            Content="Enregistrer ces commissions (verrouille les commandes concernées)"
+                            Content="✅  Enregistrer et verser ces commissions (les pièces seront verrouillées)"
                             Style="{StaticResource BtnPrimary}"
                             Height="42"
                             FontSize="13"
@@ -312,27 +312,27 @@
                               SelectionChanged="GridHistorique_SelectionChanged"
                               Margin="0,0,0,10">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Date"
+                            <DataGridTextColumn Header="Date calcul"
                                     Binding="{Binding DateCalculAffichee}"
                                     Width="140"/>
-                            <DataGridTextColumn Header="Employé"
+                            <DataGridTextColumn Header="Couturier"
                                     Binding="{Binding NomEmployeSnapshot}"
                                     Width="*"/>
                             <DataGridTextColumn Header="Période"
                                     Binding="{Binding PeriodeAffichee}"
                                     Width="180"/>
-                            <DataGridTextColumn Header="Base"
+                            <DataGridTextColumn Header="Base de calcul"
                                     Binding="{Binding BaseCalcul}"
-                                    Width="90"/>
-                            <DataGridTextColumn Header="Montant (FCFA)"
-                                    Binding="{Binding MontantAffiche}"
-                                    Width="120"/>
-                            <DataGridTextColumn Header="🎁 Prime"
-                                    Binding="{Binding PrimeAffiche}"
-                                    Width="90"/>
-                            <DataGridTextColumn Header="Total"
-                                    Binding="{Binding TotalAffiche}"
                                     Width="110"/>
+                            <DataGridTextColumn Header="Commission (FCFA)"
+                                    Binding="{Binding MontantAffiche}"
+                                    Width="140"/>
+                            <DataGridTextColumn Header="🎁 Prime qualité"
+                                    Binding="{Binding PrimeAffiche}"
+                                    Width="110"/>
+                            <DataGridTextColumn Header="Total versé (FCFA)"
+                                    Binding="{Binding TotalAffiche}"
+                                    Width="130"/>
                             <DataGridTextColumn Header="Statut"
                                     Binding="{Binding StatutAffichage}"
                                     Width="90"/>

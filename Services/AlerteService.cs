@@ -110,6 +110,50 @@ namespace GestionCoutureApp.Services
             return resultat.OrderBy(a => a.DateRendezVous).ToList();
         }
 
+        /// <summary>
+        /// Section Retrait : toutes les pièces non livrées dont le RDV est
+        /// dans les 7 prochains jours OU dont la pièce est terminée
+        /// (y compris si le RDV est passé — le client n'est pas encore venu).
+        /// </summary>
+        public async Task<List<AlerteRendezVous>> ObtenirRendezVousSemaine()
+        {
+            var maintenant = DateTime.Now;
+            var finSemaine = maintenant.AddDays(7);
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var pieces = await context.PiecesCommande
+                .Include(p => p.Couturier)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Client)
+                .Where(p => p.Statut != "Livree" && p.Commande != null)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var resultat = new List<AlerteRendezVous>();
+            foreach (var piece in pieces)
+            {
+                var commande = piece.Commande!;
+                var dateRdv  = ObtenirDateRendezVous(piece, commande);
+
+                // Inclure : pièce terminée (peu importe le RDV) OU RDV dans la semaine
+                bool pieceTerminee = piece.Statut == "Terminee";
+                bool rdvSemaine    = dateRdv >= maintenant && dateRdv <= finSemaine;
+
+                if (!pieceTerminee && !rdvSemaine) continue;
+
+                var alerte = ConstruireAlerte(piece, commande, dateRdv, maintenant, "RendezVousProche");
+                // ProposerContactWhatsApp : pièce terminée ET (RDV passé ou aujourd'hui)
+                alerte.ProposerContactWhatsApp = pieceTerminee && dateRdv.Date <= maintenant.Date;
+                resultat.Add(alerte);
+            }
+
+            return resultat
+                .OrderBy(a => a.ProposerContactWhatsApp ? 0 : 1) // Prêts en premier
+                .ThenBy(a => a.DateRendezVous)
+                .ToList();
+        }
+
         // CORRECTIF (audit) : centralise la règle "rendez-vous de la pièce" —
         // honore désormais PieceCommande.RendezVousException (Point 5, cas
         // d'exception) au lieu d'utiliser systématiquement le rendez-vous

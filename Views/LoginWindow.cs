@@ -8,11 +8,13 @@ namespace GestionCoutureApp.Views
     public partial class LoginWindow : Window
     {
         private readonly IAuthService _authService;
+        private readonly ILogService _logService;
 
         public LoginWindow()
         {
             InitializeComponent();
             _authService = App.Services.GetRequiredService<IAuthService>();
+            _logService = App.Services.GetRequiredService<ILogService>();
         }
 
         private void BtnConnexion_Click(object sender, RoutedEventArgs e)
@@ -50,6 +52,11 @@ namespace GestionCoutureApp.Views
             if (employe != null)
             {
                 TxtErreur.Visibility = Visibility.Collapsed;
+
+                // Logger la connexion réussie
+                _logService.LogAction("Connexion réussie", 
+                    $"Utilisateur: {employe.Nom} {employe.Prenom} ({employe.Role})", 
+                    employe.Nom);
 
                 // ── Changement de mot de passe obligatoire ──────────────────
                 // La colonne DoitChangerMotDePasse a été supprimée (migration
@@ -107,6 +114,9 @@ namespace GestionCoutureApp.Views
             }
             else
             {
+                // Logger la tentative de connexion échouée
+                _logService.LogWarning($"Tentative de connexion échouée pour l'identifiant: {identifiant}");
+                
                 TxtErreur.Text = "Identifiant ou mot de passe incorrect.";
                 TxtErreur.Visibility = Visibility.Visible;
             }

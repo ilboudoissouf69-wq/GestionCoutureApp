@@ -5,32 +5,34 @@
       Background="{StaticResource BackgroundBrush}">
 
     <Page.Resources>
-        <!-- Style onglet -->
-        <Style x:Key="TabStyle" TargetType="TabItem">
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="18,10"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#6B7280"/>
+
+        <!-- ── Bouton nav horizontal inactif ── -->
+        <Style x:Key="NavTopBtn" TargetType="Button">
+            <Setter Property="Background"     Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0,0,0,3"/>
+            <Setter Property="BorderBrush"    Value="Transparent"/>
+            <Setter Property="Foreground"     Value="#6B7280"/>
+            <Setter Property="FontSize"       Value="12"/>
+            <Setter Property="FontWeight"     Value="Normal"/>
+            <Setter Property="Padding"        Value="14,10"/>
+            <Setter Property="Cursor"         Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Bd" Background="Transparent"
-                                BorderThickness="0,0,0,3"
-                                BorderBrush="Transparent"
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter ContentSource="Header"
-                                              HorizontalAlignment="Center"
+                            <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#CC0000"/>
-                                <Setter Property="Foreground" Value="#CC0000"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
-                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#FDF5F2"/>
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="#FDF5F2"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -38,433 +40,1234 @@
             </Setter>
         </Style>
 
-        <!-- Section titre -->
-        <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="#8B7355"/>
-            <Setter Property="Margin" Value="0,0,0,12"/>
+        <!-- ── Bouton nav horizontal actif ── -->
+        <Style x:Key="NavTopBtnActif" TargetType="Button"
+               BasedOn="{StaticResource NavTopBtn}">
+            <Setter Property="BorderBrush"  Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground"   Value="{StaticResource AccentBrush}"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
         </Style>
+
+        <!-- ── Carte section ── -->
+        <Style x:Key="ParamCard" TargetType="Border">
+            <Setter Property="Background"       Value="White"/>
+            <Setter Property="BorderBrush"      Value="#E5E0DC"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="CornerRadius"     Value="10"/>
+            <Setter Property="Padding"          Value="22,18"/>
+            <Setter Property="Margin"           Value="0,0,0,14"/>
+        </Style>
+
     </Page.Resources>
 
-    <Grid Margin="28,24,28,28">
+    <Grid>
         <Grid.RowDefinitions>
+            <!-- En-tête page -->
             <RowDefinition Height="Auto"/>
+            <!-- Barre nav horizontale -->
+            <RowDefinition Height="Auto"/>
+            <!-- Contenu scrollable -->
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- TITRE -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="Paramètres" FontSize="22" FontWeight="Bold"
-                       Foreground="{StaticResource PrimaryBrush}"/>
-            <Border Height="3" Width="40" CornerRadius="2" Background="#CC0000"
-                    HorizontalAlignment="Left" Margin="0,6,0,0"/>
-        </StackPanel>
-
-        <!-- ══ TABS ══════════════════════════════════════════════════════ -->
-        <TabControl Grid.Row="1"
-                    x:Name="MainTabs"
-                    Background="White"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1">
-
-            <TabControl.Resources>
-                <Style TargetType="TabPanel">
-                    <Setter Property="Background" Value="White"/>
-                </Style>
-            </TabControl.Resources>
-
-            <!-- ══════════════════════════════════════════════════════════
-                 ONGLET 1 — Comptabilité & Seuils
-            ══════════════════════════════════════════════════════════ -->
-            <TabItem Header="📊  Comptabilité &amp; Seuils" Style="{StaticResource TabStyle}">
-                <ScrollViewer Padding="28,20,28,28" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="560" HorizontalAlignment="Left">
-
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="MODE DE CALCUL DU CHIFFRE D'AFFAIRES"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
-
-                        <RadioButton x:Name="RbModeEncaisse"
-                                     Content="✅  Basé sur les encaissements réels (acomptes + solde perçus)"
-                                     FontSize="13" Margin="0,0,0,8" GroupName="ModeCA"/>
-                        <RadioButton x:Name="RbModeTotal"
-                                     Content="Basé sur la valeur totale des commandes engagées"
-                                     FontSize="13" Margin="0,0,0,24" GroupName="ModeCA"/>
-
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="SEUILS &amp; BUDGETS" Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
-
-                        <TextBlock Text="Seuil d'alerte des dépenses mensuelles (FCFA)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtSeuilDepenses" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,4"/>
-                        <TextBlock Text="Une alerte s'affiche si les dépenses du mois dépassent ce plafond."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,14"/>
-
-                        <TextBlock Text="Budget fixe Loyer / Charges récurrentes (FCFA / mois)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtBudgetLoyer" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,4"/>
-                        <TextBlock Text="Valeur pré-remplie lors de la saisie des dépenses récurrentes."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,24"/>
-
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="APPROBATION DES DÉPENSES" Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
-
-                        <CheckBox x:Name="ChkApprobationDep"
-                                  Content="Exiger la validation du Boss pour les dépenses saisies par la secrétaire"
-                                  FontSize="13" Margin="0,0,0,6"/>
-                        <TextBlock Text="Si coché, les dépenses de la secrétaire restent 'En attente' jusqu'à votre approbation."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="0,0,0,24"/>
-
-                        <Button Content="💾  Enregistrer — Comptabilité"
-                                Style="{StaticResource BtnSuccess}" Height="38"
-                                Click="BtnSauvegarderComptabilite_Click"/>
-                        <TextBlock x:Name="TxtMsgComptabilite" FontSize="12"
-                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ══════════════════════════════════════════════════════════
-                 ONGLET 2 — Messages & WhatsApp
-            ══════════════════════════════════════════════════════════ -->
-            <TabItem Header="💬  Messages &amp; WhatsApp" Style="{StaticResource TabStyle}">
-                <ScrollViewer Padding="28,20,28,28" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="620" HorizontalAlignment="Left">
-
-                        <!-- Légende balises -->
-                        <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1"
-                                CornerRadius="8" Padding="14,10" Margin="0,0,0,20">
-                            <StackPanel>
-                                <TextBlock Text="📌  Balises dynamiques disponibles"
-                                           FontSize="11" FontWeight="Bold" Foreground="#1E40AF"
-                                           Margin="0,0,0,6"/>
-                                <TextBlock FontSize="11" Foreground="#1E3A5F" TextWrapping="Wrap">
-                                    <Run FontWeight="Bold">{Nom}</Run> — Nom du client   
-                                    <Run FontWeight="Bold">{Commande}</Run> — N° commande   
-                                    <Run FontWeight="Bold">{Pieces}</Run> — Liste des pièces   
-                                    <Run FontWeight="Bold">{Reste}</Run> — Reste à payer (FCFA)&#x0A;
-                                    <Run FontWeight="Bold">{Date}</Run> — Date du RDV   
-                                    <Run FontWeight="Bold">{Heure}</Run> — Heure du RDV   
-                                    <Run FontWeight="Bold">{Atelier}</Run> — Nom de l'atelier
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Commande prête -->
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,12">
-                            <TextBlock Text="📩  MESSAGE 1 — COMMANDE PRÊTE"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
-                        <TextBox x:Name="TxtMsgCommandePrete"
-                                 Height="100" FontSize="13" TextWrapping="Wrap"
-                                 AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 Margin="0,0,0,20"
-                                 Padding="10,8,10,8"
-                                 BorderBrush="{StaticResource BorderBrush}"
-                                 BorderThickness="1"/>
-
-                        <!-- Rappel RDV -->
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,12">
-                            <TextBlock Text="⏰  MESSAGE 2 — RAPPEL DE RENDEZ-VOUS"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
-                        <TextBox x:Name="TxtMsgRappelRdv"
-                                 Height="80" FontSize="13" TextWrapping="Wrap"
-                                 AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 Margin="0,0,0,20"
-                                 Padding="10,8,10,8"
-                                 BorderBrush="{StaticResource BorderBrush}"
-                                 BorderThickness="1"/>
-
-                        <!-- Retouche prête -->
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,12">
-                            <TextBlock Text="🔄  MESSAGE 3 — RETOUCHE / REPRISE PRÊTE"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
-                        <TextBox x:Name="TxtMsgRetouchePrete"
-                                 Height="70" FontSize="13" TextWrapping="Wrap"
-                                 AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 Margin="0,0,0,20"
-                                 Padding="10,8,10,8"
-                                 BorderBrush="{StaticResource BorderBrush}"
-                                 BorderThickness="1"/>
-
-                        <!-- Boutons -->
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="🔄  Remettre les messages par défaut"
-                                    Style="{StaticResource BtnGhost}" Height="36"
-                                    Padding="14,0,14,0" Margin="0,0,10,0"
-                                    Click="BtnResetMessages_Click"/>
-                            <Button Content="💾  Enregistrer les messages"
-                                    Style="{StaticResource BtnSuccess}" Height="36"
-                                    Padding="14,0,14,0"
-                                    Click="BtnSauvegarderMessages_Click"/>
+        <!-- ══ EN-TÊTE ═══════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Background="White"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="28,18,28,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="⚙️" FontSize="20"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <StackPanel>
+                            <TextBlock x:Name="TxtPageTitre"
+                                       Text="Paramètres"
+                                       FontSize="20" FontWeight="Bold"
+                                       Foreground="{StaticResource PrimaryBrush}"/>
+                            <TextBlock x:Name="TxtPageDesc"
+                                       Text="Configuration système"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
                         </StackPanel>
-                        <TextBlock x:Name="TxtMsgWhatsApp" FontSize="12"
-                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                </StackPanel>
+                <!-- Badge langue + version -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Border Background="#1A1A1A" CornerRadius="6"
+                            Padding="12,5" Margin="0,0,12,0">
+                        <TextBlock x:Name="TxtBadgeFR"
+                                   Text="🇫🇷 Français"
+                                   FontSize="11" Foreground="#B0A8A4"/>
+                    </Border>
+                    <TextBlock Text="v2.0 — Retouche Choco"
+                               FontSize="10"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
-            <!-- ══════════════════════════════════════════════════════════
-                 ONGLET 3 — Réglages Métier & Alertes
-            ══════════════════════════════════════════════════════════ -->
-            <TabItem Header="⚙️  Réglages Métier" Style="{StaticResource TabStyle}">
-                <ScrollViewer Padding="28,20,28,28" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+        <!-- ══ BARRE DE NAVIGATION HORIZONTALE ═══════════════════════════ -->
+        <Border Grid.Row="1" Background="White"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Hidden">
+                <StackPanel Orientation="Horizontal" Margin="16,0">
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="ALERTES &amp; DÉLAIS" Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+                    <!-- Groupe gestion -->
+                    <TextBlock Text="GESTION"
+                               FontSize="9" FontWeight="Bold" Foreground="#CBD5E1"
+                               VerticalAlignment="Center" Margin="8,0,4,0"/>
 
-                        <TextBlock Text="Délai du rappel 'rendez-vous proche' (heures avant le RDV)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtDelaiAlerte" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,14"/>
+                    <Button x:Name="BtnNavComptabilite"
+                            Style="{StaticResource NavTopBtnActif}"
+                            Click="BtnNav_Click" Tag="Comptabilite">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📊" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavComptabilite"
+                                       Text="Comptabilité" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-                        <TextBlock Text="Seuil d'alerte de retard (heures après la date de livraison)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtSeuiRetard" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,24"/>
+                    <Button x:Name="BtnNavMetier"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Metier">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚙️" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavMetier"
+                                       Text="Réglages Métier" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="RÉMUNÉRATION" Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+                    <Button x:Name="BtnNavMessages"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Messages">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="💬" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavMessages"
+                                       Text="Messages WhatsApp" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-                        <TextBlock Text="Salaire mensuel de la secrétaire (FCFA)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtSalaireSecretaire" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,14"/>
+                    <!-- Séparateur -->
+                    <Border Width="1" Background="#E5E7EB" Margin="8,8"/>
 
-                        <TextBlock Text="Taux de commission couturier par défaut (%)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtTauxCommission" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,4"/>
-                        <TextBlock Text="Valeur pré-remplie dans l'écran Commissions."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,14"/>
+                    <!-- Groupe système -->
+                    <TextBlock Text="SYSTÈME"
+                               FontSize="9" FontWeight="Bold" Foreground="#CBD5E1"
+                               VerticalAlignment="Center" Margin="4,0,4,0"/>
 
-                        <TextBlock Text="Prime Zéro Défaut par défaut (FCFA)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtPrimeZeroDefaut" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,4"/>
-                        <TextBlock Text="Prime accordée au couturier avec 0 retour sur la période (min. 5 pièces)."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,24"/>
+                    <Button x:Name="BtnNavSauvegarde"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Sauvegarde">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="☁️" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavSauvegarde"
+                                       Text="Sauvegarde" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-                        <Button Content="💾  Enregistrer — Réglages Métier"
-                                Style="{StaticResource BtnSuccess}" Height="38"
-                                Click="BtnSauvegarderMetier_Click"/>
-                        <TextBlock x:Name="TxtMsgMetier" FontSize="12"
-                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                    <Button x:Name="BtnNavImpression"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Impression">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🧾" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavImpression"
+                                       Text="Impression" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-            <!-- ══════════════════════════════════════════════════════════
-                 ONGLET 4 — Sauvegarde & Google Drive
-            ══════════════════════════════════════════════════════════ -->
-            <TabItem Header="☁️  Sauvegarde" Style="{StaticResource TabStyle}">
-                <ScrollViewer Padding="28,20,28,28" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="540" HorizontalAlignment="Left">
+                    <Button x:Name="BtnNavMaintenance"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Maintenance">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🛠️" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavMaintenance"
+                                       Text="Maintenance" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="SYNCHRONISATION AUTOMATIQUE"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+                    <!-- Séparateur -->
+                    <Border Width="1" Background="#E5E7EB" Margin="8,8"/>
 
-                        <TextBlock Text="Fréquence de synchronisation Google Drive (heures)"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtFrequenceSync" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,4"/>
-                        <TextBlock Text="0 = sauvegarde uniquement à la fermeture de l'application."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,20"/>
+                    <!-- Groupe personnalisation -->
+                    <TextBlock Text="PERSONNALISATION"
+                               FontSize="9" FontWeight="Bold" Foreground="#CBD5E1"
+                               VerticalAlignment="Center" Margin="4,0,4,0"/>
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="OPTIMISATION DES PHOTOS"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+                    <Button x:Name="BtnNavApparence"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Apparence">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🎨" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavApparence"
+                                       Text="Apparence" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
-                        <CheckBox x:Name="ChkCompresserPhotos"
-                                  Content="Compresser les photos des vêtements avant envoi"
-                                  FontSize="13" Margin="0,0,0,6"/>
-                        <TextBlock Text="Redimensionnement 1024×768 pixels + JPEG 70% — environ 70 Ko/photo au lieu de 4–6 Mo."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="0,0,0,24"/>
+                    <Button x:Name="BtnNavLangue"
+                            Style="{StaticResource NavTopBtn}"
+                            Click="BtnNav_Click" Tag="Langue">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🌐" FontSize="13"
+                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNavLangue"
+                                       Text="Langue" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="ÉTAT DU CLOUD" Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+        <!-- ══ CONTENU PRINCIPAL ════════════════════════════════════════ -->
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="28,24,28,28">
+            <StackPanel>
 
-                        <!-- Pastille statut -->
-                        <Border CornerRadius="8" Padding="14,10" Margin="0,0,0,16"
-                                Background="#1A1A1A">
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 1 — COMPTABILITÉ
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelComptabilite" Visibility="Visible">
+
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="{StaticResource AccentBrush}"
+                                        Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblModeCA"
+                                               Text="Mode de calcul du Chiffre d'Affaires"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescModeCA"
+                                               Text="Définit la base utilisée dans les tableaux de bord et le bilan."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <RadioButton x:Name="RbModeEncaisse" FontSize="13"
+                                         Margin="0,0,0,10" GroupName="ModeCA">
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtRbEncaisse"
+                                               Text="✅  Basé sur les encaissements réels (recommandé)"
+                                               FontSize="13" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="TxtRbEncaisseDesc"
+                                               Text="Acomptes + solde effectivement perçus par l'atelier."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="22,2,0,0"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton x:Name="RbModeTotal" FontSize="13"
+                                         GroupName="ModeCA">
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtRbTotal"
+                                               Text="Basé sur la valeur totale des commandes engagées"
+                                               FontSize="13" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="TxtRbTotalDesc"
+                                               Text="Inclut les montants non encore encaissés."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="22,2,0,0"/>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#D97706" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblSeuils"
+                                               Text="Seuils &amp; Budgets"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescSeuils"
+                                               Text="Plafonds d'alerte et valeurs pré-remplies."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock x:Name="TxtStatutDrive"
-                                               Text="Non synchronisé"
-                                               FontSize="13" FontWeight="Bold"
-                                               Foreground="White"/>
-                                    <TextBlock x:Name="TxtDernierSync"
-                                               Text="Dernière sauvegarde : jamais"
-                                               FontSize="11" Foreground="#B0A8A4"
-                                               Margin="0,4,0,0"/>
+                                    <TextBlock x:Name="TxtLblSeuilDep"
+                                               Text="Seuil d'alerte dépenses (FCFA/mois)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtSeuilDepenses"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                    <TextBlock x:Name="TxtDescSeuilDep"
+                                               Text="Alerte si les dépenses dépassent ce plafond."
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <Border Grid.Column="1" CornerRadius="20" Width="20" Height="20"
-                                        x:Name="PastilleStatut" Background="#374151"
-                                        VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock x:Name="TxtLblBudgetLoyer"
+                                               Text="Budget fixe Loyer / Charges (FCFA/mois)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtBudgetLoyer"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                    <TextBlock x:Name="TxtDescBudgetLoyer"
+                                               Text="Pré-remplit les dépenses récurrentes."
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
                             </Grid>
-                        </Border>
-
-                        <!-- Barre progression -->
-                        <Border x:Name="PanelProgression" Background="#065F46" CornerRadius="8"
-                                Padding="14,10" Margin="0,0,0,14" Visibility="Collapsed">
-                            <TextBlock x:Name="TxtProgression" Text="En cours…"
-                                       FontSize="12" Foreground="White"/>
-                        </Border>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Button Content="💾  Enregistrer fréquence"
-                                    Style="{StaticResource BtnNavy}" Height="38"
-                                    Padding="14,0,14,0" Margin="0,0,10,0"
-                                    Click="BtnSauvegarderSauvegarde_Click"/>
-                            <Button x:Name="BtnSauvegarderDrive"
-                                    Height="38" Padding="16,0,16,0"
-                                    FontSize="13" FontWeight="SemiBold"
-                                    Background="#25D366" Foreground="White"
-                                    BorderThickness="0" Cursor="Hand"
-                                    Click="BtnSauvegarderDrive_Click">
-                                <Button.Content>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="☁️" FontSize="14"
-                                                   VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <TextBlock Text="Synchroniser maintenant"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button.Content>
-                            </Button>
                         </StackPanel>
-                        <TextBlock x:Name="TxtMsgDrive" FontSize="12"
-                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
-                        <TextBlock FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="0,10,0,0">
-                            ℹ️ La première synchronisation ouvrira votre navigateur pour autoriser l'accès à Google Drive.
-                            Le token est conservé localement — vous n'aurez à autoriser qu'une seule fois.
-                        </TextBlock>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                    </Border>
 
-            <!-- ══════════════════════════════════════════════════════════
-                 ONGLET 5 — Impression & Reçus
-            ══════════════════════════════════════════════════════════ -->
-            <TabItem Header="🧾  Impression &amp; Reçus" Style="{StaticResource TabStyle}">
-                <ScrollViewer Padding="28,20,28,28" VerticalScrollBarVisibility="Auto">
-                    <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#059669" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblAppro"
+                                               Text="Workflow d'approbation"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescAppro"
+                                               Text="Contrôle sur les dépenses saisies par la secrétaire."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Background="#F0FDF4" BorderBrush="#BBF7D0"
+                                    BorderThickness="1" CornerRadius="8" Padding="16,12">
+                                <CheckBox x:Name="ChkApprobationDep" FontSize="13">
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtChkAppro"
+                                                   Text="Exiger la validation du Boss pour les dépenses de la secrétaire"
+                                                   FontSize="13" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="TxtDescChkAppro"
+                                                   Text="Les dépenses restent 'En attente' jusqu'à votre approbation."
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </Border>
+                        </StackPanel>
+                    </Border>
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="EN-TÊTE DU REÇU (FORMAT 80 mm)"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+                    <Button x:Name="BtnSauvegarderComptabilite"
+                            Content="💾  Enregistrer les modifications"
+                            Style="{StaticResource BtnSuccess}"
+                            Height="40" Padding="20,0,20,0"
+                            HorizontalAlignment="Left"
+                            Click="BtnSauvegarderComptabilite_Click"/>
+                    <TextBlock x:Name="TxtMsgComptabilite" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+                </StackPanel>
 
-                        <TextBlock Text="Nom de l'atelier sur le reçu *"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtNomAtelier" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,14"/>
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 2 — RÉGLAGES MÉTIER
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelMetier" Visibility="Collapsed">
 
-                        <TextBlock Text="Téléphones de contact"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtTelAtelier" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,14"/>
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#D97706" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblAlertes"
+                                               Text="Alertes &amp; Délais"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescAlertes"
+                                               Text="Délais déclenchant les notifications automatiques."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock x:Name="TxtLblDelai"
+                                               Text="Rappel 'RDV proche' (heures avant)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtDelaiAlerte"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock x:Name="TxtLblRetard"
+                                               Text="Seuil alerte retard (heures après livraison)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtSeuiRetard"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
-                        <TextBlock Text="Adresse / Localisation"
-                                   Style="{StaticResource FieldLabel}"/>
-                        <TextBox x:Name="TxtAdresseAtelier" Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,24"/>
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="{StaticResource AccentBrush}"
+                                        Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblRemun"
+                                               Text="Rémunération"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescRemun"
+                                               Text="Paramètres salariaux et commissions par défaut."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock x:Name="TxtLblSalaire"
+                                               Text="Salaire secrétaire (FCFA/mois)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtSalaireSecretaire"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock x:Name="TxtLblTaux"
+                                               Text="Taux commission couturier (%)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtTauxCommission"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock x:Name="TxtLblPrime"
+                                               Text="Prime Zéro Défaut (FCFA)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtPrimeZeroDefaut"
+                                             Style="{StaticResource ModernTextBox}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
-                        <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="0,0,0,1" Padding="0,0,0,10" Margin="0,0,0,16">
-                            <TextBlock Text="PIED DE PAGE DU REÇU (AVERTISSEMENT LÉGAL)"
-                                       Style="{StaticResource SectionTitle}" Margin="0"/>
-                        </Border>
+                    <Button x:Name="BtnSauvegarderMetier"
+                            Content="💾  Enregistrer les réglages"
+                            Style="{StaticResource BtnSuccess}"
+                            Height="40" Padding="20,0,20,0"
+                            HorizontalAlignment="Left"
+                            Click="BtnSauvegarderMetier_Click"/>
+                    <TextBlock x:Name="TxtMsgMetier" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+                </StackPanel>
 
-                        <TextBox x:Name="TxtPiedRecu"
-                                 Height="80" FontSize="13" TextWrapping="Wrap"
-                                 AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 Margin="0,0,0,4"
-                                 Padding="10,8,10,8"
-                                 BorderBrush="{StaticResource BorderBrush}"
-                                 BorderThickness="1"/>
-                        <TextBlock Text="Ce texte s'affiche en bas de chaque reçu thermique imprimé."
-                                   FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
-                                   Margin="0,0,0,24"/>
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 3 — MESSAGES WHATSAPP
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelMessages" Visibility="Collapsed">
 
-                        <!-- Aperçu minimaliste -->
-                        <Border Background="#1A1A1A" CornerRadius="8" Padding="20,16"
-                                Margin="0,0,0,20">
-                            <StackPanel HorizontalAlignment="Center" MaxWidth="260">
-                                <TextBlock x:Name="PreviewNom"
-                                           Text="Retouche Choco — Ilassa Design"
-                                           FontSize="14" FontWeight="Bold"
-                                           Foreground="White" TextAlignment="Center"/>
-                                <TextBlock x:Name="PreviewTel"
-                                           Text="+226 70 00 00 00"
-                                           FontSize="11" Foreground="#B0A8A4"
-                                           TextAlignment="Center"/>
-                                <TextBlock x:Name="PreviewAdresse"
-                                           Text="Ouagadougou, Secteur 15"
-                                           FontSize="11" Foreground="#B0A8A4"
-                                           TextAlignment="Center" Margin="0,0,0,8"/>
-                                <Border Height="1" Background="#3A3A3A" Margin="0,0,0,8"/>
-                                <TextBlock Text="[Contenu du reçu]" FontSize="11"
-                                           Foreground="#6B7280" TextAlignment="Center"
-                                           FontStyle="Italic" Margin="0,0,0,8"/>
-                                <Border Height="1" Background="#3A3A3A" Margin="0,0,0,8"/>
-                                <TextBlock x:Name="PreviewPied"
-                                           FontSize="10" Foreground="#9CA3AF"
-                                           TextAlignment="Center" TextWrapping="Wrap"/>
+                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE"
+                            BorderThickness="1" CornerRadius="10"
+                            Padding="18,14" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock x:Name="TxtTitreBalises"
+                                       Text="📌  Balises dynamiques disponibles"
+                                       FontSize="12" FontWeight="Bold"
+                                       Foreground="#1E40AF" Margin="0,0,0,8"/>
+                            <UniformGrid Columns="4">
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Nom}</Run><Run> — Client</Run>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Commande}</Run><Run> — N° CMD</Run>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Pieces}</Run><Run> — Liste pièces</Run>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Reste}</Run><Run> — Reste FCFA</Run>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Date}</Run><Run> — Date RDV</Run>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Heure}</Run><Run> — Heure RDV</Run>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="#1E3A5F" Margin="0,2">
+                                    <Run FontWeight="Bold">{Atelier}</Run><Run> — Nom atelier</Run>
+                                </TextBlock>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 3 messages côte à côte -->
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- MSG 1 -->
+                        <Border Grid.Column="0" Style="{StaticResource ParamCard}"
+                                Margin="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Border Background="#DCFCE7" CornerRadius="6"
+                                            Padding="8,3" Margin="0,0,10,0">
+                                        <TextBlock Text="📩 MSG 1" FontSize="10"
+                                                   FontWeight="Bold" Foreground="#166534"/>
+                                    </Border>
+                                    <TextBlock x:Name="TxtTitreMsg1"
+                                               Text="Commande Prête"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBox x:Name="TxtMsgCommandePrete"
+                                         Height="130" FontSize="11" TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Padding="10,8" BorderBrush="#D1D5DB"
+                                         BorderThickness="1"/>
                             </StackPanel>
                         </Border>
 
-                        <Button Content="💾  Enregistrer — Impression"
-                                Style="{StaticResource BtnSuccess}" Height="38"
-                                Click="BtnSauvegarderImpression_Click"/>
-                        <TextBlock x:Name="TxtMsgImpression" FontSize="12"
-                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                        <!-- MSG 2 -->
+                        <Border Grid.Column="2" Style="{StaticResource ParamCard}"
+                                Margin="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Border Background="#FEF3C7" CornerRadius="6"
+                                            Padding="8,3" Margin="0,0,10,0">
+                                        <TextBlock Text="⏰ MSG 2" FontSize="10"
+                                                   FontWeight="Bold" Foreground="#92400E"/>
+                                    </Border>
+                                    <TextBlock x:Name="TxtTitreMsg2"
+                                               Text="Rappel RDV"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBox x:Name="TxtMsgRappelRdv"
+                                         Height="130" FontSize="11" TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Padding="10,8" BorderBrush="#D1D5DB"
+                                         BorderThickness="1"/>
+                            </StackPanel>
+                        </Border>
 
-        </TabControl>
+                        <!-- MSG 3 -->
+                        <Border Grid.Column="4" Style="{StaticResource ParamCard}"
+                                Margin="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Border Background="#EDE9FE" CornerRadius="6"
+                                            Padding="8,3" Margin="0,0,10,0">
+                                        <TextBlock Text="🔄 MSG 3" FontSize="10"
+                                                   FontWeight="Bold" Foreground="#5B21B6"/>
+                                    </Border>
+                                    <TextBlock x:Name="TxtTitreMsg3"
+                                               Text="Retouche Prête"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBox x:Name="TxtMsgRetouchePrete"
+                                         Height="130" FontSize="11" TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Padding="10,8" BorderBrush="#D1D5DB"
+                                         BorderThickness="1"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnResetMessages"
+                                Content="↺  Réinitialiser par défaut"
+                                Style="{StaticResource BtnGhost}"
+                                Height="40" Padding="16,0,16,0"
+                                Margin="0,0,12,0"
+                                Click="BtnResetMessages_Click"/>
+                        <Button x:Name="BtnSauvegarderMessages"
+                                Content="💾  Enregistrer les messages"
+                                Style="{StaticResource BtnSuccess}"
+                                Height="40" Padding="20,0,20,0"
+                                Click="BtnSauvegarderMessages_Click"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtMsgWhatsApp" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+                </StackPanel>
+
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 4 — SAUVEGARDE
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelSauvegarde" Visibility="Collapsed">
+
+                    <!-- Bloc statut Drive -->
+                    <Border Background="#111827" CornerRadius="12"
+                            Padding="20,16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" x:Name="PastilleStatut"
+                                    Width="12" Height="12" CornerRadius="6"
+                                    Background="#374151" Margin="0,0,14,0"
+                                    VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="TxtStatutDrive"
+                                           Text="Non synchronisé"
+                                           FontSize="14" FontWeight="Bold"
+                                           Foreground="White"/>
+                                <TextBlock x:Name="TxtDernierSync"
+                                           Text="Dernière sauvegarde : jamais"
+                                           FontSize="11" Foreground="#6B7280"
+                                           Margin="0,3,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="2"
+                                    x:Name="BtnSauvegarderDrive"
+                                    Height="38" Padding="16,0,16,0"
+                                    FontSize="12" FontWeight="SemiBold"
+                                    Background="#25D366" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"
+                                    Click="BtnSauvegarderDrive_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="☁️" FontSize="13"
+                                               Margin="0,0,6,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtBtnSync"
+                                               Text="Synchroniser maintenant"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <Border x:Name="PanelProgression" Background="#065F46"
+                            CornerRadius="8" Padding="16,10"
+                            Margin="0,0,0,14" Visibility="Collapsed">
+                        <TextBlock x:Name="TxtProgression" Text="En cours…"
+                                   FontSize="12" Foreground="White"/>
+                    </Border>
+
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource ParamCard}"
+                                Margin="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                    <Border Width="4" CornerRadius="2"
+                                            Background="#2563EB" Margin="0,0,12,0"/>
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtLblFrequence"
+                                                   Text="Fréquence de synchronisation"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource PrimaryBrush}"/>
+                                        <TextBlock x:Name="TxtDescFrequence"
+                                                   Text="0 = sauvegarde uniquement à la fermeture."
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtLblFreqVal"
+                                           Text="Toutes les X heures"
+                                           Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtFrequenceSync"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Width="120" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource ParamCard}"
+                                Margin="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                    <Border Width="4" CornerRadius="2"
+                                            Background="#7C3AED" Margin="0,0,12,0"/>
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtLblPhotos"
+                                                   Text="Optimisation des photos"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource PrimaryBrush}"/>
+                                        <TextBlock x:Name="TxtDescPhotos"
+                                                   Text="Réduit la taille du backup Google Drive."
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <Border Background="#F5F3FF" BorderBrush="#DDD6FE"
+                                        BorderThickness="1" CornerRadius="8"
+                                        Padding="14,10">
+                                    <CheckBox x:Name="ChkCompresserPhotos">
+                                        <StackPanel>
+                                            <TextBlock x:Name="TxtChkPhotos"
+                                                       Text="Compresser les photos avant sauvegarde"
+                                                       FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="TxtDescChkPhotos"
+                                                       Text="1024×768 · JPEG 70% · ~70 Ko/photo"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnSauvegarderSauvegarde"
+                                Content="💾  Enregistrer les paramètres"
+                                Style="{StaticResource BtnNavy}"
+                                Height="40" Padding="18,0,18,0"
+                                Click="BtnSauvegarderSauvegarde_Click"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtMsgDrive" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+                    <TextBlock x:Name="TxtInfoDrive"
+                               FontSize="11"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,10,0,0">
+                        ℹ️ La première synchronisation ouvrira votre navigateur pour autoriser l'accès à Google Drive. Le token est conservé localement.
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 5 — IMPRESSION
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelImpression" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition Width="280"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource ParamCard}"
+                                Margin="0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <Border Width="4" CornerRadius="2"
+                                            Background="{StaticResource AccentBrush}"
+                                            Margin="0,0,12,0"/>
+                                    <TextBlock x:Name="TxtLblEntete"
+                                               Text="En-tête du reçu thermique (80 mm)"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock x:Name="TxtLblNomAtelier"
+                                           Text="Nom de l'atelier *"
+                                           Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtNomAtelier"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Margin="0,0,0,12"/>
+
+                                <TextBlock x:Name="TxtLblTel"
+                                           Text="Téléphones de contact"
+                                           Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtTelAtelier"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Margin="0,0,0,12"/>
+
+                                <TextBlock x:Name="TxtLblAdresse"
+                                           Text="Adresse / Localisation"
+                                           Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtAdresseAtelier"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock x:Name="TxtLblPied"
+                                           Text="Pied de reçu (avertissement légal)"
+                                           Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="TxtPiedRecu"
+                                         Height="80" FontSize="12"
+                                         TextWrapping="Wrap" AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Padding="10,8" BorderBrush="#D1D5DB"
+                                         BorderThickness="1"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Aperçu -->
+                        <StackPanel Grid.Column="2">
+                            <TextBlock x:Name="TxtApercuLabel"
+                                       Text="Aperçu du reçu"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,8"/>
+                            <Border Background="#1A1A1A" CornerRadius="8"
+                                    Padding="20,16">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock x:Name="PreviewNom"
+                                               FontSize="13" FontWeight="Bold"
+                                               Foreground="White" TextAlignment="Center"/>
+                                    <TextBlock x:Name="PreviewTel"
+                                               FontSize="10" Foreground="#9CA3AF"
+                                               TextAlignment="Center" Margin="0,3,0,0"/>
+                                    <TextBlock x:Name="PreviewAdresse"
+                                               FontSize="10" Foreground="#9CA3AF"
+                                               TextAlignment="Center" Margin="0,2,0,10"/>
+                                    <Border Height="1" Background="#2D2D2D" Margin="0,0,0,10"/>
+                                    <TextBlock Text="CMD-042  •  18/09/2026"
+                                               FontSize="10" Foreground="#6B7280"
+                                               TextAlignment="Center"/>
+                                    <TextBlock Text="Pantalon  •  2 000 FCFA"
+                                               FontSize="10" Foreground="#9CA3AF"
+                                               TextAlignment="Center" Margin="0,4,0,4"/>
+                                    <Border Height="1" Background="#2D2D2D" Margin="0,4,0,8"/>
+                                    <TextBlock x:Name="PreviewPied"
+                                               FontSize="9" Foreground="#6B7280"
+                                               TextAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               FontStyle="Italic"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <Button x:Name="BtnSauvegarderImpression"
+                            Content="💾  Enregistrer"
+                            Style="{StaticResource BtnSuccess}"
+                            Height="40" Padding="20,0,20,0"
+                            HorizontalAlignment="Left"
+                            Click="BtnSauvegarderImpression_Click"/>
+                    <TextBlock x:Name="TxtMsgImpression" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+                </StackPanel>
+
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 6 — APPARENCE
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelApparence" Visibility="Collapsed">
+
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="{StaticResource AccentBrush}"
+                                        Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblCouleur"
+                                               Text="Couleur d'accentuation"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescCouleur"
+                                               Text="S'applique instantanément sur toute l'application : boutons, bordures, sélections actives."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock x:Name="TxtLblPalette"
+                                       Text="Palettes prédéfinies"
+                                       FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,0,12"/>
+                            <WrapPanel Margin="0,0,0,20">
+                                <Button Tag="#CC0000" Width="48" Height="48" Margin="4"
+                                        ToolTip="Rouge Retouche Choco" Background="#CC0000"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Tag="#7C3AED" Width="48" Height="48" Margin="4"
+                                        ToolTip="Violet Royal" Background="#7C3AED"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Tag="#0F766E" Width="48" Height="48" Margin="4"
+                                        ToolTip="Émeraude" Background="#0F766E"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Tag="#1D4ED8" Width="48" Height="48" Margin="4"
+                                        ToolTip="Bleu Saphir" Background="#1D4ED8"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Tag="#B45309" Width="48" Height="48" Margin="4"
+                                        ToolTip="Ambre" Background="#B45309"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Tag="#BE185D" Width="48" Height="48" Margin="4"
+                                        ToolTip="Rose Fuchsia" Background="#BE185D"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Tag="#1A1A1A" Width="48" Height="48" Margin="4"
+                                        ToolTip="Noir Charbon" Background="#1A1A1A"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Click="BtnCouleurPredefinie_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="12" Width="48" Height="48"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </WrapPanel>
+
+                            <Separator Background="#E5E0DC" Margin="0,0,0,16"/>
+
+                            <TextBlock x:Name="TxtLblCustomHex"
+                                       Text="Couleur personnalisée (code hexadécimal)"
+                                       Style="{StaticResource FieldLabel}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="52"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0"
+                                         x:Name="TxtCouleurHex"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Text="#CC0000"/>
+                                <Border Grid.Column="2"
+                                        x:Name="PreviewCouleur"
+                                        Background="#CC0000"
+                                        CornerRadius="8" Height="38"/>
+                                <Button Grid.Column="4"
+                                        x:Name="BtnAppliquerCouleur"
+                                        Height="38" Padding="18,0,18,0"
+                                        FontSize="12" FontWeight="SemiBold"
+                                        Background="{StaticResource AccentBrush}"
+                                        Foreground="White" BorderThickness="0"
+                                        Cursor="Hand"
+                                        Click="BtnAppliquerCouleur_Click">
+                                    <TextBlock x:Name="TxtBtnAppliquer"
+                                               Text="Appliquer"/>
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="TxtExempleCouleur"
+                                       Text="Exemples : #CC0000  #1D4ED8  #0F766E  #7C3AED"
+                                       FontSize="10"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="TxtMsgApparence" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 7 — LANGUE
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelLangue" Visibility="Collapsed">
+
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#2563EB" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblLangue"
+                                               Text="Langue de l'interface"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescLangue"
+                                               Text="Appliqué immédiatement sur tout le logiciel."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <!-- Français -->
+                                <Border x:Name="CardFR"
+                                        Width="220" CornerRadius="12"
+                                        Padding="24,20" Margin="0,0,20,0"
+                                        Cursor="Hand" Background="White"
+                                        BorderBrush="{StaticResource AccentBrush}"
+                                        BorderThickness="2">
+                                    <StackPanel HorizontalAlignment="Center"
+                                                MouseLeftButtonUp="SelectionnerLangue">
+                                        <StackPanel.Tag>fr</StackPanel.Tag>
+                                        <TextBlock Text="🇫🇷" FontSize="40"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Français"
+                                                   FontSize="17" FontWeight="Bold"
+                                                   Foreground="{StaticResource PrimaryBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,10,0,2"/>
+                                        <TextBlock Text="French"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   HorizontalAlignment="Center"/>
+                                        <Border x:Name="BadgeFR"
+                                                Background="{StaticResource AccentBrush}"
+                                                CornerRadius="10" Padding="12,4"
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Center">
+                                            <TextBlock Text="✓  Actif"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       Foreground="White"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Anglais -->
+                                <Border x:Name="CardEN"
+                                        Width="220" CornerRadius="12"
+                                        Padding="24,20"
+                                        Cursor="Hand"
+                                        Background="#F9FAFB"
+                                        BorderBrush="#E5E7EB"
+                                        BorderThickness="2">
+                                    <StackPanel HorizontalAlignment="Center"
+                                                MouseLeftButtonUp="SelectionnerLangue">
+                                        <StackPanel.Tag>en</StackPanel.Tag>
+                                        <TextBlock Text="🇬🇧" FontSize="40"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="English"
+                                                   FontSize="17" FontWeight="Bold"
+                                                   Foreground="{StaticResource PrimaryBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,10,0,2"/>
+                                        <TextBlock Text="Anglais"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   HorizontalAlignment="Center"/>
+                                        <Border x:Name="BadgeEN"
+                                                Background="{StaticResource AccentBrush}"
+                                                CornerRadius="10" Padding="12,4"
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Center"
+                                                Visibility="Collapsed">
+                                            <TextBlock Text="✓  Active"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       Foreground="White"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="TxtMsgLangue" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <!-- ════════════════════════════════════════════
+                     PANNEAU 8 — MAINTENANCE & SUPPORT
+                ════════════════════════════════════════════ -->
+                <StackPanel x:Name="PanelMaintenance" Visibility="Collapsed">
+
+                    <!-- Informations Système -->
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#6366F1" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblInfosSys"
+                                               Text="Informations Système"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescInfosSys"
+                                               Text="Détails techniques de l'application et de la base de données."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Ligne 1 : Version -->
+                                <TextBlock Grid.Row="0" Grid.Column="0"
+                                           x:Name="TxtLblVersion"
+                                           Text="Version du logiciel :"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryBrush}"
+                                           Margin="0,0,0,12"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1"
+                                           x:Name="TxtVersionApp"
+                                           Text="v2.0 — Retouche Choco"
+                                           FontSize="12"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,0,0,12"/>
+
+                                <!-- Ligne 2 : État BDD -->
+                                <TextBlock Grid.Row="1" Grid.Column="0"
+                                           x:Name="TxtLblEtatBDD"
+                                           Text="État de la Base de Données :"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryBrush}"
+                                           Margin="0,0,0,12"/>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"
+                                            Margin="0,0,0,12">
+                                    <Ellipse Width="10" Height="10" Fill="#10B981"
+                                             Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtEtatBDD"
+                                               Text="Connectée (Local)"
+                                               FontSize="12"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+
+                                <!-- Ligne 3 : Chemin BDD -->
+                                <TextBlock Grid.Row="2" Grid.Column="0"
+                                           x:Name="TxtLblCheminBDD"
+                                           Text="Emplacement de la BDD :"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryBrush}"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1"
+                                           x:Name="TxtCheminBDD"
+                                           Text=""
+                                           FontSize="11"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Diagnostic & Support Technique -->
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#F59E0B" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtLblDiagnostic"
+                                               Text="Diagnostic &amp; Support Technique"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock x:Name="TxtDescDiagnostic"
+                                               Text="En cas d'anomalie ou de besoin d'assistance technique, accédez aux journaux d'erreurs du système."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Background="#FEF3C7" BorderBrush="#FCD34D"
+                                    BorderThickness="1" CornerRadius="8"
+                                    Padding="18,14" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtInfoLogs"
+                                               FontSize="12"
+                                               Foreground="#92400E"
+                                               TextWrapping="Wrap">
+                                        <Run FontWeight="Bold">ℹ️  Fichiers de logs :</Run>
+                                        <LineBreak/>
+                                        <Run>Les logs enregistrent automatiquement toutes les actions et erreurs de l'application. </Run>
+                                        <Run>Ils sont utiles pour diagnostiquer les problèmes à distance.</Run>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <Button x:Name="BtnOuvrirLogs"
+                                    Content="📂  Ouvrir le dossier des Logs"
+                                    Style="{StaticResource BtnPrimary}"
+                                    Height="44" Padding="24,0"
+                                    HorizontalAlignment="Left"
+                                    Click="BtnOuvrirLogs_Click"/>
+
+                            <TextBlock x:Name="TxtCheminLogs"
+                                       Text=""
+                                       FontSize="10"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,8,0,0"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="TxtMsgMaintenance" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Page>
