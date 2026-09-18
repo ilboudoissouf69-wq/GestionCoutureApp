@@ -9,6 +9,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -124,8 +125,173 @@
             </Border>
         </StackPanel>
 
-        <!-- ══ TABLEAU ═══════════════════════════════════════════════════════ -->
+        <!-- ══ PANNEAU PERFORMANCE QUALITÉ ══════════════════════════════════ -->
         <Border Grid.Row="3"
+                Background="#1A1A1A"
+                CornerRadius="10"
+                Padding="18,14"
+                Margin="0,0,0,16">
+            <StackPanel>
+                <!-- En-tête -->
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock Text="📈" FontSize="15" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="PERFORMANCE QUALITÉ"
+                                   FontSize="12" FontWeight="Bold"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <!-- Sélecteur période -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <TextBlock Text="Période :"
+                                   FontSize="11" Foreground="#B0A8A4"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="CmbPeriodeQualite"
+                                  Width="140" Height="28" FontSize="11"
+                                  Background="#2D2D2D" Foreground="White"
+                                  SelectionChanged="CmbPeriodeQualite_SelectionChanged">
+                            <ComboBoxItem Content="Ce mois-ci"    Tag="mois"      IsSelected="True"/>
+                            <ComboBoxItem Content="Ce trimestre"  Tag="trimestre"/>
+                            <ComboBoxItem Content="Cette année"   Tag="annee"/>
+                            <ComboBoxItem Content="Tout"          Tag="tout"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Classement couturiers -->
+                <ItemsControl x:Name="ListePerformance">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#2A2A2A"
+                                    CornerRadius="8"
+                                    Padding="14,10"
+                                    Margin="0,0,0,6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="30"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="220"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Rang -->
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Medaille}"
+                                               FontSize="16"
+                                               VerticalAlignment="Center"/>
+
+                                    <!-- Nom couturier -->
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding NomCouturier}"
+                                               FontSize="13" FontWeight="Bold"
+                                               Foreground="White"
+                                               VerticalAlignment="Center"/>
+
+                                    <!-- Pièces cousues -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding NbPiecesAffiche}"
+                                                   FontSize="12" FontWeight="Bold"
+                                                   Foreground="#B0A8A4"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="pièces"
+                                                   FontSize="10" Foreground="#6B7280"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Retours -->
+                                    <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding NbRetoursAffiche}"
+                                                   FontSize="12" FontWeight="Bold"
+                                                   HorizontalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="#EF4444"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding NbRetours}" Value="0">
+                                                            <Setter Property="Foreground" Value="#10B981"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="retours"
+                                                   FontSize="10" Foreground="#6B7280"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Taux qualité -->
+                                    <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding TauxQualiteAffiche}"
+                                                   FontSize="13" FontWeight="Bold"
+                                                   HorizontalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="#F59E0B"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding EstExcellent}" Value="True">
+                                                            <Setter Property="Foreground" Value="#10B981"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding EstFaible}" Value="True">
+                                                            <Setter Property="Foreground" Value="#EF4444"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="qualité"
+                                                   FontSize="10" Foreground="#6B7280"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Badge prime -->
+                                    <Border Grid.Column="5"
+                                            CornerRadius="6"
+                                            Padding="10,4"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#374151"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding EstEligiblePrime}" Value="True">
+                                                        <Setter Property="Background" Value="#065F46"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding BadgePrime}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="White"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Message si aucune donnée -->
+                <TextBlock x:Name="TxtAucunePerformance"
+                           Text="Aucune donnée de performance pour cette période."
+                           FontSize="12" FontStyle="Italic"
+                           Foreground="#6B7280"
+                           HorizontalAlignment="Center"
+                           Margin="0,8,0,0"
+                           Visibility="Collapsed"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ══ TABLEAU ═══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="4"
                 Style="{StaticResource Card}"
                 Padding="0">
             <DataGrid x:Name="GridRetours"

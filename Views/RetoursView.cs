@@ -17,6 +17,7 @@ namespace GestionCoutureApp.Views
         private readonly Employe _utilisateur;
         private List<Commande> _commandes = new();
         private List<Retour> _tousLesRetours = new();
+        private bool _initialise = false;  // guard anti-event prématuré
 
         public RetoursView()
         {
@@ -46,6 +47,7 @@ namespace GestionCoutureApp.Views
             }
 
             ChargerRetours();
+            _initialise = true;
         }
 
         // ==================================================================
@@ -74,6 +76,7 @@ namespace GestionCoutureApp.Views
             }
             AppliquerFiltre();
             MettreAJourBadges();
+            ChargerPerformanceQualite();
         }
 
         private void AppliquerFiltre()
@@ -122,8 +125,126 @@ namespace GestionCoutureApp.Views
             TxtNbRendu.Text     = actifs.Count(r => r.Statut == "Rendu").ToString();
         }
 
-        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e) => AppliquerFiltre();
-        private void CmbFiltreStatut_SelectionChanged(object sender, SelectionChangedEventArgs e) => AppliquerFiltre();
+        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_initialise) return;
+            AppliquerFiltre();
+        }
+
+        private void CmbFiltreStatut_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_initialise) return;
+            AppliquerFiltre();
+        }
+
+        private void CmbPeriodeQualite_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_initialise) return;
+            ChargerPerformanceQualite();
+        }
+
+        // ==================================================================
+        // Panneau Performance Qualité
+        // ==================================================================
+        private void ChargerPerformanceQualite()
+        {
+            // Guard : appelé avant fin d'InitializeComponent si IsSelected="True" dans le XAML
+            if (CmbPeriodeQualite == null || _utilisateur == null) return;
+
+            string tag = (CmbPeriodeQualite.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "mois";
+            DateTime dateDebut = tag switch
+            {
+                "trimestre" => new DateTime(DateTime.Today.Year,
+                                  ((DateTime.Today.Month - 1) / 3) * 3 + 1, 1),
+                "annee"     => new DateTime(DateTime.Today.Year, 1, 1),
+                "tout"      => new DateTime(2000, 1, 1),
+                _           => new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1)
+            };
+            DateTime dateFin = DateTime.Today;
+
+            try
+            {
+                var factory = App.Services.GetRequiredService<
+                    Microsoft.EntityFrameworkCore.IDbContextFactory<
+                        GestionCoutureApp.Data.ApplicationDbContext>>();
+                using var ctx = factory.CreateDbContext();
+
+                // Couturiers actifs
+                var couturiers = ctx.Employes
+                    .Where(e => e.Statut == "Actif" &&
+                                (e.Role == "Couturier" || e.Role == "Boss"))
+                    .ToList();
+
+                if (couturiers.Count == 0)
+                {
+                    ListePerformance.ItemsSource = null;
+                    TxtAucunePerformance.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                // Pièces terminées/livrées sur la période
+                var pieces = ctx.PiecesCommande
+                    .Include(p => p.Commande)
+                    .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
+                                p.IdCouturier.HasValue &&
+                                p.Commande != null &&
+                                p.Commande.DateFin.Date >= dateDebut.Date &&
+                                p.Commande.DateFin.Date <= dateFin.Date)
+                    .ToList();
+
+                // Retours sur la période (couturier initial responsable)
+                var retours = ctx.Retours
+                    .Where(r => !r.EstAnnule &&
+                                r.DateSignalement.Date >= dateDebut.Date &&
+                                r.DateSignalement.Date <= dateFin.Date)
+                    .ToList();
+
+                // Seuil prime : configurable (ici on lit depuis Parametres si dispo)
+                decimal primeZeroDefaut = 5000m;
+                var paramPrime = ctx.Parametres.Find("PrimeZeroDefaut");
+                if (paramPrime != null && decimal.TryParse(paramPrime.Valeur, out decimal v))
+                    primeZeroDefaut = v;
+
+                var performances = couturiers
+                    .Select((emp, idx) =>
+                    {
+                        int nbPieces  = pieces.Count(p => p.IdCouturier == emp.IdEmploye);
+                        int nbRetours = retours.Count(r => r.IdCouturier == emp.IdEmploye);
+                        double taux   = nbPieces > 0
+                            ? Math.Round(100.0 * (nbPieces - nbRetours) / nbPieces, 1)
+                            : 100.0;
+                        bool eligible = nbPieces >= 5 && nbRetours == 0;
+
+                        return new PerformanceCouturier
+                        {
+                            IdCouturier    = emp.IdEmploye,
+                            NomCouturier   = emp.Prenom + " " + emp.Nom,
+                            NbPieces       = nbPieces,
+                            NbRetours      = nbRetours,
+                            TauxQualite    = taux,
+                            EstEligiblePrime = eligible,
+                            PrimeZeroDefaut  = primeZeroDefaut
+                        };
+                    })
+                    .Where(p => p.NbPieces > 0)
+                    .OrderByDescending(p => p.TauxQualite)
+                    .ThenByDescending(p => p.NbPieces)
+                    .ToList();
+
+                // Attribuer les médailles
+                for (int i = 0; i < performances.Count; i++)
+                    performances[i].Rang = i + 1;
+
+                ListePerformance.ItemsSource = performances;
+                TxtAucunePerformance.Visibility =
+                    performances.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("PerformanceQualite erreur: " + ex.Message);
+                TxtAucunePerformance.Visibility = Visibility.Visible;
+            }
+        }
 
         // ==================================================================
         // Handlers tableau
@@ -584,6 +705,8 @@ namespace GestionCoutureApp.Views
                     string dest = System.IO.Path.Combine(dossierPhotos,
                         $"defaut_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixe}{ext}");
                     System.IO.File.Copy(dlg.FileName, dest, overwrite: true);
+                    // Compression JPEG 1024×768 / 70% à la source
+                    GestionCoutureApp.Helpers.PhotoCompressor.Compresser(dest, dest);
                     MettreAJourPhotoDefaut(dest);
                 }
                 catch (Exception ex)
@@ -931,5 +1054,39 @@ namespace GestionCoutureApp.Views
             dlg.ShowDialog();
             return resultat;
         }
+    }
+
+    // DTO pour le panneau Performance Qualité
+    public class PerformanceCouturier
+    {
+        public int IdCouturier     { get; set; }
+        public string NomCouturier { get; set; } = string.Empty;
+        public int NbPieces        { get; set; }
+        public int NbRetours       { get; set; }
+        public double TauxQualite  { get; set; }
+        public int Rang            { get; set; }
+        public bool EstEligiblePrime { get; set; }
+        public decimal PrimeZeroDefaut { get; set; }
+
+        // Propriétés calculées pour le binding XAML
+        public string NbPiecesAffiche  => NbPieces.ToString();
+        public string NbRetoursAffiche => NbRetours == 0 ? "✓ 0" : NbRetours.ToString();
+        public string TauxQualiteAffiche => TauxQualite.ToString("0.#") + "%";
+        public bool EstExcellent => TauxQualite >= 98;
+        public bool EstFaible    => TauxQualite < 85;
+
+        public string Medaille => Rang switch
+        {
+            1 => "🥇",
+            2 => "🥈",
+            3 => "🥉",
+            _ => $"#{Rang}"
+        };
+
+        public string BadgePrime => EstEligiblePrime
+            ? $"🎁 Éligible Prime +{PrimeZeroDefaut:N0} FCFA"
+            : NbRetours == 0 && NbPieces < 5
+                ? "⚠️ < 5 pièces (pas encore éligible)"
+                : $"❌ {NbRetours} retour(s) — non éligible";
     }
 }

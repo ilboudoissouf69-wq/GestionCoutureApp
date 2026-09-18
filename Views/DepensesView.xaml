@@ -7,217 +7,376 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="28,24,28,28">
 
-            <!-- TITRE -->
-            <StackPanel Margin="0,0,0,20">
-                <TextBlock Text="Depenses"
-                           FontSize="22"
-                           FontWeight="Bold"
-                           Foreground="{StaticResource PrimaryBrush}"/>
-                <Border Height="3"
-                        Width="48"
-                        CornerRadius="2"
-                        Background="#CC0000"
-                        HorizontalAlignment="Left"
-                        Margin="0,6,0,0"/>
-            </StackPanel>
+            <!-- ══ TITRE ══════════════════════════════════════════════════ -->
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Dépenses &amp; Bilan Financier"
+                               FontSize="22" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryBrush}"/>
+                    <Border Height="3" Width="48" CornerRadius="2"
+                            Background="#CC0000" HorizontalAlignment="Left"
+                            Margin="0,6,0,4"/>
+                    <TextBlock x:Name="TxtPeriodeLabel"
+                               Text="Période : ce mois-ci"
+                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+                <!-- Sélecteur de période rapide -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <ComboBox x:Name="CmbPeriode" Width="160" Height="34" FontSize="12"
+                              SelectionChanged="CmbPeriode_SelectionChanged" Margin="0,0,8,0">
+                        <ComboBoxItem Content="Aujourd'hui"    Tag="jour"/>
+                        <ComboBoxItem Content="Cette semaine"  Tag="semaine"/>
+                        <ComboBoxItem Content="Ce mois-ci"     Tag="mois" IsSelected="True"/>
+                        <ComboBoxItem Content="Ce trimestre"   Tag="trimestre"/>
+                        <ComboBoxItem Content="Cette année"    Tag="annee"/>
+                        <ComboBoxItem Content="Personnalisé"   Tag="custom"/>
+                    </ComboBox>
+                    <!-- Dates personnalisées -->
+                    <StackPanel x:Name="PanelDateCustom" Orientation="Horizontal"
+                                Visibility="Collapsed">
+                        <DatePicker x:Name="DateDebutFiltre" Height="34" FontSize="12"
+                                    Width="120" Margin="0,0,6,0"
+                                    SelectedDateChanged="DateFiltre_Changed"/>
+                        <DatePicker x:Name="DateFinFiltre" Height="34" FontSize="12"
+                                    Width="120" Margin="0,0,8,0"
+                                    SelectedDateChanged="DateFiltre_Changed"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
 
-            <!-- 3 Cartes statistiques -->
-            <UniformGrid Columns="3"
-                         Margin="0,0,0,20">
+            <!-- ══ 4 CARTES KPI FINANCIÈRES ═══════════════════════════════ -->
+            <UniformGrid Columns="4" Margin="0,0,0,16">
 
-                <!-- Total du mois — noir charbon -->
-                <Border CornerRadius="8"
-                        Padding="18,14"
-                        Margin="0,0,8,0"
-                        Background="#1A1A1A">
+                <!-- 1 — CA Encaissé -->
+                <Border CornerRadius="8" Padding="16,12" Margin="0,0,8,0" Background="#1A1A1A">
                     <StackPanel>
-                        <TextBlock Text="DEPENSES DU MOIS"
-                                   FontSize="10"
-                                   FontWeight="Bold"
+                        <TextBlock Text="CA ENCAISSÉ" FontSize="9" FontWeight="Bold"
                                    Foreground="#B0A8A4"/>
-                        <TextBlock x:Name="TxtTotalMois"
-                                   Text="0"
-                                   FontSize="28"
-                                   FontWeight="Bold"
-                                   Foreground="White"
+                        <TextBlock x:Name="TxtCaEncaisse" Text="0"
+                                   FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA"
-                                   FontSize="11"
-                                   Foreground="#B0A8A4"/>
+                        <TextBlock Text="FCFA total paiements" FontSize="10" Foreground="#B0A8A4"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Aujourd'hui — orange -->
-                <Border CornerRadius="8"
-                        Padding="18,14"
-                        Margin="0,0,8,0"
-                        Background="#D97706">
+                <!-- 2 — Charges d'exploitation -->
+                <Border CornerRadius="8" Padding="16,12" Margin="0,0,8,0" Background="#CC0000">
                     <StackPanel>
-                        <TextBlock Text="AUJOURD'HUI"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="#FFF3CD"/>
-                        <TextBlock x:Name="TxtTotalJour"
-                                   Text="0"
-                                   FontSize="28"
-                                   FontWeight="Bold"
-                                   Foreground="White"
+                        <TextBlock Text="CHARGES EXPLOITATION" FontSize="9" FontWeight="Bold"
+                                   Foreground="#FFCCCC"/>
+                        <TextBlock x:Name="TxtCharges" Text="0"
+                                   FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA"
-                                   FontSize="11"
-                                   Foreground="#FFF3CD"/>
+                        <TextBlock x:Name="TxtChargesDetail" Text="FCFA (dép. + salaires)"
+                                   FontSize="10" Foreground="#FFCCCC" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Nombre — rouge -->
-                <Border CornerRadius="8"
-                        Padding="18,14"
-                        Background="#CC0000">
+                <!-- 3 — Marge Brute -->
+                <Border CornerRadius="8" Padding="16,12" Margin="0,0,8,0" Background="#065F46">
                     <StackPanel>
-                        <TextBlock Text="NOMBRE CE MOIS"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="#FFCCCC"/>
-                        <TextBlock x:Name="TxtNbDepenses"
-                                   Text="0"
-                                   FontSize="28"
-                                   FontWeight="Bold"
-                                   Foreground="White"
+                        <TextBlock Text="MARGE BRUTE" FontSize="9" FontWeight="Bold"
+                                   Foreground="#6EE7B7"/>
+                        <TextBlock x:Name="TxtMargeBrute" Text="0"
+                                   FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="depense(s)"
-                                   FontSize="11"
-                                   Foreground="#FFCCCC"/>
+                        <TextBlock Text="CA − commissions − matériaux" FontSize="10"
+                                   Foreground="#6EE7B7" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 4 — Bénéfice Net -->
+                <Border CornerRadius="8" Padding="16,12" Background="#1E3A5F">
+                    <StackPanel>
+                        <TextBlock Text="BÉNÉFICE NET" FontSize="9" FontWeight="Bold"
+                                   Foreground="#93C5FD"/>
+                        <TextBlock x:Name="TxtBeneficeNet" Text="0"
+                                   FontSize="22" FontWeight="Bold" Foreground="White"
+                                   Margin="0,4,0,2"/>
+                        <TextBlock Text="Marge brute − charges fixes" FontSize="10"
+                                   Foreground="#93C5FD" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </UniformGrid>
 
-            <!-- Formulaire d'ajout -->
-            <Border Style="{StaticResource Card}"
+            <!-- Détail KPI (sous les cartes) -->
+            <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="16,10"
                     Margin="0,0,0,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="dont Commissions" FontSize="10"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock x:Name="TxtDetailCommissions" Text="0 FCFA"
+                                   FontSize="12" FontWeight="Bold" Foreground="#CC0000"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="dont Matériaux" FontSize="10"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock x:Name="TxtDetailMateriaux" Text="0 FCFA"
+                                   FontSize="12" FontWeight="Bold" Foreground="#374151"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="dont Dépenses" FontSize="10"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock x:Name="TxtDetailDepenses" Text="0 FCFA"
+                                   FontSize="12" FontWeight="Bold" Foreground="#374151"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="3">
+                        <TextBlock Text="dont Salaire Secrétaire" FontSize="10"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock x:Name="TxtDetailSalaire" Text="0 FCFA"
+                                   FontSize="12" FontWeight="Bold" Foreground="#374151"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ══ FORMULAIRE NOUVELLE DÉPENSE ════════════════════════════ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <Border CornerRadius="10,10,0,0"
-                            Padding="20,14"
-                            Background="#1A1A1A">
-                        <TextBlock Text="Nouvelle depense"
-                                   FontSize="14"
-                                   FontWeight="Bold"
-                                   Foreground="White"/>
+                    <Border CornerRadius="10,10,0,0" Padding="20,14" Background="#1A1A1A">
+                        <TextBlock Text="Enregistrer une dépense" FontSize="14"
+                                   FontWeight="Bold" Foreground="White"/>
                     </Border>
 
                     <Grid Margin="20,16,20,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="12"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="140"/>
                         </Grid.ColumnDefinitions>
 
+                        <!-- Catégorie -->
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Type *"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="CmbTypeDepense"
-                                      Style="{StaticResource ModernComboBox}">
-                                <ComboBoxItem Content="Loyer"/>
-                                <ComboBoxItem Content="Electricite"/>
-                                <ComboBoxItem Content="Eau"/>
-                                <ComboBoxItem Content="Materiel"/>
-                                <ComboBoxItem Content="Transport"/>
-                                <ComboBoxItem Content="Salaires"/>
-                                <ComboBoxItem Content="Divers"/>
+                            <TextBlock Text="Catégorie *" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CmbCategorie"
+                                      Style="{StaticResource ModernComboBox}"
+                                      SelectionChanged="CmbCategorie_SelectionChanged">
+                                <ComboBoxItem Content="Charges fixes"       Tag="Charges fixes"/>
+                                <ComboBoxItem Content="Masse salariale"     Tag="Masse salariale"/>
+                                <ComboBoxItem Content="Matériel &amp; Entretien" Tag="Matériel &amp; Entretien"/>
+                                <ComboBoxItem Content="Divers"              Tag="Divers"/>
                             </ComboBox>
                         </StackPanel>
 
+                        <!-- Type (dépend de la catégorie) -->
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="Montant (FCFA) *"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TxtMontant"
-                                     Style="{StaticResource ModernTextBox}"/>
+                            <TextBlock Text="Type *" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CmbTypeDepense"
+                                      IsEditable="True"
+                                      Style="{StaticResource ModernComboBox}"/>
                         </StackPanel>
 
+                        <!-- Montant -->
                         <StackPanel Grid.Column="4">
-                            <TextBlock Text="Date *"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <DatePicker x:Name="DateDepense"
-                                        Height="38"
-                                        FontSize="13"
+                            <TextBlock Text="Montant (FCFA) *" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtMontant" Style="{StaticResource ModernTextBox}"/>
+                        </StackPanel>
+
+                        <!-- Date -->
+                        <StackPanel Grid.Column="6">
+                            <TextBlock Text="Date *" Style="{StaticResource FieldLabel}"/>
+                            <DatePicker x:Name="DateDepense" Height="38" FontSize="13"
                                         BorderBrush="{StaticResource BorderBrush}"/>
                         </StackPanel>
                     </Grid>
 
-                    <Grid Margin="20,12,20,0">
+                    <Grid Margin="20,10,20,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="130"/>
                         </Grid.ColumnDefinitions>
 
+                        <!-- Description -->
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Description"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TxtDescription"
-                                     Style="{StaticResource ModernTextBox}"/>
+                            <TextBlock Text="Description" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtDescription" Style="{StaticResource ModernTextBox}"/>
                         </StackPanel>
 
-                        <Button Grid.Column="1"
-                                Content="Ajouter"
+                        <!-- Statut initial -->
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Statut" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CmbStatutSaisie" Style="{StaticResource ModernComboBox}">
+                                <ComboBoxItem Content="Validée"     Tag="Validee" IsSelected="True"/>
+                                <ComboBoxItem Content="En attente"  Tag="En attente"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Bouton ajouter -->
+                        <Button Grid.Column="4"
+                                Content="➕  Enregistrer"
                                 Style="{StaticResource BtnSuccess}"
-                                Height="38"
-                                VerticalAlignment="Bottom"
+                                Height="38" VerticalAlignment="Bottom"
                                 Click="BtnAjouter_Click"/>
                     </Grid>
 
-                    <TextBlock x:Name="TxtMessage"
-                               FontSize="12"
-                               TextWrapping="Wrap"
-                               Margin="20,8,20,16"/>
+                    <TextBlock x:Name="TxtMessage" FontSize="12"
+                               TextWrapping="Wrap" Margin="20,8,20,16"/>
                 </StackPanel>
             </Border>
 
-            <!-- Liste des depenses -->
+            <!-- ══ FILTRES + HISTORIQUE ════════════════════════════════════ -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <TextBlock Text="Historique des depenses"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="{StaticResource PrimaryBrush}"
-                               Margin="0,0,0,10"/>
+                    <!-- En-tête avec filtres + export -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock Text="Historique des dépenses"
+                                       FontSize="14" FontWeight="Bold"
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,16,0"/>
+
+                            <!-- Filtre catégorie -->
+                            <ComboBox x:Name="CmbFiltreCategorie" Width="160" Height="32"
+                                      FontSize="12" Margin="0,0,8,0"
+                                      SelectionChanged="FiltreChanged">
+                                <ComboBoxItem Content="Toutes catégories" Tag="Toutes" IsSelected="True"/>
+                                <ComboBoxItem Content="Charges fixes"     Tag="Charges fixes"/>
+                                <ComboBoxItem Content="Masse salariale"   Tag="Masse salariale"/>
+                                <ComboBoxItem Content="Matériel &amp; Entretien" Tag="Matériel &amp; Entretien"/>
+                                <ComboBoxItem Content="Divers"            Tag="Divers"/>
+                            </ComboBox>
+
+                            <!-- Filtre statut -->
+                            <ComboBox x:Name="CmbFiltreStatut" Width="130" Height="32"
+                                      FontSize="12" SelectionChanged="FiltreChanged">
+                                <ComboBoxItem Content="Tous statuts"  Tag="Tous" IsSelected="True"/>
+                                <ComboBoxItem Content="Validées"      Tag="Validee"/>
+                                <ComboBoxItem Content="En attente"    Tag="En attente"/>
+                                <ComboBoxItem Content="Annulées"      Tag="Annulée"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Boutons export -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="BtnExportCsv"
+                                    Content="📊  Export CSV"
+                                    Height="32" Padding="12,0,12,0"
+                                    FontSize="12"
+                                    Background="#1E3A5F" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"
+                                    Margin="0,0,8,0"
+                                    Click="BtnExportCsv_Click"/>
+                            <Button x:Name="BtnValiderSelection"
+                                    Content="✅  Valider sélection"
+                                    Height="32" Padding="12,0,12,0"
+                                    FontSize="12"
+                                    Background="#059669" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"
+                                    Margin="0,0,8,0"
+                                    Click="BtnValider_Click"/>
+                            <Button Content="🚫  Annuler sélection"
+                                    Height="32" Padding="12,0,12,0"
+                                    FontSize="12"
+                                    Background="#CC0000" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand"
+                                    Click="BtnSupprimer_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Tableau -->
                     <DataGrid x:Name="GridDepenses"
                               Style="{StaticResource ModernGrid}"
                               AutoGenerateColumns="False"
-                              IsReadOnly="True">
+                              IsReadOnly="True"
+                              SelectionMode="Single">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#1A1A1A"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Padding" Value="10,8"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                            </Style>
+                        </DataGrid.Resources>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Date"
-                                                Binding="{Binding DateDepense, StringFormat=\{0:dd/MM/yyyy\}}"
-                                                Width="100"/>
+                                                Binding="{Binding DateAffichee}"
+                                                Width="88"/>
+                            <DataGridTextColumn Header="Catégorie"
+                                                Binding="{Binding Categorie}"
+                                                Width="140"/>
                             <DataGridTextColumn Header="Type"
                                                 Binding="{Binding TypeDepense}"
-                                                Width="120"/>
-                            <DataGridTextColumn Header="Montant (FCFA)"
-                                                Binding="{Binding Montant, StringFormat=\{0:N0\}}"
-                                                Width="140"/>
+                                                Width="160"/>
+                            <DataGridTextColumn Header="Montant"
+                                                Binding="{Binding MontantAffiche}"
+                                                Width="110"/>
                             <DataGridTextColumn Header="Description"
                                                 Binding="{Binding Description}"
                                                 Width="*"/>
                             <DataGridTextColumn Header="Par"
                                                 Binding="{Binding NomOperateur}"
-                                                Width="120"/>
-                            <!-- CORRECTIF (audit) : rend visible qu'une dépense annulée
-                                 reste dans la liste (jamais supprimée), pour que la
-                                 secrétaire/le Boss comprenne pourquoi elle est encore là. -->
-                            <DataGridTextColumn Header="Statut"
-                                                Binding="{Binding StatutAffiche}"
-                                                Width="100"/>
+                                                Width="110"/>
+                            <!-- Statut coloré -->
+                            <DataGridTemplateColumn Header="Statut" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="4" Padding="8,3"
+                                                Margin="4,2" HorizontalAlignment="Left">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#059669"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding StatutValidation}" Value="En attente">
+                                                            <Setter Property="Background" Value="#D97706"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding EstAnnulee}" Value="True">
+                                                            <Setter Property="Background" Value="#9CA3AF"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding StatutAffiche}"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="White"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <StackPanel Orientation="Horizontal"
-                                Margin="0,10,0,0">
-                        <Button Content="Annuler la selection"
-                                Style="{StaticResource BtnDanger}"
-                                Height="34"
-                                FontSize="12"
-                                Click="BtnSupprimer_Click"/>
-                    </StackPanel>
+                    <!-- Pied : total filtré -->
+                    <Border Background="#1A1A1A" CornerRadius="0,0,8,8"
+                            Padding="16,10" Margin="0,0,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="TOTAL AFFICHÉ : "
+                                       FontSize="12" FontWeight="Bold"
+                                       Foreground="#B0A8A4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtTotalFiltre"
+                                       Text="0 FCFA"
+                                       FontSize="16" FontWeight="Bold"
+                                       Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNbFiltre"
+                                       Text="  — 0 dépense(s)"
+                                       FontSize="12" Foreground="#B0A8A4"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 

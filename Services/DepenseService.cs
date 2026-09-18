@@ -21,6 +21,29 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
+        public List<Depense> Filtrer(DateTime debut, DateTime fin,
+                                     string? categorie = null,
+                                     string? statutValidation = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var q = context.Depenses
+                .Where(d => d.DateDepense.Date >= debut.Date &&
+                            d.DateDepense.Date <= fin.Date);
+
+            if (!string.IsNullOrEmpty(categorie) && categorie != "Toutes")
+                q = q.Where(d => d.Categorie == categorie);
+
+            if (!string.IsNullOrEmpty(statutValidation) && statutValidation != "Tous")
+            {
+                if (statutValidation == "Annulée")
+                    q = q.Where(d => d.EstAnnulee);
+                else
+                    q = q.Where(d => !d.EstAnnulee && d.StatutValidation == statutValidation);
+            }
+
+            return q.OrderByDescending(d => d.DateDepense).ToList();
+        }
+
         public void Ajouter(Depense depense)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -28,22 +51,25 @@ namespace GestionCoutureApp.Services
             context.SaveChanges();
         }
 
-        // CORRECTIF (audit — Décision 3.1) : remplace l'ancienne suppression
-        // physique. Une dépense enregistrée par erreur n'est plus supprimée,
-        // elle est annulée avec motif obligatoire et trace de qui/quand —
-        // même mécanisme que PaiementService.Annuler et CommissionService.Annuler.
-        // De l'argent réel ne doit jamais disparaître silencieusement de
-        // l'historique, quel que soit le module de l'application.
+        public void Valider(int idDepense, string nomBoss)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var dep = context.Depenses.Find(idDepense)
+                ?? throw new InvalidOperationException("Dépense introuvable.");
+            if (dep.EstAnnulee)
+                throw new InvalidOperationException("Impossible de valider une dépense annulée.");
+            dep.StatutValidation = "Validee";
+            context.SaveChanges();
+        }
+
         public void Annuler(int idDepense, string motif, string nomAnnulateur)
         {
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
             using var context = _contextFactory.CreateDbContext();
-
             var depense = context.Depenses.Find(idDepense)
                 ?? throw new InvalidOperationException("Dépense introuvable.");
-
             if (depense.EstAnnulee)
                 throw new InvalidOperationException("Cette dépense est déjà annulée.");
 
@@ -51,23 +77,78 @@ namespace GestionCoutureApp.Services
             depense.MotifAnnulation = motif.Trim();
             depense.DateAnnulation = DateTime.Now;
             depense.NomAnnulateur = nomAnnulateur;
-
             context.SaveChanges();
         }
 
-        // CORRECTIF (audit) : total du tableau de bord — exclut désormais les
-        // dépenses annulées, exactement comme ResteAPayer/MontantEncaisse
-        // excluent déjà les paiements annulés. Sans ce filtre, une dépense
-        // annulée continuerait à réduire à tort le bénéfice net affiché au Boss.
         public decimal TotalParPeriode(DateTime debut, DateTime fin)
         {
             using var context = _contextFactory.CreateDbContext();
             return context.Depenses
-                .Where(d => !d.EstAnnulee
-                         && d.DateDepense.Date >= debut.Date
-                         && d.DateDepense.Date <= fin.Date)
+                .Where(d => !d.EstAnnulee &&
+                            d.StatutValidation == "Validee" &&
+                            d.DateDepense.Date >= debut.Date &&
+                            d.DateDepense.Date <= fin.Date)
                 .AsEnumerable()
                 .Sum(d => d.Montant);
+        }
+
+        public StatsFinancieres ObtenirStats(DateTime debut, DateTime fin)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            // CA encaissé (paiements non annulés)
+            decimal caEncaisse = context.Paiements
+                .Where(p => !p.EstAnnule &&
+                            p.DatePaiement.Date >= debut.Date &&
+                            p.DatePaiement.Date <= fin.Date)
+                .AsEnumerable()
+                .Sum(p => p.MontantPaye);
+
+            // Commissions validées
+            decimal totalCommissions = context.Commissions
+                .Where(c => !c.EstAnnulee &&
+                            c.DateCalcul.Date >= debut.Date &&
+                            c.DateCalcul.Date <= fin.Date)
+                .AsEnumerable()
+                .Sum(c => c.MontantCommission + c.PrimeQualite);
+
+            // Matériaux facturés clients (sur les commandes de la période)
+            decimal totalMateriaux = context.MaterielsSupplements
+                .Include(m => m.Commande)
+                .Where(m => m.Commande != null &&
+                            m.Commande.DateFin.Date >= debut.Date &&
+                            m.Commande.DateFin.Date <= fin.Date)
+                .AsEnumerable()
+                .Sum(m => m.Quantite * m.PrixUnitaire);
+
+            // Dépenses validées
+            decimal totalDepenses = context.Depenses
+                .Where(d => !d.EstAnnulee &&
+                            d.StatutValidation == "Validee" &&
+                            d.DateDepense.Date >= debut.Date &&
+                            d.DateDepense.Date <= fin.Date)
+                .AsEnumerable()
+                .Sum(d => d.Montant);
+
+            // Salaire secrétaire depuis Paramètres
+            decimal salaireSecretaire = 0m;
+            var paramSalaire = context.Parametres.Find("SalaireMensuelSecretaire");
+            if (paramSalaire != null)
+                decimal.TryParse(paramSalaire.Valeur, out salaireSecretaire);
+
+            // Prorata mensuel du salaire selon la période
+            double nbJoursPeriode = (fin.Date - debut.Date).TotalDays + 1;
+            double nbJoursMois = DateTime.DaysInMonth(debut.Year, debut.Month);
+            salaireSecretaire = Math.Round(salaireSecretaire * (decimal)(nbJoursPeriode / nbJoursMois), 0);
+
+            return new StatsFinancieres
+            {
+                CaEncaisse       = caEncaisse,
+                TotalCommissions = totalCommissions,
+                TotalMateriaux   = totalMateriaux,
+                TotalDepenses    = totalDepenses,
+                SalaireSecretaire = salaireSecretaire
+            };
         }
     }
 }

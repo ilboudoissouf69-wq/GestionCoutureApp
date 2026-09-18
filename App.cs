@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Data;
+using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -63,6 +64,7 @@ namespace GestionCoutureApp
 
             // Sauvegarde automatique
             services.AddSingleton<BackupService>();
+            services.AddSingleton<GoogleDriveBackupService>();
 
             Services = services.BuildServiceProvider();
 
@@ -110,6 +112,40 @@ namespace GestionCoutureApp
                             context.Database.ExecuteSqlRaw($"ALTER TABLE Retours ADD COLUMN {col} {def};");
                     }
                     catch { /* colonne déjà présente ou table inexistante */ }
+                }
+
+                // ── Colonne PrimeQualite dans Commissions (idempotent) ──
+                try
+                {
+                    var conn2 = context.Database.GetDbConnection();
+                    if (conn2.State != System.Data.ConnectionState.Open) conn2.Open();
+                    using var cmd2 = conn2.CreateCommand();
+                    cmd2.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Commissions') WHERE name='PrimeQualite'";
+                    long cnt = (long)(cmd2.ExecuteScalar() ?? 0L);
+                    if (cnt == 0)
+                        context.Database.ExecuteSqlRaw("ALTER TABLE Commissions ADD COLUMN PrimeQualite TEXT NOT NULL DEFAULT '0';");
+                }
+                catch { /* déjà présente */ }
+
+                // ── Colonnes Depenses ajoutées progressivement (idempotent) ──
+                var colonnesDepenses = new (string col, string def)[]
+                {
+                    ("Categorie",        "TEXT NOT NULL DEFAULT 'Divers'"),
+                    ("StatutValidation", "TEXT NOT NULL DEFAULT 'Validee'"),
+                };
+                foreach (var (col, def) in colonnesDepenses)
+                {
+                    try
+                    {
+                        var conn3 = context.Database.GetDbConnection();
+                        if (conn3.State != System.Data.ConnectionState.Open) conn3.Open();
+                        using var cmd3 = conn3.CreateCommand();
+                        cmd3.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('Depenses') WHERE name='{col}'";
+                        long cnt3 = (long)(cmd3.ExecuteScalar() ?? 0L);
+                        if (cnt3 == 0)
+                            context.Database.ExecuteSqlRaw($"ALTER TABLE Depenses ADD COLUMN {col} {def};");
+                    }
+                    catch { /* déjà présente */ }
                 }
 
                 // CORRECTIF (robustesse concurrence) : le mode journal par défaut de
@@ -338,6 +374,25 @@ namespace GestionCoutureApp
                     "Erreur critique :\n" + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            // Sauvegarde Google Drive automatique à la fermeture
+            // (en tâche de fond, 2–3 secondes maximum)
+            try
+            {
+                var driveBackup = Services.GetService<GoogleDriveBackupService>();
+                if (driveBackup != null)
+                {
+                    // Fire-and-wait avec timeout 8 secondes pour ne pas bloquer la fermeture
+                    var tache = driveBackup.SauvegarderAsync();
+                    tache.Wait(TimeSpan.FromSeconds(8));
+                }
+            }
+            catch { /* ne jamais bloquer la fermeture */ }
+
+            base.OnExit(e);
         }
     }
 }

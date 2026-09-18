@@ -8,11 +8,17 @@ namespace GestionCoutureApp.Models
         [Key]
         public int IdDepense { get; set; }
 
-        [Required(ErrorMessage = "Le type de depense est obligatoire.")]
+        // ── Catégorie métier (regroupement analytique) ────────────────────
+        // Valeurs possibles : "Charges fixes", "Masse salariale",
+        //                     "Matériel & Entretien", "Divers"
         [MaxLength(50)]
+        public string Categorie { get; set; } = "Divers";
+
+        [Required]
+        [MaxLength(80)]
         public string TypeDepense { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Le montant est obligatoire.")]
+        [Required]
         [Column(TypeName = "TEXT")]
         public decimal Montant { get; set; }
 
@@ -22,20 +28,62 @@ namespace GestionCoutureApp.Models
         [MaxLength(200)]
         public string Description { get; set; } = string.Empty;
 
-        // Tracabilite : qui a enregistre la depense
+        // Tracabilité
         public string NomOperateur { get; set; } = string.Empty;
 
-        // CORRECTIF (audit — Décision 3.1 actée mais non implémentée) :
-        // une dépense enregistrée ne doit jamais disparaître physiquement de
-        // la base — exactement le même mécanisme que Paiement et Commission.
-        // Une dépense annulée reste dans l'historique mais sort des totaux
-        // du tableau de bord (voir DepenseService.TotalParPeriode).
+        // ── Statut de validation (workflow Secrétaire → Boss) ─────────────
+        // "En attente" = saisie par la secrétaire, en attente d'approbation Boss
+        // "Validee"    = approuvée (ou saisie directement par le Boss)
+        public string StatutValidation { get; set; } = "Validee";
+
+        // ── Annulation (jamais de suppression physique) ───────────────────
         public bool EstAnnulee { get; set; } = false;
         public string? MotifAnnulation { get; set; }
         public DateTime? DateAnnulation { get; set; }
         public string? NomAnnulateur { get; set; }
 
+        // ── Propriétés calculées ──────────────────────────────────────────
         [NotMapped]
-        public string StatutAffiche => EstAnnulee ? "ANNULÉE" : "Validée";
+        public string StatutAffiche
+        {
+            get
+            {
+                if (EstAnnulee) return "ANNULÉE";
+                return StatutValidation == "En attente" ? "En attente" : "Validée";
+            }
+        }
+
+        [NotMapped]
+        public string CouleurStatut => EstAnnulee ? "#9CA3AF"
+            : StatutValidation == "En attente" ? "#D97706" : "#059669";
+
+        [NotMapped]
+        public string DateAffichee => DateDepense.ToString("dd/MM/yyyy");
+
+        [NotMapped]
+        public string MontantAffiche => Montant.ToString("N0") + " FCFA";
+
+        // ── Catalogue des catégories et types ────────────────────────────
+        public static readonly Dictionary<string, List<string>> CatalogueTypes
+            = new()
+            {
+                ["Charges fixes"] = new()
+                {
+                    "Loyer", "Électricité", "Eau", "Connexion Internet", "Téléphone"
+                },
+                ["Masse salariale"] = new()
+                {
+                    "Salaire Secrétaire", "Avance sur salaire", "Prime exceptionnelle"
+                },
+                ["Matériel & Entretien"] = new()
+                {
+                    "Fils & Accessoires", "Fermetures & Boutons", "Aiguilles",
+                    "Réparation machine", "Entretien atelier", "Achat fournitures"
+                },
+                ["Divers"] = new()
+                {
+                    "Transport", "Restauration", "Faux frais", "Autre"
+                }
+            };
     }
 }

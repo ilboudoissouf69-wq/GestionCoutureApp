@@ -37,6 +37,13 @@ namespace GestionCoutureApp.Models
         [Column(TypeName = "TEXT")]
         public decimal MontantCommission { get; set; }
 
+        // Prime qualité zéro défaut (0 si non accordée)
+        [Column(TypeName = "TEXT")]
+        public decimal PrimeQualite { get; set; } = 0m;
+
+        [NotMapped]
+        public decimal TotalAvecPrime => MontantCommission + PrimeQualite;
+
         public int NbCommandes { get; set; }
 
         public DateTime DateCalcul { get; set; } = DateTime.Now;
@@ -73,6 +80,8 @@ namespace GestionCoutureApp.Models
         public string DateCalculAffichee => DateCalcul.ToString("dd/MM/yyyy HH:mm");
 
         [NotMapped]
-        public string MontantAffiche => MontantCommission.ToString("N0");
+        public string MontantAffiche => PrimeQualite > 0
+            ? $"{MontantCommission:N0} + {PrimeQualite:N0} prime"
+            : MontantCommission.ToString("N0");
     }
 }

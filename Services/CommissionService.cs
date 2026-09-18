@@ -35,8 +35,13 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
 
             var query = context.PiecesCommande
+                .Include(p => p.MaterielSupplements)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.MaterielSupplements)
                 .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
                             p.Commande != null &&
                             p.Commande.DateFin.Date >= dateDebut.Date &&
@@ -63,6 +68,7 @@ namespace GestionCoutureApp.Services
 
                 if (piecesCouturier.Count == 0) continue;
 
+                // CA couture uniquement — les matériaux sont exclus de la commission
                 decimal caTotal = piecesCouturier.Sum(p => p.MontantCouture);
 
                 // CORRECTIF (audit) — BUG CRITIQUE : l'ancienne version faisait
@@ -85,6 +91,14 @@ namespace GestionCoutureApp.Services
                 decimal base_ = surMontantEncaisse ? caEncaisse : caTotal;
                 decimal commission = Math.Round(base_ * (pourcentage / 100m), 0);
 
+                // Matériaux rattachés aux pièces de ce couturier (exclus de la commission)
+                decimal totalMateriaux = piecesCouturier
+                    .SelectMany(p => p.MaterielSupplements ?? new List<MaterielSupplement>())
+                    .Sum(m => m.Quantite * m.PrixUnitaire);
+
+                // Encaissé total réel (couture + matériaux) = ce que le client a payé
+                decimal totalEncaisse = caEncaisse + totalMateriaux;
+
                 resultat.Add(new ApercuCommission
                 {
                     IdEmploye = couturier.IdEmploye,
@@ -94,6 +108,8 @@ namespace GestionCoutureApp.Services
                     CaEncaisse = caEncaisse,
                     BaseCalcul = base_,
                     Commission = commission,
+                    TotalMateriaux = totalMateriaux,
+                    TotalEncaisse  = totalEncaisse,
                     IdsCommandes = piecesCouturier.Select(p => p.IdCommande).Distinct().ToList(),
                     IdsPieces = piecesCouturier.Select(p => p.IdPieceCommande).ToList()
                 });
@@ -107,28 +123,40 @@ namespace GestionCoutureApp.Services
             return resultat;
         }
 
-        // CORRECTIF (audit) — NOUVEAU : calcule la part d'encaissé qui revient
-        // réellement à UNE pièce, au prorata de son montant de couture sur le
-        // total des pièces de sa commande.
+        // Calcule la part d'encaissé COUTURE qui revient à UNE pièce.
         //
-        // Exemple concret : commande à 2 pièces, 2000 FCFA (couturier A) et
-        // 3000 FCFA (couturier B), total 5000 FCFA. Le client a versé un
-        // acompte de 2000 FCFA (non détaillé, comme toujours — Option A du
-        // Point 1). Part de A = 2000 * (2000/5000) = 800 FCFA.
-        // Part de B = 2000 * (3000/5000) = 1200 FCFA. Total = 2000 FCFA :
-        // l'encaissé réel de la commande n'est jamais dépassé, ni dupliqué.
+        // Règle métier (cahier des charges Point 2) :
+        //   La commission du couturier est calculée UNIQUEMENT sur les frais de
+        //   couture — jamais sur les matériaux achetés pour le client.
+        //   Les paiements du client couvrent couture + matériaux, mais seule la
+        //   part couture entre dans la base de calcul.
+        //
+        // Méthode :
+        //   1. Encaissé couture = min(encaissé total, total couture commande)
+        //      → on plafonne à la valeur couture pour isoler la part matériaux
+        //   2. Part de la pièce = encaissé couture × (couture pièce / total couture)
         private static decimal PartEncaisseeDeLaPiece(PieceCommande piece)
         {
             var commande = piece.Commande;
             if (commande == null) return 0m;
 
-            decimal totalCommande = commande.Pieces.Sum(p => p.MontantCouture);
-            if (totalCommande <= 0m) return 0m;
+            // Total couture de la commande (hors matériaux)
+            decimal totalCouture = commande.Pieces.Sum(p => p.MontantCouture);
+            if (totalCouture <= 0m) return 0m;
 
-            decimal encaisseCommande = commande.MontantEncaisse;
-            decimal proportion = piece.MontantCouture / totalCommande;
+            // Encaissé total (couture + matériaux potentiellement)
+            decimal encaisseTotal = commande.MontantEncaisse;
 
-            return Math.Round(encaisseCommande * proportion, 0);
+            // On ne garde que la part couture de l'encaissé
+            // (les matériaux ne rentrent JAMAIS dans la commission)
+            decimal totalMateriaux = commande.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+            decimal encaisseCouture = Math.Max(0m, encaisseTotal - totalMateriaux);
+            // Plafond : on ne peut pas dépasser le total couture
+            encaisseCouture = Math.Min(encaisseCouture, totalCouture);
+
+            // Part proportionnelle de cette pièce
+            decimal proportion = piece.MontantCouture / totalCouture;
+            return Math.Round(encaisseCouture * proportion, 0);
         }
 
         public void EnregistrerCommissions(
@@ -162,6 +190,8 @@ namespace GestionCoutureApp.Services
                             .ThenInclude(c => c!.Pieces)
                         .Include(p => p.Commande)
                             .ThenInclude(c => c!.Paiements)
+                        .Include(p => p.Commande)
+                            .ThenInclude(c => c!.MaterielSupplements)
                         .Where(p => ligne.IdsPieces.Contains(p.IdPieceCommande) && p.IdCommission == null)
                         .ToList();
 
@@ -206,6 +236,9 @@ namespace GestionCoutureApp.Services
 
                     commission.MontantCommission =
                         Math.Round(commission.BaseMontant * (pourcentage / 100m), 0);
+
+                    // Prime qualité zéro défaut (calculée dans l'aperçu et transmise ici)
+                    commission.PrimeQualite = ligne.PrimeQualite;
 
                     context.Commissions.Add(commission);
                     context.SaveChanges();

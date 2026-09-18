@@ -27,11 +27,32 @@ namespace GestionCoutureApp.Services
         // réellement à verrouiller/déverrouiller lors de l'enregistrement.
         public List<int> IdsPieces { get; set; } = new();
 
+        // Qualité — remplis par BtnCalculer_Click dans CommissionsView
+        public int NbRetours         { get; set; }
+        public double TauxQualite    { get; set; } = 100.0;
+        public decimal PrimeQualite  { get; set; }
+
+        // Matériaux — exclus de la commission, 100% atelier
+        public decimal TotalMateriaux   { get; set; }
+        // CA encaissé TOTAL (couture + matériaux) = ce que le client a vraiment payé
+        public decimal TotalEncaisse    { get; set; }
+
+        // Totaux calculés
+        public decimal TotalAvecPrime   => Commission + PrimeQualite;
+        public decimal ResteAtelier     => TotalEncaisse - Commission;  // matériaux + part couture atelier
+
         // Propriétés d'affichage formatées pour la DataGrid
-        public string CaTotalAffiche => CaTotal.ToString("N0");
-        public string CaEncaisseAffiche => CaEncaisse.ToString("N0");
-        public string BaseAffichee => BaseCalcul.ToString("N0");
-        public string CommissionAffichee => Commission.ToString("N0");
+        public string CaTotalAffiche        => CaTotal.ToString("N0");
+        public string CaEncaisseAffiche     => CaEncaisse.ToString("N0");
+        public string BaseAffichee          => BaseCalcul.ToString("N0");
+        public string CommissionAffichee    => Commission.ToString("N0");
+        public string TauxQualiteAffiche    => TauxQualite.ToString("0.#") + "%";
+        public string TotalMateriauxAffiche => TotalMateriaux.ToString("N0");
+        public string TotalEncaisseAffiche  => TotalEncaisse.ToString("N0");
+        public string ResteAtelierAffiche   => ResteAtelier.ToString("N0");
+        public string PrimeQualiteAffiche   => PrimeQualite > 0
+            ? "+" + PrimeQualite.ToString("N0") : "—";
+        public string TotalAffiche          => TotalAvecPrime.ToString("N0");
     }
 
     public interface ICommissionService

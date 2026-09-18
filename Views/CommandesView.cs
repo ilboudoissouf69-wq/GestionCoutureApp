@@ -18,6 +18,7 @@ namespace GestionCoutureApp.Views
         private readonly IClientService _clientService;
         private readonly ApplicationDbContext _context;
         private readonly IMaterielService _materielService;
+        private readonly IWhatsAppService _whatsApp;
         private int _commandeSelectionneeId;
         private int? _pieceSelectionneeId; // null = aucune pièce sélectionnée
         // CORRECTIF (audit) : le motif saisi lors de l'exception Boss (ajout de
@@ -45,6 +46,7 @@ namespace GestionCoutureApp.Views
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _clientService = App.Services.GetRequiredService<IClientService>();
             _materielService = App.Services.GetRequiredService<IMaterielService>();
+            _whatsApp = App.Services.GetRequiredService<IWhatsAppService>();
 
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
@@ -334,6 +336,9 @@ namespace GestionCoutureApp.Views
             // Si une pièce a été chargée (commande avec pièces), rafraîchir ses matériaux
             if (_pieceSelectionneeId.HasValue)
                 RafraichirMateriaux();
+
+            // Mettre à jour les boutons WhatsApp selon le statut de la commande
+            MettreAJourBoutonsWhatsApp(cmd);
         }
 
         // ==================================================================
@@ -1682,6 +1687,123 @@ namespace GestionCoutureApp.Views
         private void BtnVider_Click(object sender, RoutedEventArgs e) { ViderChamps(); }
 
         // ==================================================================
+        // WHATSAPP — Notifications client
+        // ==================================================================
+
+        /// <summary>
+        /// Met à jour la visibilité et le label des boutons WhatsApp
+        /// selon le statut de la commande sélectionnée.
+        /// </summary>
+        private void MettreAJourBoutonsWhatsApp(Commande? cmd)
+        {
+            bool aCommande = cmd != null;
+            bool estTerminee = aCommande && cmd!.StatutGlobalAffiche == "Terminée";
+
+            // Bouton pied (toujours visible si une commande est sélectionnée)
+            BtnWhatsAppPied.Visibility = aCommande ? Visibility.Visible : Visibility.Collapsed;
+            if (aCommande)
+            {
+                TxtWhatsAppPiedLabel.Text = estTerminee ? "Prête !" : "RDV";
+                BtnWhatsAppPied.Background = System.Windows.Media.Brushes.Green;
+                BtnWhatsAppPied.ToolTip = estTerminee
+                    ? "Notifier le client : commande prête"
+                    : "Envoyer rappel de RDV au client";
+            }
+
+            // Boutons dans l'en-tête (Prête + RDV)
+            BtnWhatsAppPrete.Visibility = estTerminee ? Visibility.Visible : Visibility.Collapsed;
+            BtnWhatsAppRdv.Visibility   = aCommande   ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private Commande? ObtenirCommandeSelectionnee()
+        {
+            if (_commandeSelectionneeId == 0) return null;
+            return _commandeService.ObtenirTous()
+                .FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
+        }
+
+        // Bouton dans le tableau (colonne 💬)
+        private void BtnWhatsAppCommande_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.DataContext is not Commande cmd) return;
+            EnvoyerWhatsAppCommande(cmd);
+        }
+
+        // Bouton "💬 Prête !" dans l'en-tête du panneau
+        private void BtnWhatsAppPrete_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = ObtenirCommandeSelectionnee();
+            if (cmd == null) return;
+            try
+            {
+                _whatsApp.NotifierCommandePrete(cmd);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Impossible d'ouvrir WhatsApp :\n" + ex.Message,
+                    "Erreur WhatsApp", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Bouton "⏰ RDV" dans l'en-tête du panneau
+        private void BtnWhatsAppRdv_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = ObtenirCommandeSelectionnee();
+            if (cmd == null) return;
+            try
+            {
+                _whatsApp.NotifierRappelRdv(cmd);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Impossible d'ouvrir WhatsApp :\n" + ex.Message,
+                    "Erreur WhatsApp", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Bouton "💬 Notifier" dans le pied — envoie Prête si terminée, RDV sinon
+        private void BtnWhatsAppPied_Click(object sender, RoutedEventArgs e)
+        {
+            var cmd = ObtenirCommandeSelectionnee();
+            if (cmd == null) return;
+            try
+            {
+                if (cmd.StatutGlobalAffiche == "Terminée")
+                    _whatsApp.NotifierCommandePrete(cmd);
+                else
+                    _whatsApp.NotifierRappelRdv(cmd);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Impossible d'ouvrir WhatsApp :\n" + ex.Message,
+                    "Erreur WhatsApp", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void EnvoyerWhatsAppCommande(Commande cmd)
+        {
+            if (string.IsNullOrWhiteSpace(cmd.Client?.Telephone))
+            {
+                MessageBox.Show("Ce client n'a pas de numéro de téléphone.",
+                    "WhatsApp", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            try
+            {
+                // Si terminée → message "prête", sinon → rappel RDV
+                if (cmd.StatutGlobalAffiche == "Terminée")
+                    _whatsApp.NotifierCommandePrete(cmd);
+                else
+                    _whatsApp.NotifierRappelRdv(cmd);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Impossible d'ouvrir WhatsApp :\n" + ex.Message,
+                    "Erreur WhatsApp", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // ==================================================================
         // Import / Capture / Suppression photo
         // ==================================================================
         private static readonly string[] ExtensionsAutorisees = { ".jpg", ".jpeg", ".png", ".bmp" };
@@ -1727,6 +1849,9 @@ namespace GestionCoutureApp.Views
                 string cheminDestination = System.IO.Path.Combine(dossierPhotos, nomFichier);
 
                 System.IO.File.Copy(dialog.FileName, cheminDestination, overwrite: true);
+
+                // Compression JPEG 1024×768 / 70% à la source (après copie)
+                GestionCoutureApp.Helpers.PhotoCompressor.Compresser(cheminDestination, cheminDestination);
 
                 _cheminPhotoTemporaire = cheminDestination;
                 ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(cheminDestination));
@@ -1825,6 +1950,9 @@ namespace GestionCoutureApp.Views
 
             // Réafficher le formulaire pour la première pièce (mode création)
             AfficherFormulairePiece(true);
+
+            // Masquer les boutons WhatsApp quand aucune commande n'est sélectionnée
+            MettreAJourBoutonsWhatsApp(null);
         }
         // ==================================================================
         private string? DemanderMotif(string titre)

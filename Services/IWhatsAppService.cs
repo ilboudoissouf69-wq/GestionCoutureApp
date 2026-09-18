@@ -1,24 +1,50 @@
+using GestionCoutureApp.Models;
+
 namespace GestionCoutureApp.Services
 {
     /// <summary>
-    /// Point 6 — Message WhatsApp semi-automatique.
-    /// L'application ouvre WhatsApp (application ou WhatsApp Web) avec le
-    /// message déjà rédigé pour le client ; la secrétaire vérifie que la
-    /// commande est réellement terminée puis clique elle-même sur "Envoyer".
-    /// Aucun envoi n'est jamais automatique.
+    /// Point 6 — Notifications WhatsApp semi-automatiques (Option A : wa.me).
+    /// L'application prépare le message et ouvre WhatsApp ; la secrétaire
+    /// vérifie puis appuie sur Entrée. Aucun envoi n'est jamais automatique.
     /// </summary>
     public interface IWhatsAppService
     {
-        /// <summary>
-        /// Convertit un numéro local (ex. "70 12 34 56") au format
-        /// international attendu par WhatsApp (ex. "22670123456", sans le +).
-        /// </summary>
+        /// <summary>Normalise un numéro local au format international sans '+'.</summary>
         string NormaliserNumero(string numeroLocal);
 
-        /// <summary>
-        /// Ouvre WhatsApp (application ou WhatsApp Web) avec le message déjà
-        /// rédigé pour ce numéro. N'envoie jamais rien tout seul.
-        /// </summary>
+        /// <summary>Ouvre WhatsApp avec le message pré-rempli.</summary>
         void OuvrirConversation(string numeroLocal, string message);
+
+        // ── Messages métier ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Message "Commande prête" — envoyé quand toutes les pièces sont Terminées.
+        /// </summary>
+        string MessageCommandePrete(Commande commande);
+
+        /// <summary>
+        /// Rappel de RDV de retrait pour le client.
+        /// </summary>
+        string MessageRappelRdv(Commande commande);
+
+        /// <summary>
+        /// Message de contact général (depuis la fiche client).
+        /// </summary>
+        string MessageContactGeneral(Client client);
+
+        /// <summary>
+        /// Ouvre directement WhatsApp avec le message "Commande prête".
+        /// </summary>
+        void NotifierCommandePrete(Commande commande);
+
+        /// <summary>
+        /// Ouvre directement WhatsApp avec le rappel de RDV.
+        /// </summary>
+        void NotifierRappelRdv(Commande commande);
+
+        /// <summary>
+        /// Ouvre WhatsApp pour contacter le client (message général).
+        /// </summary>
+        void ContacterClient(Client client);
     }
 }

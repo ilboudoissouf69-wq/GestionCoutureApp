@@ -73,9 +73,11 @@ namespace GestionCoutureApp.Views
                 c.IdCommission,
                 DateCalculAffichee = c.DateCalcul.ToString("dd/MM/yyyy HH:mm"),
                 c.NomEmployeSnapshot,
-                PeriodeAffichee = c.DateDebutPeriode.ToString("dd/MM/yyyy") + " - " + c.DateFinPeriode.ToString("dd/MM/yyyy"),
+                PeriodeAffichee = c.DateDebutPeriode.ToString("dd/MM/yyyy") + " – " + c.DateFinPeriode.ToString("dd/MM/yyyy"),
                 c.BaseCalcul,
                 MontantAffiche = c.MontantCommission.ToString("N0"),
+                PrimeAffiche   = c.PrimeQualite > 0 ? "+" + c.PrimeQualite.ToString("N0") : "—",
+                TotalAffiche   = c.TotalAvecPrime.ToString("N0"),
                 c.StatutAffichage,
                 c.NomOperateur
             }).ToList();
@@ -127,19 +129,70 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // Lire la prime zéro défaut
+            if (!decimal.TryParse(TxtPrimeZeroDefaut.Text, out decimal primeZeroDefaut) || primeZeroDefaut < 0)
+                primeZeroDefaut = 0m;
+
             DateTime dateDebut = DateDebut.SelectedDate ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            DateTime dateFin = DateFin.SelectedDate ?? DateTime.Today;
+            DateTime dateFin   = DateFin.SelectedDate   ?? DateTime.Today;
 
             _dernierApercu = _commissionService.CalculerApercu(
                 dateDebut, dateFin, pourcentage, _surMontantEncaisse, _idCouturierSelectionne);
 
-            decimal caTotalRetenu = _dernierApercu.Sum(a => a.BaseCalcul);
+            // ── Enrichir chaque aperçu avec les données qualité ──────────
+            try
+            {
+                using var ctx = _contextFactory.CreateDbContext();
+                var retours = ctx.Retours
+                    .Where(r => !r.EstAnnule &&
+                                r.DateSignalement.Date >= dateDebut.Date &&
+                                r.DateSignalement.Date <= dateFin.Date)
+                    .ToList();
+
+                foreach (var ap in _dernierApercu)
+                {
+                    ap.NbRetours = retours.Count(r => r.IdCouturier == ap.IdEmploye);
+                    ap.TauxQualite = ap.NbCommandes > 0
+                        ? Math.Round(100.0 * (ap.NbCommandes - ap.NbRetours) / ap.NbCommandes, 1)
+                        : 100.0;
+                    // Prime si ≥ 5 pièces et 0 retour
+                    ap.PrimeQualite = (ap.NbCommandes >= 5 && ap.NbRetours == 0)
+                        ? primeZeroDefaut
+                        : 0m;
+                }
+            }
+            catch { /* retours pas encore en base */ }
+
+            decimal caTotalRetenu    = _dernierApercu.Sum(a => a.BaseCalcul);
             decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);
+            decimal totalPrimes      = _dernierApercu.Sum(a => a.PrimeQualite);
 
-            TxtCaTotal.Text = caTotalRetenu.ToString("N0");
-            TxtTotalCommissions.Text = totalCommissions.ToString("N0");
-            TxtResteAtelier.Text = (caTotalRetenu - totalCommissions).ToString("N0");
+            // 5 cartes KPI
+            decimal totalEncaisseGlobal   = _dernierApercu.Sum(a => a.TotalEncaisse);
+            decimal totalMateriauxGlobal  = _dernierApercu.Sum(a => a.TotalMateriaux);
+            decimal totalCoutureGlobal    = _dernierApercu.Sum(a => a.CaTotal);
+            decimal resteAtelierGlobal    = totalEncaisseGlobal - totalCommissions - totalPrimes;
 
+            TxtCaEncaisseTotal.Text   = totalEncaisseGlobal.ToString("N0");
+            TxtTotalMateriauxKpi.Text = totalMateriauxGlobal.ToString("N0");
+            TxtCaTotal.Text           = totalCoutureGlobal.ToString("N0");
+            TxtTotalCommissions.Text  = totalCommissions.ToString("N0");
+            TxtResteAtelier.Text      = resteAtelierGlobal.ToString("N0");
+
+            // Bande primes
+            if (totalPrimes > 0)
+            {
+                int nbEligibles = _dernierApercu.Count(a => a.PrimeQualite > 0);
+                TxtTotalPrimes.Text  = totalPrimes.ToString("N0") + " FCFA";
+                TxtDetailPrimes.Text = $"({nbEligibles} couturier(s) éligible(s) — zéro retour)";
+            }
+            else
+            {
+                TxtTotalPrimes.Text  = "0 FCFA";
+                TxtDetailPrimes.Text = "(aucun couturier éligible sur cette période)";
+            }
+
+            GridCommissions.ItemsSource = null;
             GridCommissions.ItemsSource = _dernierApercu;
 
             BtnEnregistrer.IsEnabled = _dernierApercu.Count > 0;
@@ -158,11 +211,18 @@ namespace GestionCoutureApp.Views
             }
 
             decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);
+            decimal totalPrimes      = _dernierApercu.Sum(a => a.PrimeQualite);
+            int nbPrimes             = _dernierApercu.Count(a => a.PrimeQualite > 0);
+
+            string detailPrimes = nbPrimes > 0
+                ? $"\n🎁 Prime Zéro Défaut : +{totalPrimes:N0} FCFA ({nbPrimes} couturier(s) éligible(s))"
+                : "\n(Aucun couturier éligible à la prime zéro défaut)";
+
             var confirmation = MessageBox.Show(
                 $"Vous allez enregistrer {totalCommissions:N0} FCFA de commissions pour " +
-                $"{_dernierApercu.Count} couturier(s).\n\n" +
-                "Les commandes concernées seront verrouillées et ne pourront plus jamais être " +
-                "recomptées dans un calcul futur.\n\nConfirmer ?",
+                $"{_dernierApercu.Count} couturier(s).{detailPrimes}\n\n" +
+                $"Total à verser : {(totalCommissions + totalPrimes):N0} FCFA\n\n" +
+                "Les commandes concernées seront verrouillées.\n\nConfirmer ?",
                 "Confirmation d'enregistrement",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
 

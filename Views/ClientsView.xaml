@@ -11,7 +11,7 @@
             <ColumnDefinition Width="320"/>
         </Grid.ColumnDefinitions>
 
-        <!-- GAUCHE -->
+        <!-- ═══════════════════════════════ GAUCHE ═══════════════════════ -->
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -19,7 +19,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Titre avec trait rouge -->
+            <!-- Titre -->
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
                 <TextBlock Text="Gestion des Clients"
                            FontSize="22" FontWeight="Bold"
@@ -37,24 +37,68 @@
             <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
                 <DataGrid x:Name="GridClients"
                           Style="{StaticResource ModernGrid}"
-                          SelectionChanged="GridClients_SelectionChanged">
+                          SelectionChanged="GridClients_SelectionChanged"
+                          AutoGenerateColumns="False">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Nom"       Binding="{Binding Nom}"       Width="*"/>
-                        <DataGridTextColumn Header="Prenom"    Binding="{Binding Prenom}"    Width="*"/>
-                        <DataGridTextColumn Header="Telephone" Binding="{Binding Telephone}" Width="140"/>
+                        <DataGridTextColumn Header="Nom"    Binding="{Binding Nom}"    Width="*"/>
+                        <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="*"/>
+
+                        <!-- Téléphone + bouton WhatsApp intégré -->
+                        <DataGridTemplateColumn Header="Téléphone" Width="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="32"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding Telephone}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="4,0,0,0"
+                                                   FontSize="12"/>
+
+                                        <!-- 💬 bouton vert WhatsApp -->
+                                        <Button Grid.Column="1"
+                                                Content="💬"
+                                                Width="26" Height="24"
+                                                FontSize="12"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Cursor="Hand"
+                                                ToolTip="Envoyer un message WhatsApp"
+                                                Click="BtnWhatsAppTableau_Click"
+                                                Margin="0,0,2,0">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Style.Triggers>
+                                                        <!-- Désactiver si pas de téléphone -->
+                                                        <DataTrigger Binding="{Binding Telephone}" Value="">
+                                                            <Setter Property="Opacity" Value="0.3"/>
+                                                            <Setter Property="IsEnabled" Value="False"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
         </Grid>
 
-        <!-- DROITE -->
+        <!-- ═══════════════════════════════ DROITE ═══════════════════════ -->
         <Border Grid.Column="2" Style="{StaticResource Card}"
                 Padding="0" VerticalAlignment="Top">
             <StackPanel>
-                <!-- En-tête panel — noir -->
+                <!-- En-tête noir -->
                 <Border CornerRadius="10,10,0,0" Padding="20,14"
                         Background="#1A1A1A">
-                    <TextBlock Text="Details du client"
+                    <TextBlock Text="Détails du client"
                                FontSize="14" FontWeight="Bold" Foreground="White"/>
                 </Border>
 
@@ -63,20 +107,63 @@
                     <TextBox x:Name="TxtNom" Style="{StaticResource ModernTextBox}"
                              Margin="0,0,0,12"/>
 
-                    <TextBlock Text="Prenom *" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Text="Prénom *" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="TxtPrenom" Style="{StaticResource ModernTextBox}"
                              Margin="0,0,0,12"/>
 
-                    <TextBlock Text="Telephone" Style="{StaticResource FieldLabel}"/>
-                    <TextBox x:Name="TxtTelephone" Style="{StaticResource ModernTextBox}"
-                             Margin="0,0,0,22"/>
+                    <!-- Téléphone + bouton WhatsApp -->
+                    <TextBlock Text="Téléphone" Style="{StaticResource FieldLabel}"/>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <Separator Background="{StaticResource BorderBrush}" Margin="0,0,0,16"/>
+                        <TextBox Grid.Column="0"
+                                 x:Name="TxtTelephone"
+                                 Style="{StaticResource ModernTextBox}"/>
 
-                    <Button Content="Ajouter"      Style="{StaticResource BtnSuccess}" Click="BtnAjouter_Click"  Margin="0,0,0,8"/>
-                    <Button Content="Modifier"     Style="{StaticResource BtnNavy}"   Click="BtnModifier_Click" Margin="0,0,0,8"/>
-                    <Button Content="Supprimer"    Style="{StaticResource BtnDanger}" Click="BtnSupprimer_Click" Margin="0,0,0,8"/>
-                    <Button Content="Vider les champs" Style="{StaticResource BtnGhost}" Click="BtnVider_Click"/>
+                        <!-- Bouton WhatsApp panneau -->
+                        <Button Grid.Column="2"
+                                x:Name="BtnWhatsAppPanneau"
+                                Height="36" Padding="12,0,12,0"
+                                FontSize="12" FontWeight="SemiBold"
+                                Cursor="Hand"
+                                Background="#25D366"
+                                Foreground="White"
+                                BorderThickness="0"
+                                ToolTip="Ouvrir WhatsApp pour ce client"
+                                Click="BtnWhatsAppPanneau_Click">
+                            <Button.Content>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="💬" FontSize="13"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,5,0"/>
+                                    <TextBlock Text="WhatsApp"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button.Content>
+                        </Button>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,4,0,16"/>
+
+                    <Button Content="✚  Ajouter"
+                            Style="{StaticResource BtnSuccess}"
+                            Click="BtnAjouter_Click"
+                            Margin="0,0,0,8"/>
+                    <Button Content="✏  Modifier"
+                            Style="{StaticResource BtnNavy}"
+                            Click="BtnModifier_Click"
+                            Margin="0,0,0,8"/>
+                    <Button Content="🗑  Supprimer"
+                            Style="{StaticResource BtnDanger}"
+                            Click="BtnSupprimer_Click"
+                            Margin="0,0,0,8"/>
+                    <Button Content="Vider les champs"
+                            Style="{StaticResource BtnGhost}"
+                            Click="BtnVider_Click"/>
                 </StackPanel>
             </StackPanel>
         </Border>

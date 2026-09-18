@@ -118,7 +118,9 @@ namespace GestionCoutureApp.Views
                 string suffixeUnique = Guid.NewGuid().ToString("N")[..8];
                 string chemin = System.IO.Path.Combine(dossierPhotos,
                     $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixeUnique}.jpg");
-                copieLocale.Save(chemin, ImageFormat.Jpeg);
+
+                // Compression JPEG 1024×768 / 70% à la source
+                chemin = GestionCoutureApp.Helpers.PhotoCompressor.CompresserBitmap(copieLocale, chemin);
                 CapturedFilePath = chemin;
                 DialogResult = true;
                 Close();

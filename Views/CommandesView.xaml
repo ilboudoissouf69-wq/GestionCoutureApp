@@ -82,6 +82,36 @@
                         <DataGridTextColumn Header="RDV"
                                             Binding="{Binding DateFin, StringFormat={}{0:dd/MM}}"
                                             Width="62"/>
+
+                        <!-- ── WhatsApp ── -->
+                        <DataGridTemplateColumn Header="💬" Width="38">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="💬"
+                                            Width="28" Height="26"
+                                            FontSize="13"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            HorizontalAlignment="Center"
+                                            ToolTip="Notifier le client sur WhatsApp"
+                                            Click="BtnWhatsAppCommande_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Opacity" Value="0.45"/>
+                                                <Style.Triggers>
+                                                    <!-- Vert vif si commande Terminee -->
+                                                    <DataTrigger Binding="{Binding StatutGlobalAffiche}" Value="Terminée">
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                        <Setter Property="ToolTip" Value="✅ Commande prête — Notifier le client"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
@@ -107,11 +137,71 @@
                 <!-- ── En-tête panneau ── -->
                 <Border Grid.Row="0"
                         CornerRadius="10,10,0,0"
-                        Padding="20,14"
+                        Padding="16,12"
                         Background="#1A1A1A">
-                    <TextBlock Text="Détails de la commande"
-                               FontSize="14" FontWeight="Bold"
-                               Foreground="White"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="Détails de la commande"
+                                   FontSize="14" FontWeight="Bold"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
+
+                        <!-- Boutons WhatsApp dans l'en-tête -->
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+
+                            <!-- Notifier commande prête -->
+                            <Button x:Name="BtnWhatsAppPrete"
+                                    Height="30" Padding="10,0,10,0"
+                                    FontSize="11" FontWeight="SemiBold"
+                                    Background="#25D366"
+                                    Foreground="White"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Margin="0,0,6,0"
+                                    Visibility="Collapsed"
+                                    ToolTip="Envoyer WhatsApp : commande prête"
+                                    Click="BtnWhatsAppPrete_Click">
+                                <Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="💬" FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,4,0"/>
+                                        <TextBlock Text="Prête !"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button.Content>
+                            </Button>
+
+                            <!-- Rappel RDV -->
+                            <Button x:Name="BtnWhatsAppRdv"
+                                    Height="30" Padding="10,0,10,0"
+                                    FontSize="11" FontWeight="SemiBold"
+                                    Background="#075E54"
+                                    Foreground="White"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Visibility="Collapsed"
+                                    ToolTip="Envoyer WhatsApp : rappel de RDV"
+                                    Click="BtnWhatsAppRdv_Click">
+                                <Button.Content>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⏰" FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,4,0"/>
+                                        <TextBlock Text="RDV"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button.Content>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- ── Corps scrollable ── -->
@@ -963,6 +1053,8 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- Créer -->
@@ -997,6 +1089,30 @@
                                 Style="{StaticResource BtnDanger}"
                                 Height="36" Padding="14,0"
                                 Click="BtnSupprimer_Click"/>
+
+                        <!-- WhatsApp Notifier — visible uniquement si commande sélectionnée -->
+                        <Button Grid.Column="7"
+                                x:Name="BtnWhatsAppPied"
+                                Height="36" Padding="12,0,12,0"
+                                FontSize="12" FontWeight="SemiBold"
+                                Background="#25D366"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Visibility="Collapsed"
+                                ToolTip="Notifier le client sur WhatsApp"
+                                Click="BtnWhatsAppPied_Click">
+                            <Button.Content>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="💬" FontSize="14"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,5,0"/>
+                                    <TextBlock x:Name="TxtWhatsAppPiedLabel"
+                                               Text="Notifier"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button.Content>
+                        </Button>
                     </Grid>
                 </Border>
             </Grid>
