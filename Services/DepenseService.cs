@@ -54,6 +54,12 @@ namespace GestionCoutureApp.Services
         public void Valider(int idDepense, string nomBoss)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // ✅ CORRECTIF AUDIT #8 : Vérifier que le validateur est Boss
+            var validateur = context.Employes.FirstOrDefault(e => 
+                (e.Prenom + " " + e.Nom) == nomBoss);
+            Helpers.AuthorizationHelper.RequireRole(validateur, "Boss");
+
             var dep = context.Depenses.Find(idDepense)
                 ?? throw new InvalidOperationException("Dépense introuvable.");
             if (dep.EstAnnulee)
@@ -68,6 +74,12 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
             using var context = _contextFactory.CreateDbContext();
+
+            // ✅ CORRECTIF AUDIT #8 : Seul le Boss peut annuler une dépense
+            var annulateur = context.Employes.FirstOrDefault(e => 
+                (e.Prenom + " " + e.Nom) == nomAnnulateur);
+            Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
+
             var depense = context.Depenses.Find(idDepense)
                 ?? throw new InvalidOperationException("Dépense introuvable.");
             if (depense.EstAnnulee)
@@ -113,6 +125,11 @@ namespace GestionCoutureApp.Services
                 .Sum(c => c.MontantCommission + c.PrimeQualite);
 
             // Matériaux facturés clients (sur les commandes de la période)
+            // ✅ CORRECTIF AUDIT #3 : Les matériaux représentent un COÛT pour l'atelier
+            // (tissu/boutons achetés et refacturés au client). Ils sont déduits dans
+            // StatsFinancieres.MargeBrute = CA - Commissions - Matériaux.
+            // Si l'atelier applique une marge sur les matériaux (ex: acheté 5k, vendu 7k),
+            // il faudrait stocker le coût d'achat réel dans MaterielSupplement.CoutAchat.
             decimal totalMateriaux = context.MaterielsSupplements
                 .Include(m => m.Commande)
                 .Where(m => m.Commande != null &&

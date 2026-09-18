@@ -32,6 +32,10 @@ namespace GestionCoutureApp.Models
         [MaxLength(20)]
         public string Statut { get; set; } = "Actif";
 
+        // ✅ CORRECTIF AUDIT #11 : Traçabilité du dernier changement de mot de passe
+        // pour rappel périodique (tous les 90 jours pour le Boss)
+        public DateTime? DerniereModificationMotDePasse { get; set; }
+
         [NotMapped]
         public string NomComplet => $"{Prenom} {Nom}";
     }

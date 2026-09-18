@@ -184,7 +184,15 @@
                         <!-- Montant -->
                         <StackPanel Grid.Column="4">
                             <TextBlock Text="Montant (FCFA) *" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TxtMontant" Style="{StaticResource ModernTextBox}"/>
+                            <TextBox x:Name="TxtMontant" Style="{StaticResource ModernTextBox}">
+                                <TextBox.Text>
+                                    <Binding Path="Text" RelativeSource="{RelativeSource Self}" UpdateSourceTrigger="PropertyChanged">
+                                        <Binding.ValidationRules>
+                                            <helpers:MontantPositifValidationRule xmlns:helpers="clr-namespace:GestionCoutureApp.Helpers" />
+                                        </Binding.ValidationRules>
+                                    </Binding>
+                                </TextBox.Text>
+                            </TextBox>
                         </StackPanel>
 
                         <!-- Date -->

@@ -131,8 +131,19 @@ namespace GestionCoutureApp.Services
         // ----------------------------------------------------------------
         public void ChangerMotDePasse(int idEmploye, string ancienMotDePasse, string nouveauMotDePasse)
         {
+            // ✅ CORRECTIF AUDIT #7 : Validation renforcée des mots de passe
             if (string.IsNullOrWhiteSpace(nouveauMotDePasse) || nouveauMotDePasse.Length < 6)
                 throw new InvalidOperationException("Le nouveau mot de passe doit contenir au moins 6 caractères.");
+
+            if (nouveauMotDePasse.Trim().Length < 6)
+                throw new InvalidOperationException(
+                    "Le mot de passe ne peut pas être composé uniquement d'espaces.");
+
+            // Interdire les mots de passe trop faibles
+            string[] motsDePasseInterdits = { "123456", "password", "motdepasse", "admin", "boss", "secret" };
+            if (motsDePasseInterdits.Any(m => nouveauMotDePasse.ToLower().Contains(m)))
+                throw new InvalidOperationException(
+                    "Ce mot de passe est trop faible. Évitez les mots courants.");
 
             using var context = _contextFactory.CreateDbContext();
             var employe = context.Employes.Find(idEmploye)
@@ -146,6 +157,10 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException("L'ancien mot de passe est incorrect.");
 
             employe.MotDePasse = PasswordHasher.Hasher(nouveauMotDePasse);
+            
+            // ✅ CORRECTIF AUDIT #11 : Enregistrer la date de modification
+            employe.DerniereModificationMotDePasse = DateTime.Now;
+            
             context.SaveChanges();
 
             // Garde la session en mémoire cohérente avec la base

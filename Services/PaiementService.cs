@@ -125,7 +125,24 @@ namespace GestionCoutureApp.Services
                 paiement.EstAnnule = false;
 
                 context.Paiements.Add(paiement);
-                context.SaveChanges();
+
+                // ✅ CORRECTIF AUDIT #5 : Gestion retry en cas de doublon (race condition)
+                try
+                {
+                    context.SaveChanges();
+                }
+                catch (DbUpdateException ex) when (
+                    ex.InnerException?.Message?.Contains("UNIQUE constraint") == true ||
+                    ex.InnerException?.Message?.Contains("IX_Paiements_RecuNumero") == true)
+                {
+                    // Collision détectée : régénérer un nouveau numéro et réessayer
+                    paiement.RecuNumero = GenererNumeroRecu(context);
+                    context.SaveChanges();
+                    
+                    _logger.LogWarning(
+                        "Collision numéro reçu détectée — régénéré en {Nouveau}",
+                        paiement.RecuNumero);
+                }
 
                 _logger.LogInformation(
                     "Paiement {Recu} enregistré — commande {IdCommande} — {Montant:N0} FCFA — opérateur {Op}",
@@ -140,6 +157,11 @@ namespace GestionCoutureApp.Services
         public void Annuler(int idPaiement, string motif, string nomAnnulateur)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // ✅ CORRECTIF AUDIT #8 : Seul le Boss peut annuler un paiement
+            var annulateur = context.Employes.FirstOrDefault(e => 
+                (e.Prenom + " " + e.Nom) == nomAnnulateur);
+            Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
 
             var paiement = context.Paiements.Find(idPaiement)
                 ?? throw new InvalidOperationException("Paiement introuvable.");

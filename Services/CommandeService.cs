@@ -8,6 +8,9 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
 
+        // ✅ CORRECTIF AUDIT #1 : Event pour notifier les vues des changements
+        public event EventHandler<CommandeChangedEventArgs>? CommandeChanged;
+
         public CommandeService(IDbContextFactory<ApplicationDbContext> contextFactory)
         {
             _contextFactory = contextFactory;
@@ -149,6 +152,11 @@ namespace GestionCoutureApp.Services
         public void Supprimer(int id)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // ✅ CORRECTIF AUDIT #8 : Cette méthode devrait être réservée au Boss
+            // Note: actuellement appelée sans traçabilité de l'opérateur dans CommandesView
+            // TODO: ajouter paramètre idOperateur pour tracer qui supprime
+
             var commande = context.Commandes
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces)
@@ -265,6 +273,14 @@ namespace GestionCoutureApp.Services
                 context.Mesures.Add(mesure);
             }
             context.SaveChanges();
+
+            // ✅ CORRECTIF AUDIT #1 : Notification du changement
+            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            {
+                IdCommande = idCommande,
+                TypeChangement = "PieceAjoutee",
+                Details = $"Pièce #{piece.IdPieceCommande} ({piece.TypeVetement}) - {piece.MontantCouture:N0} FCFA"
+            });
         }
 
         public void ModifierPiece(PieceCommande piece, List<Mesure> mesures)
@@ -326,6 +342,17 @@ namespace GestionCoutureApp.Services
             }
 
             context.SaveChanges();
+
+            // ✅ CORRECTIF AUDIT #1 : Notification si montant modifié
+            if (pieceExistante.MontantCouture != piece.MontantCouture)
+            {
+                CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+                {
+                    IdCommande = pieceExistante.IdCommande,
+                    TypeChangement = "MontantModifie",
+                    Details = $"Pièce #{pieceExistante.IdPieceCommande} : {pieceExistante.MontantCouture:N0} FCFA"
+                });
+            }
         }
 
         public void SupprimerPiece(int idPieceCommande)
@@ -364,6 +391,14 @@ namespace GestionCoutureApp.Services
             context.Mesures.RemoveRange(piece.Mesures);
             context.PiecesCommande.Remove(piece);
             context.SaveChanges();
+
+            // ✅ CORRECTIF AUDIT #1 : Notification
+            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            {
+                IdCommande = piece.IdCommande,
+                TypeChangement = "PieceSupprimee",
+                Details = $"Pièce #{idPieceCommande} supprimée"
+            });
         }
 
         public PieceCommande DupliquerPiece(int idPieceCommandeSource)

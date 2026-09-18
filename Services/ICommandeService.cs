@@ -6,6 +6,9 @@ namespace GestionCoutureApp.Services
 {
     public interface ICommandeService
     {
+        // ✅ CORRECTIF AUDIT #1 : Event pour notifier les vues des changements
+        event EventHandler<CommandeChangedEventArgs>? CommandeChanged;
+
         List<Commande> ObtenirTous();
         Commande? ObtenirParId(int id);
 

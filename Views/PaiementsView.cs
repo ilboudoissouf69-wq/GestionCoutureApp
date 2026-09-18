@@ -27,9 +27,17 @@ namespace GestionCoutureApp.Views
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _authService = App.Services.GetRequiredService<IAuthService>();
 
+            // ✅ CORRECTIF AUDIT #1 : S'abonner aux changements de commande
+            _commandeService.CommandeChanged += OnCommandeChanged;
+
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
-            Unloaded += (s, e) => _context.Dispose();
+            Unloaded += (s, e) =>
+            {
+                _context.Dispose();
+                // ✅ Se désabonner pour éviter les fuites mémoire
+                _commandeService.CommandeChanged -= OnCommandeChanged;
+            };
 
             _operateurConnecte = _authService.UtilisateurConnecte;
 
@@ -505,6 +513,79 @@ namespace GestionCoutureApp.Views
                 return motif;
 
             return null;
+        }
+
+        // ----------------------------------------------------------------
+        // ✅ CORRECTIF AUDIT #1 : Gestion des changements de commande
+        // ----------------------------------------------------------------
+
+        /// <summary>
+        /// Appelé automatiquement lorsqu'une commande est modifiée ailleurs
+        /// (ex: ajout de pièce depuis CommandesView).
+        /// Rafraîchit l'affichage si c'est la commande actuellement sélectionnée.
+        /// </summary>
+        private void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
+        {
+            // Ne rien faire si aucune commande sélectionnée ou si c'est une autre commande
+            if (_commandeSelectionnee == null || _commandeSelectionnee.IdCommande != e.IdCommande)
+                return;
+
+            // Rafraîchir sur le thread UI
+            Dispatcher.Invoke(() =>
+            {
+                // Recharger la commande depuis la base
+                _commandeSelectionnee = _commandeService.ObtenirParId(e.IdCommande);
+
+                if (_commandeSelectionnee == null)
+                {
+                    // La commande a été supprimée
+                    TxtInfoMontant.Text = "—";
+                    TxtInfoReste.Text = "—";
+                    TxtInfoClient.Text = "Commande supprimée";
+                    return;
+                }
+
+                // Mettre à jour l'affichage
+                TxtInfoMontant.Text = _commandeSelectionnee.MontantTotalAvecMateriaux.ToString("N0") + " FCFA";
+                TxtInfoReste.Text = _commandeSelectionnee.ResteAPayer.ToString("N0") + " FCFA";
+                
+                decimal dejaEncaisse = _commandeSelectionnee.Paiements
+                    .Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                TxtInfoDejaPaye.Text = $"Deja paye : {dejaEncaisse:N0} FCFA";
+
+                // Couleur du reste à payer
+                if (_commandeSelectionnee.ResteAPayer <= 0.01m)
+                {
+                    TxtInfoReste.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+                    TxtInfoReste.Text += " ✓";
+                }
+                else
+                {
+                    TxtInfoReste.Foreground = new SolidColorBrush(Color.FromRgb(0xF9, 0x73, 0x16));
+                }
+
+                // Afficher un toast informatif temporaire
+                var originalClient = TxtInfoClient.Text;
+                TxtInfoClient.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+                TxtInfoClient.Text = $"⚡ {e.TypeChangement}";
+
+                // Retour au texte normal après 3 secondes
+                var timer = new System.Windows.Threading.DispatcherTimer 
+                { 
+                    Interval = TimeSpan.FromSeconds(3) 
+                };
+                timer.Tick += (s, _) =>
+                {
+                    TxtInfoClient.Text = originalClient;
+                    TxtInfoClient.Foreground = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A));
+                    timer.Stop();
+                };
+                timer.Start();
+
+                // Recharger aussi la liste des commandes (ComboBox) et paiements
+                ChargerCommandes();
+                ChargerPaiements();
+            });
         }
 
         // ----------------------------------------------------------------

@@ -666,7 +666,15 @@
                                 <TextBox x:Name="TxtMontant"
                                          Style="{StaticResource ModernTextBox}"
                                          Margin="0,0,0,10"
-                                         Visibility="Collapsed"/>
+                                         Visibility="Collapsed">
+                                    <TextBox.Text>
+                                        <Binding Path="Text" RelativeSource="{RelativeSource Self}" UpdateSourceTrigger="PropertyChanged">
+                                            <Binding.ValidationRules>
+                                                <helpers:MontantPositifValidationRule xmlns:helpers="clr-namespace:GestionCoutureApp.Helpers" />
+                                            </Binding.ValidationRules>
+                                        </Binding>
+                                    </TextBox.Text>
+                                </TextBox>
 
                                 <!-- Statut -->
                                 <TextBlock x:Name="LblStatut"

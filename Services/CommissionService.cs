@@ -54,6 +54,26 @@ namespace GestionCoutureApp.Services
 
             var pieces = query.ToList();
 
+            // ✅ CORRECTIF AUDIT #4 : Charger les retours pour exclure les pièces défectueuses
+            // Les pièces avec un retour non résolu (Signalé ou En reprise) ne doivent pas
+            // être commissionnées tant que le problème n'est pas corrigé.
+            var retoursNonResolus = context.Retours
+                .Where(r => !r.EstAnnule &&
+                            (r.Statut == "Signale" || r.Statut == "En reprise") &&
+                            r.DateSignalement.Date >= dateDebut.Date &&
+                            r.DateSignalement.Date <= dateFin.Date)
+                .Select(r => r.IdPieceCommande)
+                .ToHashSet();
+
+            // Exclure les pièces avec retours non résolus
+            if (retoursNonResolus.Any())
+            {
+                pieces = pieces.Where(p => !retoursNonResolus.Contains(p.IdPieceCommande)).ToList();
+                _logger.LogInformation(
+                    "Aperçu commission — {NbExclus} pièce(s) exclue(s) (retours non résolus)",
+                    retoursNonResolus.Count);
+            }
+
             var couturiers = context.Employes
                 .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
                 .ToList();
@@ -166,11 +186,54 @@ namespace GestionCoutureApp.Services
             if (apercu == null || apercu.Count == 0)
                 throw new InvalidOperationException("Aucune commission à enregistrer pour cette période.");
 
+            // ✅ CORRECTIF AUDIT #8 : Contrôle d'accès côté service (défense en profondeur)
+            Helpers.AuthorizationHelper.RequireRoleById(_contextFactory, idOperateur, "Boss");
+
             lock (_verrou)
             {
                 using var context = _contextFactory.CreateDbContext();
                 using var transaction = context.Database.BeginTransaction();
 
+                // ✅ CORRECTIF AUDIT #2 : Validation AVANT toute modification
+                // Vérifie qu'aucune pièce n'a été verrouillée entre le calcul de l'aperçu
+                // et l'enregistrement (race condition)
+                var conflits = new List<string>();
+
+                foreach (var ligne in apercu)
+                {
+                    if (ligne.IdsPieces.Count == 0) continue;
+
+                    var piecesVerrouillees = context.PiecesCommande
+                        .Where(p => ligne.IdsPieces.Contains(p.IdPieceCommande) 
+                                 && p.IdCommission != null)
+                        .Select(p => new { p.IdPieceCommande, p.IdCommission })
+                        .ToList();
+
+                    if (piecesVerrouillees.Any())
+                    {
+                        var employe = context.Employes.Find(ligne.IdEmploye);
+                        string nomCouturier = employe != null 
+                            ? $"{employe.Prenom} {employe.Nom}" 
+                            : ligne.Nom;
+                        conflits.Add($"- {nomCouturier} : {piecesVerrouillees.Count} pièce(s) " +
+                                   $"déjà commissionnée(s) (commission #{piecesVerrouillees[0].IdCommission})");
+                    }
+                }
+
+                if (conflits.Any())
+                {
+                    transaction.Rollback();
+                    _logger.LogWarning(
+                        "Enregistrement commission refusé — {NbConflits} conflit(s) détecté(s)",
+                        conflits.Count);
+                    throw new InvalidOperationException(
+                        "Impossible d'enregistrer : certaines pièces ont déjà été commissionnées " +
+                        "depuis le calcul de l'aperçu.\n\n" +
+                        string.Join("\n", conflits) +
+                        "\n\nRecalculez un nouvel aperçu avec le bouton \"Aperçu\" et réessayez.");
+                }
+
+                // ✅ Enregistrement normal si aucun conflit
                 foreach (var ligne in apercu)
                 {
                     if (ligne.IdsPieces.Count == 0) continue;
@@ -194,6 +257,21 @@ namespace GestionCoutureApp.Services
                             .ThenInclude(c => c!.MaterielSupplements)
                         .Where(p => ligne.IdsPieces.Contains(p.IdPieceCommande) && p.IdCommission == null)
                         .ToList();
+
+                    // ✅ CORRECTIF AUDIT #2 : Deuxième vérification (défense en profondeur)
+                    // Si le nombre de pièces récupérées ne correspond pas à l'aperçu,
+                    // c'est qu'une ou plusieurs ont été verrouillées entre-temps
+                    if (pieces.Count != ligne.IdsPieces.Count)
+                    {
+                        transaction.Rollback();
+                        _logger.LogWarning(
+                            "Incohérence détectée pour {Nom} — aperçu: {Apercu} pièces, base: {Base} pièces",
+                            ligne.Nom, ligne.IdsPieces.Count, pieces.Count);
+                        throw new InvalidOperationException(
+                            $"Incohérence détectée pour {ligne.Nom} : " +
+                            $"{ligne.IdsPieces.Count - pieces.Count} pièce(s) manquante(s). " +
+                            "Une autre opération a modifié les données. Recalculez l'aperçu.");
+                    }
 
                     if (pieces.Count == 0) continue;
 
@@ -273,6 +351,11 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
             using var context = _contextFactory.CreateDbContext();
+
+            // ✅ CORRECTIF AUDIT #8 : Vérifier que l'annulateur est Boss
+            var annulateur = context.Employes.FirstOrDefault(e => 
+                (e.Prenom + " " + e.Nom) == nomAnnulateur);
+            Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
 
             var commission = context.Commissions
                 .Include(c => c.Commandes) // legacy : historique enregistré avant l'Étape 1b-i

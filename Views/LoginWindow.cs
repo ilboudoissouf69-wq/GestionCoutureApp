@@ -100,6 +100,36 @@ namespace GestionCoutureApp.Views
                 }
                 // ────────────────────────────────────────────────────────────
 
+                // ✅ CORRECTIF AUDIT #11 : Rappel périodique changement mot de passe (90 jours)
+                if (employe.Role == "Boss" && employe.DerniereModificationMotDePasse.HasValue)
+                {
+                    var joursDepuis = (DateTime.Now - employe.DerniereModificationMotDePasse.Value).TotalDays;
+                    if (joursDepuis > 90)
+                    {
+                        var rappel = MessageBox.Show(
+                            $"Votre mot de passe date de {(int)joursDepuis} jours.\n\n" +
+                            "Pour votre sécurité, il est recommandé de le changer régulièrement " +
+                            "(tous les 90 jours).\n\n" +
+                            "Voulez-vous le changer maintenant ?",
+                            "Rappel de sécurité",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Information);
+
+                        if (rappel == MessageBoxResult.Yes)
+                        {
+                            var changerMdp = new ChangerMotDePasseWindow(employe);
+                            changerMdp.ShowDialog();
+
+                            if (changerMdp.ChangementReussi)
+                            {
+                                // Recharger avec le nouveau mot de passe
+                                employe = _authService.Authentifier(employe.Identifiant,
+                                    changerMdp.NouveauMotDePasse) ?? employe;
+                            }
+                        }
+                    }
+                }
+
                 try
                 {
                     var mainWindow = new GestionCoutureApp.Views.MainWindow(employe);
