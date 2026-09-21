@@ -158,17 +158,26 @@ namespace GestionCoutureApp.Services
         // ==================================================================
         private static async Task<DriveService> ObtenirServiceDriveAsync()
         {
-            // Chercher client_secret.json dans le dossier de l'exécutable
+            // IMPORTANT : client_secret.json ne doit JAMAIS être commité dans le dépôt Git.
+            // Pour des raisons de sécurité, il doit être placé manuellement dans :
+            // %LOCALAPPDATA%\GestionCoutureApp\client_secret.json
+            // Le fichier est déjà ignoré par .gitignore.
+            
             string[] candidats = {
-                Path.Combine(AppContext.BaseDirectory, "client_secret.json"),
-                Path.Combine(AppPaths.DossierApplication, "client_secret.json"),
-                "client_secret.json"
+                Path.Combine(AppPaths.DossierApplication, "client_secret.json"), // Priorité : %LOCALAPPDATA%
+                Path.Combine(AppContext.BaseDirectory, "client_secret.json"),    // Fallback : dossier exécutable
+                "client_secret.json"                                            // Dernier recours : dossier courant
             };
 
             string? cheminSecret = candidats.FirstOrDefault(File.Exists);
             if (cheminSecret == null)
                 throw new FileNotFoundException(
-                    "client_secret.json introuvable. Placez-le dans le dossier de l'application.");
+                    "client_secret.json introuvable.\n\n" +
+                    "Pour activer la sauvegarde Google Drive :\n" +
+                    "1. Téléchargez votre fichier client_secret.json depuis Google Cloud Console\n" +
+                    "2. Placez-le dans : " + AppPaths.DossierApplication + "\n" +
+                    "3. Relancez l'application\n\n" +
+                    "Ce fichier ne doit JAMAIS être commité dans le dépôt Git pour des raisons de sécurité.");
 
             string dossierToken = Path.Combine(AppPaths.DossierApplication, "DriveToken");
             Directory.CreateDirectory(dossierToken);

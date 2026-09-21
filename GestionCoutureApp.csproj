@@ -51,10 +51,8 @@
     <Content Remove="GestionCoutureApp.Tests\**" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="client_secret.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+  <!-- client_secret.json NE DOIT PAS être inclus dans le projet ni copié.
+     Il doit être placé manuellement dans %LOCALAPPDATA%\GestionCoutureApp\
+     pour des raisons de sécurité (secret OAuth exposé dans le dépôt Git). -->
 
 </Project>
