@@ -87,7 +87,9 @@
                             Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="TxtPrixBase"
                             Style="{StaticResource ModernTextBox}"
-                            Margin="0,0,0,18"/>
+                            Margin="0,0,0,18"
+                            PreviewTextInput="TxtPrixBase_PreviewTextInput"
+                            DataObject.Pasting="TxtPrixBase_Pasting"/>
 
                     <Separator Background="{StaticResource BorderBrush}"
                             Margin="0,0,0,14"/>

@@ -5,6 +5,7 @@ using System.Windows.Media;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -595,6 +596,17 @@ namespace GestionCoutureApp.Views
         private void Alerte(string message)
         {
             MessageBox.Show(message, "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        // ✅ Validation des montants décimaux
+        private void TxtMontant_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtMontant_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
         }
     }
 }

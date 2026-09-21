@@ -1,10 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 
 namespace GestionCoutureApp.Views
 {
@@ -225,6 +227,17 @@ namespace GestionCoutureApp.Views
             RafraichirListeMesures();
             GridTypes.SelectedItem = null;
             TxtMessage.Text = string.Empty;
+        }
+
+        // ✅ Validation des prix décimaux
+        private void TxtPrixBase_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtPrixBase_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
         }
     }
 }

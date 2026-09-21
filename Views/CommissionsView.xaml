@@ -47,7 +47,9 @@
                                        Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="TxtPourcentage"
                                      Text="40"
-                                     Style="{StaticResource ModernTextBox}"/>
+                                     Style="{StaticResource ModernTextBox}"
+                                     PreviewTextInput="TxtPourcentage_PreviewTextInput"
+                                     DataObject.Pasting="TxtPourcentage_Pasting"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="Date debut"

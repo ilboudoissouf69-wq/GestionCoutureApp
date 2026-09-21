@@ -666,7 +666,9 @@
                                 <TextBox x:Name="TxtMontant"
                                          Style="{StaticResource ModernTextBox}"
                                          Margin="0,0,0,10"
-                                         Visibility="Collapsed">
+                                         Visibility="Collapsed"
+                                         PreviewTextInput="TxtMontant_PreviewTextInput"
+                                         DataObject.Pasting="TxtMontant_Pasting">
                                     <TextBox.Text>
                                         <Binding Path="Text" RelativeSource="{RelativeSource Self}" UpdateSourceTrigger="PropertyChanged">
                                             <Binding.ValidationRules>

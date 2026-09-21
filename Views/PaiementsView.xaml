@@ -235,7 +235,9 @@
                                 Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="TxtMontant"
                                  Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,12">
+                                 Margin="0,0,0,12"
+                                 PreviewTextInput="TxtMontant_PreviewTextInput"
+                                 DataObject.Pasting="TxtMontant_Pasting">
                             <TextBox.Text>
                                 <Binding Path="Text" RelativeSource="{RelativeSource Self}" UpdateSourceTrigger="PropertyChanged">
                                     <Binding.ValidationRules>

@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -275,6 +277,15 @@ namespace GestionCoutureApp.Views
                 FontSize = 13,
                 Text = estModification ? existant.Quantite.ToString() : "1"
             };
+            // ✅ Validation du champ Quantite (entiers uniquement - on utilise le même handler que les décimaux)
+            txtQuantite.PreviewTextInput += (s, e) =>
+            {
+                ValidationHelper.TextBox_PreviewTextInputDecimal(s, e);
+            };
+            txtQuantite.AddHandler(DataObject.PastingEvent, new DataObjectPastingEventHandler((s, e) =>
+            {
+                ValidationHelper.TextBox_Pasting(s, e);
+            }));
             stackQte.Children.Add(txtQuantite);
             Grid.SetColumn(stackQte, 0);
             gridQuantite.Children.Add(stackQte);
@@ -293,6 +304,15 @@ namespace GestionCoutureApp.Views
                 FontSize = 13,
                 Text = estModification ? existant.PrixUnitaire.ToString() : ""
             };
+            // ✅ Validation du champ Prix Unitaire (décimaux)
+            txtPrixUnitaire.PreviewTextInput += (s, e) =>
+            {
+                ValidationHelper.TextBox_PreviewTextInputDecimal(s, e);
+            };
+            txtPrixUnitaire.AddHandler(DataObject.PastingEvent, new DataObjectPastingEventHandler((s, e) =>
+            {
+                ValidationHelper.TextBox_Pasting(s, e);
+            }));
             stackPrix.Children.Add(txtPrixUnitaire);
             Grid.SetColumn(stackPrix, 2);
             gridQuantite.Children.Add(stackPrix);

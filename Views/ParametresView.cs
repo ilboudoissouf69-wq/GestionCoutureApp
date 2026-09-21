@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Diagnostics;
 using GestionCoutureApp.Services;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -872,6 +873,37 @@ namespace GestionCoutureApp.Views
         {
             tb.Text = msg;
             tb.Foreground = Brushes.Red;
+        }
+
+        // ✅ Validation des champs numériques
+        private void TxtSalaireSecretaire_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtSalaireSecretaire_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
+        }
+
+        private void TxtTauxCommission_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtTauxCommission_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
+        }
+
+        private void TxtPrimeZeroDefaut_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtPrimeZeroDefaut_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
         }
     }
 }

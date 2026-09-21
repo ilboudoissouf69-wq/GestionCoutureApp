@@ -37,7 +37,10 @@ namespace GestionCoutureApp
             services.AddLogging(logging =>
             {
                 logging.AddDebug();
-                logging.SetMinimumLevel(LogLevel.Information);
+                // ✅ CORRECTIF AUDIT #4 : Niveau Warning pour production
+                // En production, on limite aux avertissements et erreurs pour éviter
+                // de surcharger les logs avec des informations de debug/trace.
+                logging.SetMinimumLevel(LogLevel.Warning);
             });
 
             // CORRECTIF : la base est désormais stockée dans %LOCALAPPDATA%
@@ -61,7 +64,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IDepenseService, DepenseService>();
             services.AddSingleton<IMaterielService, MaterielService>();
             services.AddSingleton<IWhatsAppService, WhatsAppService>();
-
+            services.AddSingleton<ITresorerieService, TresorerieService>();
 
             // Sauvegarde automatique
             services.AddSingleton<BackupService>();
@@ -118,7 +121,14 @@ namespace GestionCoutureApp
                         cmd.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('Retours') WHERE name='{col}'";
                         long count = (long)(cmd.ExecuteScalar() ?? 0L);
                         if (count == 0)
-                            context.Database.ExecuteSqlRaw($"ALTER TABLE Retours ADD COLUMN {col} {def};");
+                        {
+                            // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql au lieu de ExecuteSqlRaw
+                            // Note : les valeurs col et def proviennent d'un tableau statique défini
+                            // dans le code (pas d'entrée utilisateur), donc pas de risque d'injection SQL.
+                            // Cependant, on utilise ExecuteSql pour respecter les bonnes pratiques.
+                            FormattableString sql = $"ALTER TABLE Retours ADD COLUMN {col} {def};";
+                            context.Database.ExecuteSql(sql);
+                        }
                     }
                     catch { /* colonne déjà présente ou table inexistante */ }
                 }
@@ -132,7 +142,10 @@ namespace GestionCoutureApp
                     cmd2.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Commissions') WHERE name='PrimeQualite'";
                     long cnt = (long)(cmd2.ExecuteScalar() ?? 0L);
                     if (cnt == 0)
-                        context.Database.ExecuteSqlRaw("ALTER TABLE Commissions ADD COLUMN PrimeQualite TEXT NOT NULL DEFAULT '0';");
+                    {
+                        // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql
+                        context.Database.ExecuteSql($"ALTER TABLE Commissions ADD COLUMN PrimeQualite TEXT NOT NULL DEFAULT '0';");
+                    }
                 }
                 catch { /* déjà présente */ }
 
@@ -152,7 +165,11 @@ namespace GestionCoutureApp
                         cmd3.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('Depenses') WHERE name='{col}'";
                         long cnt3 = (long)(cmd3.ExecuteScalar() ?? 0L);
                         if (cnt3 == 0)
-                            context.Database.ExecuteSqlRaw($"ALTER TABLE Depenses ADD COLUMN {col} {def};");
+                        {
+                            // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql
+                            FormattableString sql = $"ALTER TABLE Depenses ADD COLUMN {col} {def};";
+                            context.Database.ExecuteSql(sql);
+                        }
                     }
                     catch { /* déjà présente */ }
                 }
@@ -167,7 +184,8 @@ namespace GestionCoutureApp
                 // est persistant dans le fichier .db : l'exécuter au démarrage à chaque
                 // lancement garantit qu'il reste actif même après une restauration
                 // manuelle d'une ancienne sauvegarde qui n'aurait pas ce mode.
-                context.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+                // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql
+                context.Database.ExecuteSql($"PRAGMA journal_mode=WAL;");
 
                 // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.
                 // On ne touche plus jamais à son mot de passe ensuite (sinon un Boss qui a

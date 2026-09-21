@@ -184,7 +184,9 @@
                         <!-- Montant -->
                         <StackPanel Grid.Column="4">
                             <TextBlock Text="Montant (FCFA) *" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TxtMontant" Style="{StaticResource ModernTextBox}">
+                            <TextBox x:Name="TxtMontant" Style="{StaticResource ModernTextBox}"
+                                     PreviewTextInput="TxtMontant_PreviewTextInput"
+                                     DataObject.Pasting="TxtMontant_Pasting">
                                 <TextBox.Text>
                                     <Binding Path="Text" RelativeSource="{RelativeSource Self}" UpdateSourceTrigger="PropertyChanged">
                                         <Binding.ValidationRules>

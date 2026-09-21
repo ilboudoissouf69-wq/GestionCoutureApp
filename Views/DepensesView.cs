@@ -2,9 +2,11 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
@@ -447,6 +449,17 @@ namespace GestionCoutureApp.Views
             sp.Children.Add(btns);
             dialog.Content = sp;
             return dialog.ShowDialog() == true ? (string)dialog.Tag : null;
+        }
+
+        // ✅ Validation des montants décimaux
+        private void TxtMontant_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtMontant_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
         }
     }
 }

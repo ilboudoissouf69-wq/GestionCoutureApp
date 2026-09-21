@@ -1293,6 +1293,18 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // ✅ CORRECTIF AUDIT #A2 : Validation date rendez-vous
+            // Le rendez-vous ne peut pas être antérieur à la date de dépôt (aujourd'hui)
+            if (DateFin.SelectedDate < DateTime.Today)
+            {
+                MessageBox.Show(
+                    "La date de rendez-vous ne peut pas être antérieure à aujourd'hui.",
+                    "Date invalide",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
             if (CmbTypeVetement.SelectedValue == null)
             {
                 MessageBox.Show("Selectionnez un type de vetement pour la premiere piece.",
@@ -1688,6 +1700,17 @@ namespace GestionCoutureApp.Views
             {
                 MessageBox.Show("Selectionnez un client.", "Champs manquants",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // ✅ CORRECTIF AUDIT #A2 : Validation date rendez-vous en modification
+            if (DateFin.SelectedDate != null && DateFin.SelectedDate < DateTime.Today)
+            {
+                MessageBox.Show(
+                    "La date de rendez-vous ne peut pas être antérieure à aujourd'hui.",
+                    "Date invalide",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
                 return;
             }
 
@@ -2290,6 +2313,17 @@ namespace GestionCoutureApp.Views
             dialog.Owner = Window.GetWindow(this);
 
             return dialog.ShowDialog() == true;
+        }
+
+        // ✅ CORRECTIF AUDIT #A3 : Validation saisie montants (décimaux positifs uniquement)
+        private void TxtMontant_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+        {
+            Helpers.ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtMontant_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            Helpers.ValidationHelper.TextBox_Pasting(sender, e);
         }
     }
 }

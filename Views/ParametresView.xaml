@@ -460,21 +460,27 @@
                                                Text="Salaire secrétaire (FCFA/mois)"
                                                Style="{StaticResource FieldLabel}"/>
                                     <TextBox x:Name="TxtSalaireSecretaire"
-                                             Style="{StaticResource ModernTextBox}"/>
+                                             Style="{StaticResource ModernTextBox}"
+                                             PreviewTextInput="TxtSalaireSecretaire_PreviewTextInput"
+                                             DataObject.Pasting="TxtSalaireSecretaire_Pasting"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock x:Name="TxtLblTaux"
                                                Text="Taux commission couturier (%)"
                                                Style="{StaticResource FieldLabel}"/>
                                     <TextBox x:Name="TxtTauxCommission"
-                                             Style="{StaticResource ModernTextBox}"/>
+                                             Style="{StaticResource ModernTextBox}"
+                                             PreviewTextInput="TxtTauxCommission_PreviewTextInput"
+                                             DataObject.Pasting="TxtTauxCommission_Pasting"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="4">
                                     <TextBlock x:Name="TxtLblPrime"
                                                Text="Prime Zéro Défaut (FCFA)"
                                                Style="{StaticResource FieldLabel}"/>
                                     <TextBox x:Name="TxtPrimeZeroDefaut"
-                                             Style="{StaticResource ModernTextBox}"/>
+                                             Style="{StaticResource ModernTextBox}"
+                                             PreviewTextInput="TxtPrimeZeroDefaut_PreviewTextInput"
+                                             DataObject.Pasting="TxtPrimeZeroDefaut_Pasting"/>
                                 </StackPanel>
                             </Grid>
                         </StackPanel>

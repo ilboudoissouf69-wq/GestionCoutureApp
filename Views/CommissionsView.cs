@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace GestionCoutureApp.Views
@@ -302,6 +304,17 @@ namespace GestionCoutureApp.Views
                 TxtMessageHistorique.Text = "Erreur : " + ex.Message;
                 TxtMessageHistorique.Foreground = System.Windows.Media.Brushes.Red;
             }
+        }
+
+        // ✅ Validation du pourcentage (nombres décimaux)
+        private void TxtPourcentage_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+        }
+
+        private void TxtPourcentage_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            ValidationHelper.TextBox_Pasting(sender, e);
         }
     }
 }
