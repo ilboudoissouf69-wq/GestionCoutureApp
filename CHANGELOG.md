@@ -1,5 +1,91 @@
 # Changelog
 
+## [2.1] - 2026-09-21
+
+### 🌍 Gestion Dynamique de la Localisation, des Thèmes et des Paramètres
+
+#### ✅ Nouveaux Services Centralisés
+
+**EventAggregator (Notifications Globales)**
+- Création de `SettingsChangedEvent` pour notification des changements de paramètres
+- Implémentation de `IEventAggregator` pour communication inter-composants sans couplage
+- Types de changements : Language, AccentColor, ReceiptInfo, WhatsAppMessages, BusinessSettings
+
+**LanguageService (Multilinguisme Dynamique)**
+- Création de `ILanguageService` pour gestion centralisée de la langue
+- Changement dynamique de la culture (`Thread.CurrentThread.CurrentUICulture`)
+- Fichiers de ressources `.resx` pour FR et EN (`Resources/Strings.fr.resx`, `Resources/Strings.en.resx`)
+- Notification automatique de toutes les vues lors du changement de langue
+- Méthode `GetString(key)` pour obtenir les traductions
+
+**ThemeService (Gestion Dynamique des Couleurs)**
+- Création de `IThemeService` pour gestion centralisée des thèmes
+- Application dynamique de la couleur d'accentuation via `DynamicResource`
+- Mise à jour automatique de `AccentColor`, `AccentBrush`, `AccentHoverBrush`
+- Validation du format hexadécimal des couleurs
+
+**ReceiptService (Synchronisation des Reçus)**
+- Création de `IReceiptService` pour centralisation des infos d'atelier
+- Structure `ReceiptInfo` (NomAtelier, Telephone, Adresse, PiedRecu)
+- Notification automatique lors de la modification des paramètres d'impression
+- Synchronisation avec toutes les vues utilisant les reçus
+
+#### 🎨 Mises à jour de l'Interface
+
+**App.xaml**
+- Conversion des couleurs statiques en `DynamicResource` pour permettre les changements dynamiques
+- `AccentBrush` et `AccentHoverBrush` utilisent maintenant `DynamicResource AccentColor`
+
+**ParametresView**
+- Injection des nouveaux services (`ILanguageService`, `IThemeService`, `IReceiptService`, `IEventAggregator`)
+- `BtnAppliquerCouleur_Click` utilise maintenant `ThemeService.SetAccentColorAsync()`
+- `BtnSauvegarderImpression_Click` utilise maintenant `ReceiptService.UpdateReceiptInfoAsync()`
+- Ajout de gestionnaires pour changement de langue (`BtnLangueFR_Click`, `BtnLangueEN_Click`)
+
+#### 📝 Fichiers Ajoutés
+
+- `Services/SettingsChangedEvent.cs` - Événements de notification
+- `Services/IEventAggregator.cs` - Interface d'agrégation d'événements
+- `Services/EventAggregator.cs` - Implémentation du pattern Event Aggregator
+- `Services/ILanguageService.cs` - Interface du service de localisation
+- `Services/LanguageService.cs` - Service de gestion de la langue
+- `Services/IThemeService.cs` - Interface du service de thèmes
+- `Services/ThemeService.cs` - Service de gestion des couleurs
+- `Services/IReceiptService.cs` - Interface du service de reçus
+- `Services/ReceiptService.cs` - Service de synchronisation des reçus
+- `Resources/Strings.fr.resx` - Traductions françaises
+- `Resources/Strings.en.resx` - Traductions anglaises
+
+#### 🔧 Modifications de l'Architecture
+
+**App.cs**
+- Enregistrement de `IEventAggregator` comme singleton
+- Enregistrement de `ILanguageService` comme singleton
+- Enregistrement de `IThemeService` comme singleton
+- Enregistrement de `IReceiptService` comme singleton
+
+**FenetreRecu.cs**
+- Ajout de l'injection de `IReceiptService` dans le constructeur
+- Utilisation dynamique des infos d'atelier depuis `ReceiptService`
+- Les informations de l'atelier (nom, téléphone, adresse, pied de reçu) sont maintenant chargées dynamiquement depuis les paramètres
+- Synchronisation automatique avec les changements dans les paramètres d'impression
+
+**PaiementsView.cs**
+- Injection de `IReceiptService` pour synchronisation des reçus
+- Transmission du service à `FenetreRecu` lors de la génération de reçus
+- Les reçus générés depuis PaiementsView utilisent maintenant les paramètres dynamiques
+
+**ParametresView.cs**
+- Modification de `SelectionnerLangue` pour utiliser `LanguageService.SetLanguageAsync()`
+- Changement de culture dynamique lors de la sélection de langue
+- Publication d'événements de notification via `EventAggregator`
+
+**App.xaml**
+- Correction : les styles de boutons variantes (`BtnSuccess`, `BtnDanger`, `BtnWarning`, `BtnNavy`) utilisent maintenant `StaticResource` pour `BasedOn` (évitent l'erreur "BtnSuccess not found")
+- Les couleurs d'accentuation utilisent `DynamicResource` pour permettre les changements dynamiques
+
+---
+
 ## [2.0] - 2026-09-21
 
 ### 🔒 Sécurité

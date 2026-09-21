@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using GestionCoutureApp.Models;
+using GestionCoutureApp.Services;
 
 namespace GestionCoutureApp.Views
 {
@@ -30,6 +31,7 @@ namespace GestionCoutureApp.Views
         private readonly Paiement _paiement;
         private readonly List<Mesure> _mesures;
         private readonly string _nomOperateur;
+        private readonly IReceiptService _receiptService;
 
         // Panneau scrollable ou seront ajoutes les lignes du recu
         private readonly StackPanel _receiptPanel;
@@ -41,12 +43,14 @@ namespace GestionCoutureApp.Views
             Commande commande,
             Paiement paiement,
             List<Mesure> mesures,
-            string nomOperateur)
+            string nomOperateur,
+            IReceiptService receiptService)
         {
             _commande = commande;
             _paiement = paiement;
             _mesures = mesures ?? new List<Mesure>();
             _nomOperateur = nomOperateur ?? "";
+            _receiptService = receiptService;
 
             // ---- Proprietes de la fenetre ----
             Title = "Recu N° " + paiement.RecuNumero;
@@ -120,6 +124,13 @@ namespace GestionCoutureApp.Views
         private void ConstruireRecu()
         {
             var p = _receiptPanel;
+            
+            // ✅ CORRECTIF AUDIT #15 : Charger les infos de reçus dynamiques
+            var settings = _receiptService.GetReceiptInfoAsync().Result;
+            string nomAtelier = settings?.NomAtelier ?? "RETOUCHE CHOCO";
+            string telAtelier = settings?.Telephone ?? "+226 62 11 45 11";
+            string adresseAtelier = settings?.Adresse ?? "Zogona, derriere l'alimentation la shopette";
+            string piedRecu = settings?.PiedRecu ?? "Merci pour votre confiance !";
 
             // ===== BANNIERE ANNULATION =====
             if (_paiement.EstAnnule)
@@ -158,15 +169,15 @@ namespace GestionCoutureApp.Views
 
             // ===== EN-TETE BOUTIQUE =====
             Espace(p, 8);
-            Ligne(p, "RETOUCHE CHOCO", 14, TextAlignment.Center, Marque, FontWeights.Bold);
+            
+            Ligne(p, nomAtelier, 14, TextAlignment.Center, Marque, FontWeights.Bold);
             Ligne(p, "ILASSA DESIGN", 13, TextAlignment.Center, Noir, FontWeights.Bold);
             Ligne(p, "Les specialistes en slim", 10, TextAlignment.Center, Marque);
             Espace(p, 6);
-            Ligne(p, "Zogona, derriere l'alimentation la shopette",
-                       9, TextAlignment.Center, Gris);
+            Ligne(p, adresseAtelier, 9, TextAlignment.Center, Gris);
             Ligne(p, "Ouagadougou, Burkina Faso",
                        9, TextAlignment.Center, Gris);
-            Ligne(p, "Tel: +226 62 11 45 11 / WhatsApp: 77 78 86 86",
+            Ligne(p, "Tel: " + telAtelier,
                        8, TextAlignment.Center, Gris);
             Ligne(p, "Email: ilassailassa11@gmail.com",
                        8, TextAlignment.Center, Gris);
@@ -312,7 +323,7 @@ namespace GestionCoutureApp.Views
             Espace(p, 10);
 
             // ===== PIED DE PAGE =====
-            Ligne(p, "Merci pour votre confiance !", 11,
+            Ligne(p, piedRecu, 11,
                        TextAlignment.Center, Noir, FontWeights.Bold);
             Espace(p, 6);
 

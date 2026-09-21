@@ -16,6 +16,9 @@ namespace GestionCoutureApp.Views
         private readonly IPaiementService _paiementService;
         private readonly ICommandeService _commandeService;
         private readonly IAuthService _authService;
+        private readonly IReceiptService _receiptService;
+        private readonly ILanguageService _languageService;
+        private readonly IEventAggregator _eventAggregator;
         private readonly ApplicationDbContext _context;
         private Commande? _commandeSelectionnee;
         private Employe? _operateurConnecte;
@@ -27,9 +30,16 @@ namespace GestionCoutureApp.Views
             _paiementService = App.Services.GetRequiredService<IPaiementService>();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _authService = App.Services.GetRequiredService<IAuthService>();
+            _receiptService = App.Services.GetRequiredService<IReceiptService>();
+            _languageService = App.Services.GetRequiredService<ILanguageService>();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
             // ✅ CORRECTIF AUDIT #1 : S'abonner aux changements de commande
             _commandeService.CommandeChanged += OnCommandeChanged;
+            
+            // ✅ S'abonner aux changements de langue et de thème
+            _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
+            _eventAggregator.Subscribe(SettingsChangedType.AccentColor, OnThemeChanged);
 
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
@@ -38,6 +48,8 @@ namespace GestionCoutureApp.Views
                 _context.Dispose();
                 // ✅ Se désabonner pour éviter les fuites mémoire
                 _commandeService.CommandeChanged -= OnCommandeChanged;
+                _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
+                _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
             };
 
             _operateurConnecte = _authService.UtilisateurConnecte;
@@ -49,6 +61,31 @@ namespace GestionCoutureApp.Views
 
             ChargerCommandes();
             ChargerPaiements();
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de langue
+        // ------------------------------------------------------------------
+        private void OnLanguageChanged(SettingsChangedEvent evt)
+        {
+            Dispatcher.Invoke(() => UpdateTranslations());
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de thème
+        // ------------------------------------------------------------------
+        private void OnThemeChanged(SettingsChangedEvent evt)
+        {
+            // Les couleurs utilisent DynamicResource, donc elles se mettent à jour automatiquement
+        }
+        
+        // ------------------------------------------------------------------
+        // Mettre à jour les traductions de PaiementsView
+        // ------------------------------------------------------------------
+        private void UpdateTranslations()
+        {
+            // Pour l'instant, PaiementsView n'a pas beaucoup de textes traduisibles
+            // Les messages MessageBox restent en français pour l'instant
         }
 
         // ----------------------------------------------------------------
@@ -320,7 +357,7 @@ namespace GestionCoutureApp.Views
             // avec FenetreRecu qui attend encore une liste plate de Mesure.
             var mesures = commande.Pieces.SelectMany(p => p.Mesures).ToList();
 
-            var fenetre = new FenetreRecu(commande, paiement, mesures, paiement.NomOperateur);
+            var fenetre = new FenetreRecu(commande, paiement, mesures, paiement.NomOperateur, _receiptService);
             fenetre.Owner = Window.GetWindow(this);
             fenetre.Show();
         }

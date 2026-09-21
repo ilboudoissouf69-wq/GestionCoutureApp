@@ -1,11 +1,15 @@
 using System.Windows;
 using System.Windows.Controls;
+using GestionCoutureApp.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
 {
     public partial class MainWindow : Window
     {
         private readonly Models.Employe _employeConnecte;
+        private readonly ILanguageService _languageService;
+        private readonly IEventAggregator _eventAggregator;
 
         // Garde la référence du bouton actuellement actif
         private Button? _boutonActif;
@@ -14,12 +18,24 @@ namespace GestionCoutureApp.Views
         {
             InitializeComponent();
             _employeConnecte = employe;
+            
+            // ✅ CORRECTIF AUDIT #15 : Injection des services pour propagation dynamique
+            _languageService = App.Services.GetRequiredService<ILanguageService>();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
+            
             TxtUtilisateur.Text = $"{employe.Prenom} {employe.Nom} ({employe.Role})";
 
             string role = employe.Role;
 
             Loaded += (s, e) =>
             {
+                // ✅ S'abonner aux changements de langue et de thème
+                _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
+                _eventAggregator.Subscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+                
+                // Charger les traductions initiales
+                UpdateTranslations();
+                
                 if (role == "Boss")
                 {
                     BtnTableauDeBord.Visibility = Visibility.Visible;
@@ -67,6 +83,40 @@ namespace GestionCoutureApp.Views
                     ContentFrame.Navigate(new CouturierDashboardView(employe));
                 }
             };
+            
+            // Se désabonner à la fermeture
+            Closed += (s, e) =>
+            {
+                _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
+                _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+            };
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de langue
+        // ------------------------------------------------------------------
+        private void OnLanguageChanged(SettingsChangedEvent evt)
+        {
+            Dispatcher.Invoke(() => UpdateTranslations());
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de thème
+        // ------------------------------------------------------------------
+        private void OnThemeChanged(SettingsChangedEvent evt)
+        {
+            // Les couleurs utilisent DynamicResource, donc elles se mettent à jour automatiquement
+            // Pas besoin de code supplémentaire ici
+        }
+        
+        // ------------------------------------------------------------------
+        // Mettre à jour les traductions de MainWindow
+        // ------------------------------------------------------------------
+        private void UpdateTranslations()
+        {
+            // Pour l'instant, MainWindow n'a pas beaucoup de textes traduisibles
+            // Les boutons de navigation et les messages d'erreur restent en français
+            // pour l'instant car ils nécessitent une traduction complète
         }
 
         // ------------------------------------------------------------------

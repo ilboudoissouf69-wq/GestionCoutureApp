@@ -17,6 +17,10 @@ namespace GestionCoutureApp.Views
         private readonly GoogleDriveBackupService _drive;
         private readonly IAuthService _auth;
         private readonly ILogService _log;
+        private readonly ILanguageService _languageService;
+        private readonly IThemeService _themeService;
+        private readonly IReceiptService _receiptService;
+        private readonly IEventAggregator _eventAggregator;
         private bool _initialise = false;
         private string _langueActive = "fr";
         private string _panneauActif = "Comptabilite";
@@ -252,6 +256,12 @@ namespace GestionCoutureApp.Views
             _p     = App.Services.GetRequiredService<IParametresService>();
             _drive = App.Services.GetRequiredService<GoogleDriveBackupService>();
             _log   = App.Services.GetRequiredService<ILogService>();
+            
+            // ✅ CORRECTIF AUDIT #14-17 : Injection des nouveaux services
+            _languageService = App.Services.GetRequiredService<ILanguageService>();
+            _themeService = App.Services.GetRequiredService<IThemeService>();
+            _receiptService = App.Services.GetRequiredService<IReceiptService>();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
             InitializeComponent();
 
@@ -565,8 +575,9 @@ namespace GestionCoutureApp.Views
         {
             if (sender is StackPanel sp && sp.Tag is string code)
             {
+                // ✅ CORRECTIF AUDIT #15 : Utiliser LanguageService pour changement global
+                await _languageService.SetLanguageAsync(code);
                 _langueActive = code;
-                await _p.DefinirLangue(code);
                 AppliquerTraduction();
                 MajCarteLangue();
                 TxtMsgLangue.Text       = code == "fr"
@@ -596,38 +607,75 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                // ✅ CORRECTIF AUDIT #16 : Utiliser ThemeService pour application globale
+                await _themeService.SetAccentColorAsync(hex);
+                
+                // Mise à jour de l'aperçu local
                 var couleur = (Color)ColorConverter.ConvertFromString(hex);
-                var brush   = new SolidColorBrush(couleur);
-
-                // Appliquer en temps réel sur toute l'app via les ressources dynamiques
-                Application.Current.Resources["AccentColor"]      = couleur;
-                Application.Current.Resources["DangerColor"]      = couleur;
-                Application.Current.Resources["AccentBrush"]      = brush;
-                Application.Current.Resources["DangerBrush"]      = brush;
-                Application.Current.Resources["AccentHoverColor"] =
-                    Color.FromRgb(
-                        (byte)Math.Max(0, couleur.R - 30),
-                        (byte)Math.Max(0, couleur.G - 30),
-                        (byte)Math.Max(0, couleur.B - 30));
-                Application.Current.Resources["AccentHoverBrush"] =
-                    new SolidColorBrush((Color)Application.Current.Resources["AccentHoverColor"]);
-
+                var brush = new SolidColorBrush(couleur);
                 PreviewCouleur.Background = brush;
                 TxtCouleurHex.Text = hex;
 
-                await _p.DefinirCouleurAccent(hex);
-
-                TxtMsgApparence.Text       = _langueActive == "fr"
-                    ? $"✅  Couleur appliquée : {hex}"
-                    : $"✅  Color applied: {hex}";
-                TxtMsgApparence.Foreground = Brushes.Green;
+                // Afficher confirmation
+                string msg = _langueActive == "fr" ? "✅  Couleur appliquée." : "✅  Color applied.";
+                TxtMsgApparence.Text = msg;
+                TxtMsgApparence.Foreground = new SolidColorBrush(Colors.Green);
             }
-            catch
+            catch (Exception ex)
             {
-                TxtMsgApparence.Text       = _langueActive == "fr"
-                    ? "❌  Code couleur invalide. Exemple : #CC0000"
-                    : "❌  Invalid color code. Example: #CC0000";
-                TxtMsgApparence.Foreground = Brushes.Red;
+                string msg = _langueActive == "fr" ? "Erreur couleur." : "Color error.";
+                TxtMsgApparence.Text = msg + " " + ex.Message;
+                TxtMsgApparence.Foreground = new SolidColorBrush(Colors.Red);
+            }
+        }
+
+        // ==================================================================
+        // Onglet Langue
+        // ==================================================================
+        private async void BtnLangueFR_Click(object sender, RoutedEventArgs e)
+        {
+            await ChangerLangue("fr");
+        }
+
+        private async void BtnLangueEN_Click(object sender, RoutedEventArgs e)
+        {
+            await ChangerLangue("en");
+        }
+
+        private async Task ChangerLangue(string code)
+        {
+            try
+            {
+                // ✅ CORRECTIF AUDIT #15 : Utiliser LanguageService pour changement global
+                await _languageService.SetLanguageAsync(code);
+                _langueActive = code;
+                
+                // Mettre à jour les badges visuels
+                BadgeFR.Visibility = code == "fr" ? Visibility.Visible : Visibility.Collapsed;
+                BadgeEN.Visibility = code == "en" ? Visibility.Visible : Visibility.Collapsed;
+                
+                // Mettre à jour les cartes visuelles
+                CardFR.Background = code == "fr" ? Brushes.White : new SolidColorBrush(Color.FromRgb(249, 250, 251));
+                CardFR.BorderBrush = code == "fr" ? (Brush)Application.Current.Resources["AccentBrush"] : new SolidColorBrush(Color.FromRgb(229, 231, 235));
+                CardEN.Background = code == "en" ? Brushes.White : new SolidColorBrush(Color.FromRgb(249, 250, 251));
+                CardEN.BorderBrush = code == "en" ? (Brush)Application.Current.Resources["AccentBrush"] : new SolidColorBrush(Color.FromRgb(229, 231, 235));
+                
+                // Afficher confirmation
+                string msg = code == "fr" ? "✅  Langue changée." : "✅  Language changed.";
+                if (TxtMsgLangue != null)
+                {
+                    TxtMsgLangue.Text = msg;
+                    TxtMsgLangue.Foreground = new SolidColorBrush(Colors.Green);
+                }
+            }
+            catch (Exception ex)
+            {
+                string msg = _langueActive == "fr" ? "Erreur langue." : "Language error.";
+                if (TxtMsgLangue != null)
+                {
+                    TxtMsgLangue.Text = msg + " " + ex.Message;
+                    TxtMsgLangue.Foreground = new SolidColorBrush(Colors.Red);
+                }
             }
         }
 
@@ -793,10 +841,18 @@ namespace GestionCoutureApp.Views
             {
                 if (string.IsNullOrWhiteSpace(TxtNomAtelier.Text))
                 { Erreur(TxtMsgImpression, "Nom obligatoire."); return; }
-                await _p.DefinirNomAtelier(TxtNomAtelier.Text.Trim());
-                await _p.DefinirTelAtelier(TxtTelAtelier.Text.Trim());
-                await _p.DefinirAdresseAtelier(TxtAdresseAtelier.Text.Trim());
-                await _p.DefinirPiedRecu(TxtPiedRecu.Text.Trim());
+                
+                // ✅ CORRECTIF AUDIT #17 : Utiliser ReceiptService pour synchronisation globale
+                var info = new ReceiptInfo
+                {
+                    NomAtelier = TxtNomAtelier.Text.Trim(),
+                    Telephone = TxtTelAtelier.Text.Trim(),
+                    Adresse = TxtAdresseAtelier.Text.Trim(),
+                    PiedRecu = TxtPiedRecu.Text.Trim()
+                };
+                
+                await _receiptService.UpdateReceiptInfoAsync(info);
+                
                 OK(TxtMsgImpression, _langueActive == "fr" ? "✅  Enregistré." : "✅  Saved.");
             }
             catch (Exception ex) { Erreur(TxtMsgImpression, ex.Message); }

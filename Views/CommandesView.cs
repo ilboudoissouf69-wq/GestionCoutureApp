@@ -19,6 +19,8 @@ namespace GestionCoutureApp.Views
         private readonly ApplicationDbContext _context;
         private readonly IMaterielService _materielService;
         private readonly IWhatsAppService _whatsApp;
+        private readonly ILanguageService _languageService;
+        private readonly IEventAggregator _eventAggregator;
         private int _commandeSelectionneeId;
         private int? _pieceSelectionneeId; // null = aucune pièce sélectionnée
         // CORRECTIF (audit) : le motif saisi lors de l'exception Boss (ajout de
@@ -50,10 +52,22 @@ namespace GestionCoutureApp.Views
             _clientService = App.Services.GetRequiredService<IClientService>();
             _materielService = App.Services.GetRequiredService<IMaterielService>();
             _whatsApp = App.Services.GetRequiredService<IWhatsAppService>();
+            _languageService = App.Services.GetRequiredService<ILanguageService>();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
-            Unloaded += (s, e) => _context.Dispose();
+            Unloaded += (s, e) =>
+            {
+                _context.Dispose();
+                // ✅ Se désabonner pour éviter les fuites mémoire
+                _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
+                _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+            };
+            
+            // ✅ S'abonner aux changements de langue et de thème
+            _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
+            _eventAggregator.Subscribe(SettingsChangedType.AccentColor, OnThemeChanged);
 
             // ===== RECUPERER LE ROLE =====
             var authService = App.Services.GetRequiredService<IAuthService>();
@@ -117,6 +131,31 @@ namespace GestionCoutureApp.Views
             // qu'aucune commande n'est encore selectionnee dans le tableau —
             // impossible de creer la toute premiere commande d'une base vide.
             ViderChamps();
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de langue
+        // ------------------------------------------------------------------
+        private void OnLanguageChanged(SettingsChangedEvent evt)
+        {
+            Dispatcher.Invoke(() => UpdateTranslations());
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de thème
+        // ------------------------------------------------------------------
+        private void OnThemeChanged(SettingsChangedEvent evt)
+        {
+            // Les couleurs utilisent DynamicResource, donc elles se mettent à jour automatiquement
+        }
+        
+        // ------------------------------------------------------------------
+        // Mettre à jour les traductions de CommandesView
+        // ------------------------------------------------------------------
+        private void UpdateTranslations()
+        {
+            // Pour l'instant, CommandesView n'a pas beaucoup de textes traduisibles
+            // Les messages MessageBox restent en français pour l'instant
         }
 
         // ==================================================================

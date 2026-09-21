@@ -29,9 +29,9 @@
                 <SolidColorBrush x:Key="PrimaryBrush"
                                  Color="{StaticResource PrimaryColor}"/>
                 <SolidColorBrush x:Key="AccentBrush"
-                                 Color="{StaticResource AccentColor}"/>
+                                 Color="{DynamicResource AccentColor}"/>
                 <SolidColorBrush x:Key="AccentHoverBrush"
-                                 Color="{StaticResource AccentHoverColor}"/>
+                                 Color="{DynamicResource AccentHoverColor}"/>
                 <SolidColorBrush x:Key="DangerBrush"
                                  Color="{StaticResource DangerColor}"/>
                 <SolidColorBrush x:Key="WarningBrush"
@@ -65,9 +65,9 @@
                         <Setter Property="Background"
                                 Value="White"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource TextPrimaryBrush}"/>
+                                Value="{DynamicResource TextPrimaryBrush}"/>
                         <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                                Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                         <Setter Property="SnapsToDevicePixels"
@@ -91,7 +91,7 @@
                                                                  Value="True">
                                                                 <Setter TargetName="border"
                                                                         Property="BorderBrush"
-                                                                        Value="{StaticResource AccentBrush}"/>
+                                                                        Value="{DynamicResource AccentBrush}"/>
                                                                 <Setter TargetName="border"
                                                                         Property="BorderThickness"
                                                                         Value="2"/>
@@ -124,9 +124,9 @@
                         <Setter Property="Background"
                                 Value="White"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource TextPrimaryBrush}"/>
+                                Value="{DynamicResource TextPrimaryBrush}"/>
                         <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                                Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                         <Setter Property="Template">
@@ -146,7 +146,7 @@
                                                                  Value="True">
                                                                 <Setter TargetName="border"
                                                                         Property="BorderBrush"
-                                                                        Value="{StaticResource AccentBrush}"/>
+                                                                        Value="{DynamicResource AccentBrush}"/>
                                                                 <Setter TargetName="border"
                                                                         Property="BorderThickness"
                                                                         Value="2"/>
@@ -171,9 +171,9 @@
                         <Setter Property="Background"
                                 Value="White"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource TextPrimaryBrush}"/>
+                                Value="{DynamicResource TextPrimaryBrush}"/>
                         <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                                Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                 </Style>
@@ -192,7 +192,7 @@
                         <Setter Property="Foreground"
                                 Value="White"/>
                         <Setter Property="Background"
-                                Value="{StaticResource AccentBrush}"/>
+                                Value="{DynamicResource AccentBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="0"/>
                         <Setter Property="Cursor"
@@ -214,7 +214,7 @@
                                                                  Value="True">
                                                                 <Setter TargetName="border"
                                                                         Property="Background"
-                                                                        Value="{StaticResource AccentHoverBrush}"/>
+                                                                        Value="{DynamicResource AccentHoverBrush}"/>
                                                         </Trigger>
                                                         <Trigger Property="IsPressed"
                                                                  Value="True">
@@ -239,26 +239,26 @@
                        x:Key="BtnSuccess"
                        BasedOn="{StaticResource BtnPrimary}">
                         <Setter Property="Background"
-                                Value="{StaticResource SuccessBrush}"/>
+                                Value="{DynamicResource SuccessBrush}"/>
                 </Style>
                 <Style TargetType="Button"
                        x:Key="BtnDanger"
                        BasedOn="{StaticResource BtnPrimary}">
                         <Setter Property="Background"
-                                Value="{StaticResource DangerBrush}"/>
+                                Value="{DynamicResource DangerBrush}"/>
                 </Style>
                 <Style TargetType="Button"
                        x:Key="BtnWarning"
                        BasedOn="{StaticResource BtnPrimary}">
                         <Setter Property="Background"
-                                Value="{StaticResource WarningBrush}"/>
+                                Value="{DynamicResource WarningBrush}"/>
                 </Style>
                 <!-- BtnNavy devient noir charbon -->
                 <Style TargetType="Button"
                        x:Key="BtnNavy"
                        BasedOn="{StaticResource BtnPrimary}">
                         <Setter Property="Background"
-                                Value="{StaticResource PrimaryBrush}"/>
+                                Value="{DynamicResource PrimaryBrush}"/>
                 </Style>
 
                 <Style TargetType="Button"
@@ -268,13 +268,13 @@
                         <Setter Property="FontSize"
                                 Value="13"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource TextSecondaryBrush}"/>
+                                Value="{DynamicResource TextSecondaryBrush}"/>
                         <Setter Property="Background"
                                 Value="#F0EAE6"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                         <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                                Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="Cursor"
                                 Value="Hand"/>
                         <Setter Property="Padding"
@@ -322,7 +322,7 @@
                         <Setter Property="Background"
                                 Value="White"/>
                         <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                                Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                         <Setter Property="RowBackground"
@@ -339,7 +339,7 @@
                                                 <Setter Property="Background"
                                                         Value="#F2ECE8"/>
                                                 <Setter Property="Foreground"
-                                                        Value="{StaticResource TextSecondaryBrush}"/>
+                                                        Value="{DynamicResource TextSecondaryBrush}"/>
                                                 <Setter Property="FontWeight"
                                                         Value="SemiBold"/>
                                                 <Setter Property="FontSize"
@@ -410,7 +410,7 @@
                         <Setter Property="CornerRadius"
                                 Value="10"/>
                         <Setter Property="BorderBrush"
-                                Value="{StaticResource BorderBrush}"/>
+                                Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                         <Setter Property="Padding"
@@ -429,7 +429,7 @@
                         <Setter Property="FontWeight"
                                 Value="SemiBold"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource TextSecondaryBrush}"/>
+                                Value="{DynamicResource TextSecondaryBrush}"/>
                         <Setter Property="Margin"
                                 Value="0,0,0,4"/>
                 </Style>
@@ -441,7 +441,7 @@
                         <Setter Property="FontWeight"
                                 Value="Bold"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource PrimaryBrush}"/>
+                                Value="{DynamicResource PrimaryBrush}"/>
                         <Setter Property="Margin"
                                 Value="0,0,0,20"/>
                 </Style>
@@ -453,7 +453,7 @@
                         <Setter Property="FontWeight"
                                 Value="SemiBold"/>
                         <Setter Property="Foreground"
-                                Value="{StaticResource PrimaryBrush}"/>
+                                Value="{DynamicResource PrimaryBrush}"/>
                         <Setter Property="Margin"
                                 Value="0,0,0,14"/>
                 </Style>

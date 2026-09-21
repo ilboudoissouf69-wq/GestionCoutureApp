@@ -65,6 +65,18 @@ namespace GestionCoutureApp
             services.AddSingleton<IMaterielService, MaterielService>();
             services.AddSingleton<IWhatsAppService, WhatsAppService>();
             services.AddSingleton<ITresorerieService, TresorerieService>();
+            
+            // ✅ CORRECTIF AUDIT #14 : EventAggregator pour notifications globales
+            services.AddSingleton<IEventAggregator, EventAggregator>();
+            
+            // ✅ CORRECTIF AUDIT #15 : LanguageService pour multilinguisme dynamique
+            services.AddSingleton<ILanguageService, LanguageService>();
+            
+            // ✅ CORRECTIF AUDIT #16 : ThemeService pour gestion dynamique des couleurs
+            services.AddSingleton<IThemeService, ThemeService>();
+            
+            // ✅ CORRECTIF AUDIT #17 : ReceiptService pour synchronisation des infos reçus
+            services.AddSingleton<IReceiptService, ReceiptService>();
 
             // Sauvegarde automatique
             services.AddSingleton<BackupService>();

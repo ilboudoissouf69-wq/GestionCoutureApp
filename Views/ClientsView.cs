@@ -10,6 +10,8 @@ namespace GestionCoutureApp.Views
     {
         private readonly IClientService _clientService;
         private readonly IWhatsAppService _whatsApp;
+        private readonly ILanguageService _languageService;
+        private readonly IEventAggregator _eventAggregator;
         private int _clientSelectionneId;
 
         public ClientsView()
@@ -17,7 +19,46 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
             _clientService = App.Services.GetRequiredService<IClientService>();
             _whatsApp = App.Services.GetRequiredService<IWhatsAppService>();
+            _languageService = App.Services.GetRequiredService<ILanguageService>();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
+            
+            // ✅ S'abonner aux changements de langue et de thème
+            _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
+            _eventAggregator.Subscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+            
             ChargerClients();
+            
+            // Se désabonner à la fermeture
+            Unloaded += (s, e) =>
+            {
+                _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
+                _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+            };
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de langue
+        // ------------------------------------------------------------------
+        private void OnLanguageChanged(SettingsChangedEvent evt)
+        {
+            Dispatcher.Invoke(() => UpdateTranslations());
+        }
+        
+        // ------------------------------------------------------------------
+        // Gestionnaire de changement de thème
+        // ------------------------------------------------------------------
+        private void OnThemeChanged(SettingsChangedEvent evt)
+        {
+            // Les couleurs utilisent DynamicResource, donc elles se mettent à jour automatiquement
+        }
+        
+        // ------------------------------------------------------------------
+        // Mettre à jour les traductions de ClientsView
+        // ------------------------------------------------------------------
+        private void UpdateTranslations()
+        {
+            // Pour l'instant, ClientsView n'a pas beaucoup de textes traduisibles
+            // Les messages MessageBox restent en français pour l'instant
         }
 
         // ==================================================================
