@@ -12,11 +12,23 @@ namespace GestionCoutureApp.Services
         List<Commande> ObtenirTous();
         Commande? ObtenirParId(int id);
 
+        // ✅ PAGINATION : Récupère les commandes avec pagination
+        Task<PagedResult<Commande>> ObtenirPageAsync(int page, int pageSize);
+        
+        // ✅ OPTIMISATION : Version légère pour affichage tableau (sans toutes les données incluses)
+        Task<PagedResult<Commande>> ObtenirPageLightAsync(int page, int pageSize);
+
         void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures);
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures);
 
         void Supprimer(int id);
         List<Commande> Rechercher(string motCle);
+        
+        // ✅ PAGINATION : Cherche des commandes avec pagination
+        Task<PagedResult<Commande>> RechercherPageAsync(string motCle, int page, int pageSize);
+        
+        // ✅ OPTIMISATION : Version légère de recherche
+        Task<PagedResult<Commande>> RechercherPageLightAsync(string motCle, int page, int pageSize);
 
         List<Mesure> ObtenirMesuresPiece(int idPieceCommande);
 

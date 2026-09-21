@@ -44,6 +44,11 @@ namespace GestionCoutureApp.Views
 
         // Date de RDV par défaut calculée (maintenant + 24h, règle 08h-22h)
         private DateTime _dateRdvDefaut = DateTime.Today.AddDays(1);
+        
+        // ✅ PAGINATION
+        private const int PAGE_SIZE = 15;
+        private int _currentPage = 1;
+        private string _currentSearch = "";
 
         public CommandesView()
         {
@@ -124,7 +129,7 @@ namespace GestionCoutureApp.Views
             // Pré-remplir la date de RDV (+24h avec règle 08h-22h) — modifiable
             _dateRdvDefaut = dateRdvDef;
 
-            ChargerCommandes();
+            _ = ChargerCommandes();
 
             // CORRECTIF : sans cet appel, les champs de la 1ere piece
             // (Type de vetement, Montant, etc.) restent invisibles tant
@@ -161,17 +166,79 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Chargement des commandes
         // ==================================================================
-        private void ChargerCommandes()
+        private async Task ChargerCommandes()
         {
-            GridCommandes.ItemsSource = null;
-            GridCommandes.ItemsSource = _commandeService.ObtenirTous();
+            try
+            {
+                LoadingIndicator.Visibility = Visibility.Visible;
+                GridCommandes.IsEnabled = false;
+                
+                // ✅ OPTIMISATION : Utiliser la version légère pour l'affichage tableau
+                var result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+                GridCommandes.ItemsSource = result.Items;
+                
+                // Mettre à jour les boutons de pagination
+                BtnPagePrecedente.IsEnabled = result.HasPrevious;
+                BtnPageSuivante.IsEnabled = result.HasNext;
+                
+                // Mettre à jour l'info de pagination
+                int start = (result.Page - 1) * result.PageSize + 1;
+                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} commandes";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message, 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                LoadingIndicator.Visibility = Visibility.Collapsed;
+                GridCommandes.IsEnabled = true;
+            }
         }
 
-        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
+        private async void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
         {
             string motCle = TxtRecherche.Text.Trim();
-            if (string.IsNullOrEmpty(motCle)) ChargerCommandes();
-            else GridCommandes.ItemsSource = _commandeService.Rechercher(motCle);
+            _currentSearch = motCle;
+            _currentPage = 1;
+            
+            if (string.IsNullOrEmpty(motCle))
+            {
+                var result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+                GridCommandes.ItemsSource = result.Items;
+                BtnPagePrecedente.IsEnabled = result.HasPrevious;
+                BtnPageSuivante.IsEnabled = result.HasNext;
+                int start = (result.Page - 1) * result.PageSize + 1;
+                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} commandes";
+            }
+            else
+            {
+                var result = await _commandeService.RechercherPageLightAsync(motCle, _currentPage, PAGE_SIZE);
+                GridCommandes.ItemsSource = result.Items;
+                BtnPagePrecedente.IsEnabled = result.HasPrevious;
+                BtnPageSuivante.IsEnabled = result.HasNext;
+                int start = (result.Page - 1) * result.PageSize + 1;
+                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} commandes";
+            }
+        }
+        
+        private async void BtnPagePrecedente_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                await ChargerCommandes();
+            }
+        }
+        
+        private async void BtnPageSuivante_Click(object sender, RoutedEventArgs e)
+        {
+            _currentPage++;
+            await ChargerCommandes();
         }
 
         // ==================================================================
@@ -868,7 +935,7 @@ namespace GestionCoutureApp.Views
                 // Recharger les pièces et rafraîchir (avec matériaux pour RowDetailsTemplate)
                 _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                 RafraichirListePieces();
-                ChargerCommandes();
+                _ = ChargerCommandes();
                 // Ne pas masquer le formulaire après modification — rester en mode édition
                 // pour que l'utilisateur puisse enchaîner les changements
                 if (!_pieceSelectionneeId.HasValue)
@@ -1118,7 +1185,7 @@ namespace GestionCoutureApp.Views
                 // Recharger
                 _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                 RafraichirListePieces();
-                ChargerCommandes();
+                _ = ChargerCommandes();
 
                 MessageBox.Show("Piece dupliquee avec succes !", "Succes",
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1151,7 +1218,7 @@ namespace GestionCoutureApp.Views
 
                     _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                     RafraichirListePieces();
-                    ChargerCommandes();
+                    _ = ChargerCommandes();
                     MasquerFormulairePiece();
                     _pieceSelectionneeId = null;
 
@@ -1261,7 +1328,7 @@ namespace GestionCoutureApp.Views
                     // Recharger
                     _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                     RafraichirListePieces();
-                    ChargerCommandes();
+                    _ = ChargerCommandes();
 
                     MessageBox.Show("Statut de toutes les pieces mis a jour.",
                         "Succes", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1435,7 +1502,7 @@ namespace GestionCoutureApp.Views
                     _materiauxTemporaires.Clear();
                 }
 
-                ChargerCommandes();
+                _ = ChargerCommandes();
 
                 var autrePiece = MessageBox.Show(
                     "Commande creee avec succes !\n\nLe client a-t-il d'autres vetements a ajouter a cette meme commande ?",
@@ -1773,7 +1840,7 @@ namespace GestionCoutureApp.Views
 
             context.SaveChanges();
 
-            ChargerCommandes();
+            _ = ChargerCommandes();
             MessageBox.Show("Commande modifiee avec succes !", "Succes",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1795,7 +1862,7 @@ namespace GestionCoutureApp.Views
                 try
                 {
                     _commandeService.Supprimer(_commandeSelectionneeId);
-                    ChargerCommandes();
+                    _ = ChargerCommandes();
                     ViderChamps();
                     MessageBox.Show("Commande supprimee.", "Succes",
                         MessageBoxButton.OK, MessageBoxImage.Information);

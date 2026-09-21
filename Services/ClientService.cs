@@ -25,6 +25,30 @@ namespace GestionCoutureApp.Services
             return context.Clients.ToList();
         }
 
+        // ✅ PAGINATION : Récupère les clients avec pagination
+        public async Task<PagedResult<Client>> ObtenirPageAsync(int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Clients.AsQueryable();
+            var totalCount = await query.CountAsync();
+            
+            var items = await query
+                .OrderBy(c => c.Nom)
+                .ThenBy(c => c.Prenom)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Client>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public void Ajouter(Client client)
         {
             ValiderClient(client);
@@ -81,6 +105,50 @@ namespace GestionCoutureApp.Services
                          || Helpers.TexteHelper.NormaliserPourRecherche(c.Prenom).Contains(cle)
                          || (c.Telephone ?? "").Contains(motCle))
                 .ToList();
+        }
+        
+        // ✅ PAGINATION : Cherche des clients avec pagination
+        public async Task<PagedResult<Client>> RechercherPageAsync(string motCle, int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            // ✅ OPTIMISATION : Filtrer côté base de données quand possible
+            string cle = Helpers.TexteHelper.NormaliserPourRecherche(motCle);
+            
+            var query = context.Clients.AsQueryable();
+            
+            // Si pas d'accents dans la recherche, utiliser le filtrage SQL
+            if (!Helpers.TexteHelper.ContientAccents(motCle))
+            {
+                query = query.Where(c => c.Nom.Contains(motCle) 
+                                      || c.Prenom.Contains(motCle)
+                                      || (c.Telephone ?? "").Contains(motCle));
+            }
+            else
+            {
+                // Sinon, filtrer en mémoire (plus lent mais nécessaire pour les accents)
+                query = query.AsEnumerable()
+                    .Where(c => Helpers.TexteHelper.NormaliserPourRecherche(c.Nom).Contains(cle)
+                             || Helpers.TexteHelper.NormaliserPourRecherche(c.Prenom).Contains(cle)
+                             || (c.Telephone ?? "").Contains(motCle))
+                    .AsQueryable();
+            }
+            
+            var totalCount = query.Count();
+            var items = query
+                .OrderBy(c => c.Nom)
+                .ThenBy(c => c.Prenom)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+            
+            return new PagedResult<Client>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
         }
 
         // ----------------------------------------------------------------

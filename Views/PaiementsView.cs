@@ -22,6 +22,10 @@ namespace GestionCoutureApp.Views
         private readonly ApplicationDbContext _context;
         private Commande? _commandeSelectionnee;
         private Employe? _operateurConnecte;
+        
+        // ✅ PAGINATION
+        private const int PAGE_SIZE = 15;
+        private int _currentPage = 1;
 
         public PaiementsView()
         {
@@ -60,7 +64,7 @@ namespace GestionCoutureApp.Views
                     "Operateur : " + _operateurConnecte.Prenom + " " + _operateurConnecte.Nom;
 
             ChargerCommandes();
-            ChargerPaiements();
+            _ = ChargerPaiements();
         }
         
         // ------------------------------------------------------------------
@@ -107,10 +111,51 @@ namespace GestionCoutureApp.Views
             CmbCommande.SelectedValuePath = "IdCommande";
         }
 
-        private void ChargerPaiements()
+        private async Task ChargerPaiements()
         {
-            GridPaiements.ItemsSource = null;
-            GridPaiements.ItemsSource = _paiementService.ObtenirTous();
+            try
+            {
+                LoadingIndicator.Visibility = Visibility.Visible;
+                GridPaiements.IsEnabled = false;
+                
+                // ✅ OPTIMISATION : Utiliser la version légère pour l'affichage tableau
+                var result = await _paiementService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+                GridPaiements.ItemsSource = result.Items;
+                
+                // Mettre à jour les boutons de pagination
+                BtnPagePrecedente.IsEnabled = result.HasPrevious;
+                BtnPageSuivante.IsEnabled = result.HasNext;
+                
+                // Mettre à jour l'info de pagination
+                int start = (result.Page - 1) * result.PageSize + 1;
+                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} paiements";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors du chargement des paiements : " + ex.Message, 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                LoadingIndicator.Visibility = Visibility.Collapsed;
+                GridPaiements.IsEnabled = true;
+            }
+        }
+        
+        private async void BtnPagePrecedente_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                await ChargerPaiements();
+            }
+        }
+        
+        private async void BtnPageSuivante_Click(object sender, RoutedEventArgs e)
+        {
+            _currentPage++;
+            await ChargerPaiements();
         }
 
         // ----------------------------------------------------------------
@@ -238,7 +283,7 @@ namespace GestionCoutureApp.Views
                     _operateurConnecte.Prenom + " " + _operateurConnecte.Nom);
 
                 TxtMontant.Text = "";
-                ChargerPaiements();
+                _ = ChargerPaiements();
                 CmbCommande_SelectionChanged(null!, null!);
 
                 MessageBox.Show(
@@ -308,7 +353,7 @@ namespace GestionCoutureApp.Views
                     _operateurConnecte.IdEmploye,
                     _operateurConnecte.Prenom + " " + _operateurConnecte.Nom);
 
-                ChargerPaiements();
+                _ = ChargerPaiements();
                 CmbCommande_SelectionChanged(null!, null!);
 
                 MessageBox.Show(
@@ -623,7 +668,7 @@ namespace GestionCoutureApp.Views
 
                 // Recharger aussi la liste des commandes (ComboBox) et paiements
                 ChargerCommandes();
-                ChargerPaiements();
+                _ = ChargerPaiements();
             });
         }
 

@@ -13,6 +13,11 @@ namespace GestionCoutureApp.Views
         private readonly ILanguageService _languageService;
         private readonly IEventAggregator _eventAggregator;
         private int _clientSelectionneId;
+        
+        // ✅ PAGINATION
+        private const int PAGE_SIZE = 20;
+        private int _currentPage = 1;
+        private string _currentSearch = "";
 
         public ClientsView()
         {
@@ -26,7 +31,7 @@ namespace GestionCoutureApp.Views
             _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
             _eventAggregator.Subscribe(SettingsChangedType.AccentColor, OnThemeChanged);
             
-            ChargerClients();
+            ChargerClientsPage();
             
             // Se désabonner à la fermeture
             Unloaded += (s, e) =>
@@ -64,18 +69,74 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Chargement
         // ==================================================================
-        private void ChargerClients()
+        private async Task ChargerClientsPage()
         {
-            GridClients.ItemsSource = null;
-            GridClients.ItemsSource = _clientService.ObtenirTous();
+            try
+            {
+                LoadingIndicator.Visibility = Visibility.Visible;
+                GridClients.IsEnabled = false;
+                
+                PagedResult<Client> result;
+                if (string.IsNullOrWhiteSpace(_currentSearch))
+                {
+                    result = await _clientService.ObtenirPageAsync(_currentPage, PAGE_SIZE);
+                }
+                else
+                {
+                    result = await _clientService.RechercherPageAsync(_currentSearch, _currentPage, PAGE_SIZE);
+                }
+                
+                GridClients.ItemsSource = result.Items;
+                
+                // Mettre à jour les boutons de pagination
+                BtnPagePrecedente.IsEnabled = result.HasPrevious;
+                BtnPageSuivante.IsEnabled = result.HasNext;
+                
+                // Mettre à jour l'info de pagination
+                int start = (result.Page - 1) * result.PageSize + 1;
+                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} clients";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors du chargement des clients : " + ex.Message, 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                LoadingIndicator.Visibility = Visibility.Collapsed;
+                GridClients.IsEnabled = true;
+            }
         }
 
-        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
+        private void ChargerClients()
         {
-            string motCle = TxtRecherche.Text.Trim();
-            GridClients.ItemsSource = string.IsNullOrEmpty(motCle)
-                ? _clientService.ObtenirTous()
-                : _clientService.Rechercher(motCle);
+            // Pour compatibilité avec le code existant
+            _currentPage = 1;
+            _currentSearch = "";
+            _ = ChargerClientsPage();
+        }
+
+        private async void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _currentSearch = TxtRecherche.Text.Trim();
+            _currentPage = 1;
+            await ChargerClientsPage();
+        }
+        
+        private async void BtnPagePrecedente_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                await ChargerClientsPage();
+            }
+        }
+        
+        private async void BtnPageSuivante_Click(object sender, RoutedEventArgs e)
+        {
+            _currentPage++;
+            await ChargerClientsPage();
         }
 
         private void GridClients_SelectionChanged(object sender, SelectionChangedEventArgs e)

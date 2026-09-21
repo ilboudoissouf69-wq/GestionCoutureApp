@@ -35,6 +35,56 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
+        // ✅ PAGINATION : Récupère les paiements avec pagination
+        public async Task<PagedResult<Paiement>> ObtenirPageAsync(int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Paiements
+                .Include(p => p.Commande)
+                .ThenInclude(c => c!.Client)
+                .OrderByDescending(p => p.DatePaiement);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Paiement>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+        
+        // ✅ OPTIMISATION : Version légère pour affichage tableau
+        public async Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Paiements
+                .Include(p => p.Commande)
+                .ThenInclude(c => c!.Client)
+                .OrderByDescending(p => p.DatePaiement);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Paiement>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public List<Paiement> ObtenirParCommande(int idCommande)
         {
             using var context = _contextFactory.CreateDbContext();

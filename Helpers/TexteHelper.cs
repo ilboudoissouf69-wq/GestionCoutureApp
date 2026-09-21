@@ -35,5 +35,16 @@ namespace GestionCoutureApp.Helpers
 
             return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
         }
+        
+        /// <summary>
+        /// Vérifie si une chaîne contient des caractères accentués
+        /// </summary>
+        public static bool ContientAccents(string texte)
+        {
+            if (string.IsNullOrEmpty(texte)) return false;
+            
+            string decompose = texte.Normalize(NormalizationForm.FormD);
+            return decompose.Any(c => CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark);
+        }
     }
 }

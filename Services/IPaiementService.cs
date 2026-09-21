@@ -6,6 +6,13 @@ namespace GestionCoutureApp.Services
     public interface IPaiementService
     {
         List<Paiement> ObtenirTous();
+        
+        // ✅ PAGINATION : Récupère les paiements avec pagination
+        Task<PagedResult<Paiement>> ObtenirPageAsync(int page, int pageSize);
+        
+        // ✅ OPTIMISATION : Version légère pour affichage tableau
+        Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize);
+        
         List<Paiement> ObtenirParCommande(int idCommande);
         void Ajouter(Paiement paiement, int idOperateur, string nomOperateur);
         void Annuler(int idPaiement, string motif, int idAnnulateur, string nomAnnulateur);

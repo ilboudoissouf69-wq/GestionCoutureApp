@@ -30,6 +30,60 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
+        // ✅ PAGINATION : Récupère les commandes avec pagination
+        public async Task<PagedResult<Commande>> ObtenirPageAsync(int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
+                .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
+                .Include(c => c.MaterielSupplements)
+                .OrderByDescending(c => c.DateDebut);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Commande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+        
+        // ✅ OPTIMISATION : Version légère pour affichage tableau (sans toutes les données incluses)
+        public async Task<PagedResult<Commande>> ObtenirPageLightAsync(int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Pieces) // Seulement les pièces de base, sans mesures/matériaux
+                .OrderByDescending(c => c.DateDebut);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Commande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public Commande? ObtenirParId(int id)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -200,6 +254,70 @@ namespace GestionCoutureApp.Services
                          || c.Pieces.Any(p => p.Statut.Contains(motCle))))
                 .OrderByDescending(c => c.DateDebut)
                 .ToList();
+        }
+        
+        // ✅ PAGINATION : Cherche des commandes avec pagination
+        public async Task<PagedResult<Commande>> RechercherPageAsync(string motCle, int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
+                .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
+                .Include(c => c.MaterielSupplements)
+                .Where(c => c.Client != null && (
+                         c.Client.Nom.Contains(motCle)
+                         || c.Client.Prenom.Contains(motCle)
+                         || c.Pieces.Any(p => p.TypeVetement.Contains(motCle))
+                         || c.Pieces.Any(p => p.Statut.Contains(motCle))))
+                .OrderByDescending(c => c.DateDebut);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Commande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+        
+        // ✅ OPTIMISATION : Version légère de recherche
+        public async Task<PagedResult<Commande>> RechercherPageLightAsync(string motCle, int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            
+            var query = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Pieces)
+                .Where(c => c.Client != null && (
+                         c.Client.Nom.Contains(motCle)
+                         || c.Client.Prenom.Contains(motCle)
+                         || c.Pieces.Any(p => p.TypeVetement.Contains(motCle))
+                         || c.Pieces.Any(p => p.Statut.Contains(motCle))))
+                .OrderByDescending(c => c.DateDebut);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Commande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
         }
 
         public List<Mesure> ObtenirMesuresPiece(int idPieceCommande)
