@@ -268,6 +268,7 @@ namespace GestionCoutureApp.Views
                 _paiementService.Annuler(
                     paiement.IdPaiement,
                     motif,
+                    _operateurConnecte.IdEmploye,
                     _operateurConnecte.Prenom + " " + _operateurConnecte.Nom);
 
                 ChargerPaiements();

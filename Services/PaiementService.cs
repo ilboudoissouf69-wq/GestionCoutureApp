@@ -154,14 +154,15 @@ namespace GestionCoutureApp.Services
         // Annulation (jamais de suppression)
         // ----------------------------------------------------------------
 
-        public void Annuler(int idPaiement, string motif, string nomAnnulateur)
+        public void Annuler(int idPaiement, string motif, int idAnnulateur, string nomAnnulateur)
         {
             using var context = _contextFactory.CreateDbContext();
 
             // ✅ CORRECTIF AUDIT #8 : Seul le Boss peut annuler un paiement
-            var annulateur = context.Employes.FirstOrDefault(e => 
-                (e.Prenom + " " + e.Nom) == nomAnnulateur);
-            Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
+            // ✅ CORRECTIF AUDIT #9 : Utilisation de RequireRoleById au lieu de la recherche par nom
+            // La recherche par nom ("Prénom Nom") est fragile et peut échouer si deux employés
+            // ont le même nom ou si un Boss modifie son nom après connexion.
+            Helpers.AuthorizationHelper.RequireRoleById(_contextFactory, idAnnulateur, "Boss");
 
             var paiement = context.Paiements.Find(idPaiement)
                 ?? throw new InvalidOperationException("Paiement introuvable.");
@@ -180,8 +181,8 @@ namespace GestionCoutureApp.Services
             context.SaveChanges();
 
             _logger.LogWarning(
-                "Paiement {Recu} ANNULÉ par {Annulateur} — motif : {Motif}",
-                paiement.RecuNumero, nomAnnulateur, motif);
+                "Paiement {Recu} ANNULÉ par {Annulateur} (ID {IdAnnulateur}) — motif : {Motif}",
+                paiement.RecuNumero, nomAnnulateur, idAnnulateur, motif);
         }
 
         // ----------------------------------------------------------------
