@@ -29,6 +29,26 @@ namespace GestionCoutureApp.Helpers
         }
 
         /// <summary>
+        /// Vérifie que l'utilisateur connecté possède l'un des rôles autorisés (version enum).
+        /// Lève une UnauthorizedAccessException si ce n'est pas le cas.
+        /// </summary>
+        /// <param name="utilisateur">Utilisateur à vérifier (null = non connecté)</param>
+        /// <param name="rolesAutorises">Liste des rôles autorisés (version enum)</param>
+        /// <exception cref="UnauthorizedAccessException">Accès refusé</exception>
+        public static void RequireRoleEnum(Employe? utilisateur, params RoleEmploye[] rolesAutorises)
+        {
+            if (utilisateur == null)
+                throw new UnauthorizedAccessException(
+                    "Aucun utilisateur connecté. Cette opération nécessite une authentification.");
+            
+            var userRoleEnum = utilisateur.RoleEnum;
+            if (!rolesAutorises.Contains(userRoleEnum))
+                throw new UnauthorizedAccessException(
+                    $"Accès refusé. Rôle requis : {string.Join(" ou ", rolesAutorises)}. " +
+                    $"Votre rôle actuel : {userRoleEnum}.");
+        }
+
+        /// <summary>
         /// Vérifie que l'opérateur identifié par son ID possède le rôle requis.
         /// Version pour les services qui reçoivent un idOperateur au lieu de l'objet Employe.
         /// </summary>
@@ -40,6 +60,20 @@ namespace GestionCoutureApp.Helpers
             using var context = contextFactory.CreateDbContext();
             var operateur = context.Employes.Find(idOperateur);
             RequireRole(operateur, rolesAutorises);
+        }
+
+        /// <summary>
+        /// Vérifie que l'opérateur identifié par son ID possède le rôle requis (version enum).
+        /// Version pour les services qui reçoivent un idOperateur au lieu de l'objet Employe.
+        /// </summary>
+        public static void RequireRoleByIdEnum(
+            Microsoft.EntityFrameworkCore.IDbContextFactory<Data.ApplicationDbContext> contextFactory,
+            int idOperateur, 
+            params RoleEmploye[] rolesAutorises)
+        {
+            using var context = contextFactory.CreateDbContext();
+            var operateur = context.Employes.Find(idOperateur);
+            RequireRoleEnum(operateur, rolesAutorises);
         }
     }
 }

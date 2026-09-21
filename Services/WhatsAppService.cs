@@ -9,7 +9,7 @@ namespace GestionCoutureApp.Services
     public class WhatsAppService : IWhatsAppService
     {
         private const string IndicatifParDefaut  = "226";
-        private const string NomAtelierParDefaut = "Retouche Choco";
+        private const string NomAtelierParDefaut = "Retoupe Choco";
 
         // ==================================================================
         // Normalisation numéro
@@ -45,31 +45,34 @@ namespace GestionCoutureApp.Services
         }
 
         // ==================================================================
-        // Raccourcis métier
+        // Raccourcis métier (versions async)
         // ==================================================================
-        public void NotifierCommandePrete(Commande commande)
+        public async Task NotifierCommandePreteAsync(Commande commande)
         {
             string tel = commande.Client?.Telephone
                 ?? throw new InvalidOperationException("Numéro de téléphone introuvable.");
-            OuvrirConversation(tel, MessageCommandePrete(commande));
+            string message = await MessageCommandePreteAsync(commande);
+            OuvrirConversation(tel, message);
         }
 
-        public void NotifierRappelRdv(Commande commande)
+        public async Task NotifierRappelRdvAsync(Commande commande)
         {
             string tel = commande.Client?.Telephone
                 ?? throw new InvalidOperationException("Numéro de téléphone introuvable.");
-            OuvrirConversation(tel, MessageRappelRdv(commande));
+            string message = await MessageRappelRdvAsync(commande);
+            OuvrirConversation(tel, message);
         }
 
-        public void ContacterClient(Client client)
+        public async Task ContacterClientAsync(Client client)
         {
             if (string.IsNullOrWhiteSpace(client.Telephone))
                 throw new InvalidOperationException("Ce client n'a pas de numéro de téléphone.");
-            OuvrirConversation(client.Telephone, MessageContactGeneral(client));
+            string message = await MessageContactGeneralAsync(client);
+            OuvrirConversation(client.Telephone, message);
         }
 
         // ==================================================================
-        // Génération des messages
+        // Génération des messages (versions async pour éviter deadlock)
         // ==================================================================
 
         /// <summary>
@@ -82,17 +85,17 @@ namespace GestionCoutureApp.Services
         ///   - Chemise (Couturier : Ibrahim)
         ///   💰 Reste à payer : *2 500 FCFA*
         ///   Nous vous attendons. Merci pour votre confiance !
-        ///   — Retouche Choco
+        ///   — Retoupe Choco
         /// </summary>
-        public string MessageCommandePrete(Commande commande)
+        public async Task<string> MessageCommandePreteAsync(Commande commande)
         {
-            // Charger le modèle personnalisé depuis les paramètres (synchrone via .Result)
+            // ✅ CORRECTIF AUDIT #13 : Remplacement de .Result par await pour éviter deadlock
             string modele;
             try
             {
                 var param = App.Services.GetRequiredService<IParametresService>();
-                modele = param.ObtenirMsgCommandePrete().Result;
-                string nomAtelier = param.ObtenirNomAtelier().Result;
+                modele = await param.ObtenirMsgCommandePrete();
+                string nomAtelier = await param.ObtenirNomAtelier();
                 modele = modele.Replace("{Atelier}", nomAtelier);
             }
             catch
@@ -115,14 +118,15 @@ namespace GestionCoutureApp.Services
                 .Replace("{Reste}", reste.ToString("N0"));
         }
 
-        public string MessageRappelRdv(Commande commande)
+        public async Task<string> MessageRappelRdvAsync(Commande commande)
         {
+            // ✅ CORRECTIF AUDIT #13 : Remplacement de .Result par await pour éviter deadlock
             string modele;
             try
             {
                 var param = App.Services.GetRequiredService<IParametresService>();
-                modele = param.ObtenirMsgRappelRdv().Result;
-                string nomAtelier = param.ObtenirNomAtelier().Result;
+                modele = await param.ObtenirMsgRappelRdv();
+                string nomAtelier = await param.ObtenirNomAtelier();
                 modele = modele.Replace("{Atelier}", nomAtelier);
             }
             catch
@@ -142,23 +146,21 @@ namespace GestionCoutureApp.Services
                 .Replace("{Heure}", $"*{heure}*");
         }
 
-        public string MessageContactGeneral(Client client)
+        public async Task<string> MessageContactGeneralAsync(Client client)
         {
-            string nomAtelier = NomAtelier;
+            // ✅ CORRECTIF AUDIT #13 : Remplacement de .Result par await pour éviter deadlock
+            string nomAtelier = await ObtenirNomAtelierAsync();
             return $"Bonjour *{client.Nom} {client.Prenom}*,\n\n[Votre message ici]\n\n— *{nomAtelier}*";
         }
 
-        private string NomAtelier
+        private async Task<string> ObtenirNomAtelierAsync()
         {
-            get
+            try
             {
-                try
-                {
-                    var param = App.Services.GetRequiredService<IParametresService>();
-                    return param.ObtenirNomAtelier().Result;
-                }
-                catch { return NomAtelierParDefaut; }
+                var param = App.Services.GetRequiredService<IParametresService>();
+                return await param.ObtenirNomAtelier();
             }
+            catch { return NomAtelierParDefaut; }
         }
     }
 }

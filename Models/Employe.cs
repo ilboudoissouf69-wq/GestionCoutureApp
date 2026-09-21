@@ -38,5 +38,15 @@ namespace GestionCoutureApp.Models
 
         [NotMapped]
         public string NomComplet => $"{Prenom} {Nom}";
+
+        // ✅ CORRECTIF AUDIT #12 : Propriété enum pour le rôle (évite les chaînes magiques)
+        // Stockage en base reste string pour compatibilité, mais l'enum est utilisé
+        // dans le code pour la sécurité et la robustesse.
+        [NotMapped]
+        public RoleEmploye RoleEnum
+        {
+            get => RoleEmployeExtensions.FromDbString(Role);
+            set => Role = value.ToDbString();
+        }
     }
 }

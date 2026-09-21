@@ -1815,13 +1815,13 @@ namespace GestionCoutureApp.Views
         }
 
         // Bouton "💬 Prête !" dans l'en-tête du panneau
-        private void BtnWhatsAppPrete_Click(object sender, RoutedEventArgs e)
+        private async void BtnWhatsAppPrete_Click(object sender, RoutedEventArgs e)
         {
             var cmd = ObtenirCommandeSelectionnee();
             if (cmd == null) return;
             try
             {
-                _whatsApp.NotifierCommandePrete(cmd);
+                await _whatsApp.NotifierCommandePreteAsync(cmd);
             }
             catch (Exception ex)
             {
@@ -1831,13 +1831,13 @@ namespace GestionCoutureApp.Views
         }
 
         // Bouton "⏰ RDV" dans l'en-tête du panneau
-        private void BtnWhatsAppRdv_Click(object sender, RoutedEventArgs e)
+        private async void BtnWhatsAppRdv_Click(object sender, RoutedEventArgs e)
         {
             var cmd = ObtenirCommandeSelectionnee();
             if (cmd == null) return;
             try
             {
-                _whatsApp.NotifierRappelRdv(cmd);
+                await _whatsApp.NotifierRappelRdvAsync(cmd);
             }
             catch (Exception ex)
             {
@@ -1847,16 +1847,16 @@ namespace GestionCoutureApp.Views
         }
 
         // Bouton "💬 Notifier" dans le pied — envoie Prête si terminée, RDV sinon
-        private void BtnWhatsAppPied_Click(object sender, RoutedEventArgs e)
+        private async void BtnWhatsAppPied_Click(object sender, RoutedEventArgs e)
         {
             var cmd = ObtenirCommandeSelectionnee();
             if (cmd == null) return;
             try
             {
                 if (cmd.StatutGlobalAffiche == "Terminée")
-                    _whatsApp.NotifierCommandePrete(cmd);
+                    await _whatsApp.NotifierCommandePreteAsync(cmd);
                 else
-                    _whatsApp.NotifierRappelRdv(cmd);
+                    await _whatsApp.NotifierRappelRdvAsync(cmd);
             }
             catch (Exception ex)
             {
@@ -1865,7 +1865,7 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        private void EnvoyerWhatsAppCommande(Commande cmd)
+        private async void EnvoyerWhatsAppCommande(Commande cmd)
         {
             if (string.IsNullOrWhiteSpace(cmd.Client?.Telephone))
             {
@@ -1877,9 +1877,9 @@ namespace GestionCoutureApp.Views
             {
                 // Si terminée → message "prête", sinon → rappel RDV
                 if (cmd.StatutGlobalAffiche == "Terminée")
-                    _whatsApp.NotifierCommandePrete(cmd);
+                    await _whatsApp.NotifierCommandePreteAsync(cmd);
                 else
-                    _whatsApp.NotifierRappelRdv(cmd);
+                    await _whatsApp.NotifierRappelRdvAsync(cmd);
             }
             catch (Exception ex)
             {

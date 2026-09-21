@@ -99,6 +99,17 @@ namespace GestionCoutureApp.Services
             if (employe == null || employe.Statut != "Actif")
                 return null;
 
+            // ✅ CORRECTIF AUDIT #12 : Validation du rôle via enum pour robustesse
+            try
+            {
+                var roleEnum = employe.RoleEnum; // Valide que le rôle est bien un enum valide
+            }
+            catch (ArgumentException)
+            {
+                _logger.LogError("Rôle invalide en base pour l'employé '{Id}' : {Role}", identifiant, employe.Role);
+                return null;
+            }
+
             bool motDePasseValide;
 
             if (PasswordHasher.EstAncienFormatSha256(employe.MotDePasse))

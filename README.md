@@ -1,7 +1,7 @@
 # GestionCoutureApp
 
 Application de bureau WPF pour la gestion d'un atelier de couture.  
-Développée pour **Retouche Choco / Ilassa Design** (Burkina Faso).
+Développée pour **Retoupe Choco / Ilassa Design** (Burkina Faso).
 
 ---
 
@@ -12,22 +12,21 @@ Développée pour **Retouche Choco / Ilassa Design** (Burkina Faso).
 3. [Migrations de base de données](#migrations-de-base-de-données)
 4. [Rôles utilisateurs](#rôles-utilisateurs)
 5. [Fonctionnalités principales](#fonctionnalités-principales)
-6. [Sauvegarde automatique](#sauvegarde-automatique)
+6. [Documentation technique](#documentation-technique)
 7. [Données de démonstration](#données-de-démonstration)
-8. [Lancer les tests](#lancer-les-tests)
-9. [Limitations connues et dettes techniques](#limitations-connues-et-dettes-techniques)
-10. [Licence](#licence)
+8. [Limitations connues et dettes techniques](#limitations-connues-et-dettes-techniques)
+9. [Licence](#licence)
 
 ---
 
 ## Prérequis
 
-| Outil | Version minimale | Remarque |
-|---|---|---|
-| Windows | 10 (64-bit) | Windows 11 recommandé |
-| .NET Runtime | 8.0 | [Télécharger](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| .NET SDK | 8.0 | Requis pour compiler / migrer |
-| Git | — | Pour cloner le dépôt |
+|| Outil | Version minimale | Remarque |
+||---|---|---|
+|| Windows | 10 (64-bit) | Windows 11 recommandé |
+|| .NET Runtime | 8.0 | [Télécharger](https://dotnet.microsoft.com/download/dotnet/8.0) |
+|| .NET SDK | 8.0 | Requis pour compiler / migrer |
+|| Git | — | Pour cloner le dépôt |
 
 > Le runtime seul suffit pour exécuter l'application. Le SDK est nécessaire pour
 > compiler, exécuter les migrations EF Core ou lancer les tests.
@@ -119,41 +118,30 @@ Accès restreint :
 
 ## Fonctionnalités principales
 
-| Module | Description |
-|---|---|
-| **Authentification** | Anti brute-force (5 tentatives → verrouillage 2 min), PBKDF2+sel (100 000 itérations) |
-| **Clients** | Fiche client, recherche accent-insensible |
-| **Commandes** | Mesures dynamiques par type de vêtement (pas de 0,5 cm), photo client (import fichier ou webcam), suivi statut |
-| **Paiements** | Pas de suppression — annulation avec motif obligatoire, génération de numéro de reçu unique, protection contre sur-paiement |
-| **Commissions** | Aperçu avant enregistrement, verrouillage des commandes incluses, annulation avec déverrouillage et audit |
-| **Types de vêtements** | Pantalon, Chemise, Robe, Boubou, Veste — mesures et descriptions configurables par le Boss |
-| **Sauvegarde auto** | Toutes les 4 heures, rotation sur 15 fichiers, copie optionnelle vers support externe |
+|| Module | Description |
+||---|---|
+|| **Authentification** | Anti brute-force (5 tentatives → verrouillage 2 min), PBKDF2+sel (100 000 itérations) |
+|| **Clients** | Fiche client, recherche accent-insensible |
+|| **Commandes** | Mesures dynamiques par type de vêtement (pas de 0,5 cm), photo client (import fichier ou webcam), suivi statut |
+|| **Paiements** | Pas de suppression — annulation avec motif obligatoire, génération de numéro de reçu unique, protection contre sur-paiement |
+|| **Commissions** | Aperçu avant enregistrement, verrouillage des commandes incluses, annulation avec déverrouillage et audit |
+|| **Types de vêtements** | Pantalon, Chemise, Robe, Boubou, Veste — mesures et descriptions configurables par le Boss |
+|| **Sauvegarde auto** | Toutes les 4 heures, rotation sur 15 fichiers, copie optionnelle vers support externe |
 
 ---
 
-## Sauvegarde automatique
+## Documentation technique
 
-La sauvegarde utilise `VACUUM INTO` (cohérente même pendant une écriture),
-pas une copie brute du fichier.
+Pour la documentation détaillée des changements et procédures techniques, consultez :
 
-**Emplacement local :** `%LOCALAPPDATA%\GestionCoutureApp\Backups\`
-
-**Sauvegarde externe (optionnel) :** créer un fichier texte
-`%LOCALAPPDATA%\GestionCoutureApp\chemin_sauvegarde_externe.txt`
-contenant le chemin cible, par exemple :
-
-```
-D:\SauvegardesCouture
-```
-
-ou un dossier synchronisé par un client cloud (OneDrive, Google Drive, etc.).  
-Si la destination est inaccessible (clé USB débranchée, réseau hors ligne),
-la sauvegarde locale est quand même effectuée — l'échec externe est journalisé
-mais ne bloque pas l'application.
-
-> **Recommandation :** configurer au minimum une sauvegarde externe (clé USB
-> ou dossier cloud synchronisé). Sans cela, une panne du poste fait perdre la
-> base ET tout l'historique de sauvegardes simultanément.
+- **CHANGELOG.md** - Historique des versions et changements
+- **docs/** - Documentation technique détaillée :
+  - `LOGGING_README.md` - Guide du système de logging
+  - `AMELIORATIONS_RETOURS.md` - Détails interface RetoursView
+  - `TRESORERIE_GUIDE.md` - Guide trésorerie
+  - `GUIDE_TEST.md` - Guide de test étape par étape
+  - `AUDIT_IMPLEMENTATION_COMPLETE.md` - Rapport d'audit complet
+  - `CORRECTIONS_FINALES.md` - Synthèse des corrections
 
 ---
 
@@ -170,27 +158,6 @@ dotnet run -- --demo
 ```
 
 **Ne jamais utiliser `--demo` sur un poste de production.**
-
----
-
-## Lancer les tests
-
-```bash
-# Depuis la racine du dépôt
-dotnet test GestionCoutureApp.Tests
-
-# Avec détail des tests
-dotnet test GestionCoutureApp.Tests --verbosity normal
-```
-
-Le projet de tests (`GestionCoutureApp.Tests/`) utilise xUnit et
-EF Core InMemory. Aucune base de données réelle n'est nécessaire.
-
-Couverture actuelle : **34 tests** couvrant :
-- `AuthService` : authentification, brute-force, verrouillage
-- `PaiementService` : enregistrement, validation montants, annulation, précision decimal
-- `CommissionService` : calcul aperçu, enregistrement, verrouillage, annulation
-- `CommandeService` : CRUD, gardes-fous métier (commission verrouillée, montant < encaissé)
 
 ---
 
@@ -252,5 +219,5 @@ Si une migration MVVM progressive est engagée, `CommunityToolkit.Mvvm`
 
 ## Licence
 
-Propriétaire — © 2026 Retouche Choco / Ilassa Design. Tous droits réservés.  
+Propriétaire — © 2026 Retoupe Choco / Ilassa Design. Tous droits réservés.  
 Usage interne uniquement. Ne pas redistribuer sans autorisation écrite.

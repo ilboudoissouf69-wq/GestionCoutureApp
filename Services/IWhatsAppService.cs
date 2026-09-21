@@ -20,31 +20,31 @@ namespace GestionCoutureApp.Services
         /// <summary>
         /// Message "Commande prête" — envoyé quand toutes les pièces sont Terminées.
         /// </summary>
-        string MessageCommandePrete(Commande commande);
+        Task<string> MessageCommandePreteAsync(Commande commande);
 
         /// <summary>
         /// Rappel de RDV de retrait pour le client.
         /// </summary>
-        string MessageRappelRdv(Commande commande);
+        Task<string> MessageRappelRdvAsync(Commande commande);
 
         /// <summary>
         /// Message de contact général (depuis la fiche client).
         /// </summary>
-        string MessageContactGeneral(Client client);
+        Task<string> MessageContactGeneralAsync(Client client);
 
         /// <summary>
         /// Ouvre directement WhatsApp avec le message "Commande prête".
         /// </summary>
-        void NotifierCommandePrete(Commande commande);
+        Task NotifierCommandePreteAsync(Commande commande);
 
         /// <summary>
         /// Ouvre directement WhatsApp avec le rappel de RDV.
         /// </summary>
-        void NotifierRappelRdv(Commande commande);
+        Task NotifierRappelRdvAsync(Commande commande);
 
         /// <summary>
         /// Ouvre WhatsApp pour contacter le client (message général).
         /// </summary>
-        void ContacterClient(Client client);
+        Task ContacterClientAsync(Client client);
     }
 }

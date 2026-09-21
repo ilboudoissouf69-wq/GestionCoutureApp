@@ -160,9 +160,10 @@ namespace GestionCoutureApp.Services
 
             // ✅ CORRECTIF AUDIT #8 : Seul le Boss peut annuler un paiement
             // ✅ CORRECTIF AUDIT #9 : Utilisation de RequireRoleById au lieu de la recherche par nom
+            // ✅ CORRECTIF AUDIT #12 : Utilisation de RequireRoleByIdEnum avec enum RoleEmploye
             // La recherche par nom ("Prénom Nom") est fragile et peut échouer si deux employés
             // ont le même nom ou si un Boss modifie son nom après connexion.
-            Helpers.AuthorizationHelper.RequireRoleById(_contextFactory, idAnnulateur, "Boss");
+            Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idAnnulateur, RoleEmploye.Boss);
 
             var paiement = context.Paiements.Find(idPaiement)
                 ?? throw new InvalidOperationException("Paiement introuvable.");

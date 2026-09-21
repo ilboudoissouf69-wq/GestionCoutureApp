@@ -156,7 +156,7 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Logique partagée WhatsApp
         // ==================================================================
-        private void EnvoyerWhatsAppClient(Client client)
+        private async void EnvoyerWhatsAppClient(Client client)
         {
             if (string.IsNullOrWhiteSpace(client.Telephone))
             {
@@ -167,7 +167,7 @@ namespace GestionCoutureApp.Views
 
             try
             {
-                _whatsApp.ContacterClient(client);
+                await _whatsApp.ContacterClientAsync(client);
             }
             catch (Exception ex)
             {
