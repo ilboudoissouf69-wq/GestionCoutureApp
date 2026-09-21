@@ -1,6 +1,8 @@
 ﻿using System.Windows;
 using System.Data;
 using System.Windows;
+using System.Diagnostics;
+using System.Windows.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,6 +21,10 @@ namespace GestionCoutureApp
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // ✅ Activer la détection et le logging des erreurs de binding WPF
+            // Ces erreurs sont normalement silencieuses et peuvent causer des bugs difficiles à détecter
+            ConfigurerBindingErrorLogging();
 
             // ====== Configuration DI ======
             var services = new ServiceCollection();
@@ -458,6 +464,41 @@ namespace GestionCoutureApp
             catch { /* ne jamais bloquer la fermeture */ }
 
             base.OnExit(e);
+        }
+
+        /// <summary>
+        /// Configure le système de détection et logging des erreurs de binding WPF.
+        /// 
+        /// Les erreurs de binding WPF sont normalement silencieuses (invisible dans l'app)
+        /// et peuvent causer des bugs difficiles à diagnostiquer comme:
+        /// - Des valeurs qui ne s'affichent pas
+        /// - Des contrôles qui restent vides
+        /// - Des crashes silencieux dans les ValidationRules
+        /// - Des bindings circulaires
+        /// 
+        /// Cette méthode active un listener qui capture ces erreurs et les écrit dans:
+        /// - Un fichier de log dédié: %LOCALAPPDATA%\GestionCoutureApp\Logs\BindingErrors_[date].log
+        /// - La fenêtre Output de Visual Studio (pour le développement)
+        /// </summary>
+        private void ConfigurerBindingErrorLogging()
+        {
+            try
+            {
+                // Activer le tracing des erreurs de binding WPF
+                PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error | SourceLevels.Warning;
+                
+                // Ajouter notre listener personnalisé
+                var bindingErrorListener = new BindingErrorTraceListener();
+                PresentationTraceSources.DataBindingSource.Listeners.Add(bindingErrorListener);
+                
+                // Logger l'activation (via le système de log une fois qu'il est disponible)
+                // Note: On le fait après l'initialisation des services dans OnStartup
+            }
+            catch (Exception ex)
+            {
+                // Ne jamais crasher l'app à cause du logging
+                Debug.WriteLine($"Erreur lors de la configuration du binding error logging: {ex.Message}");
+            }
         }
     }
 }

@@ -32,7 +32,7 @@
             <Setter Property="HorizontalAlignment"
                     Value="Stretch"/>
             <Setter Property="Padding"
-                    Value="20,13"/>
+                    Value="20,14"/>
             <Setter Property="Cursor"
                     Value="Hand"/>
             <Setter Property="Template">
@@ -40,8 +40,8 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bg"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="6"
-                                Margin="8,1">
+                                CornerRadius="8"
+                                Margin="8,2">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -83,15 +83,15 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bg"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="6"
-                                Margin="8,1">
+                                CornerRadius="8"
+                                Margin="8,2">
                             <Grid>
                                 <!-- barre indicatrice gauche -->
                                 <Border Width="4"
                                         CornerRadius="2"
                                         Background="White"
                                         HorizontalAlignment="Left"
-                                        Margin="-4,6,0,6"/>
+                                        Margin="-4,8,0,8"/>
                                 <ContentPresenter Margin="{TemplateBinding Padding}"
                                                   VerticalAlignment="Center"/>
                             </Grid>
@@ -101,7 +101,7 @@
                                     Value="True">
                                 <Setter TargetName="bg"
                                         Property="Background"
-                                        Value="#A80000"/>
+                                        Value="#B30000"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

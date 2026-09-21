@@ -30,7 +30,7 @@ namespace GestionCoutureApp.Views
         // AjouterPiece() finissait toujours par rejeter l'enregistrement.
         private string? _motifExceptionAjoutPiece;
         private decimal _prixBaseActuel;
-        private List<TypeVetement> _typesVetement;
+        private List<TypeVetement> _typesVetement = new(); // ✅ FIX : Initialisation par défaut pour éviter null
         private bool _chargementEnCours = false;
         private string _cheminPhotoTemporaire = string.Empty;
         private string _roleUtilisateur;
@@ -53,18 +53,29 @@ namespace GestionCoutureApp.Views
         public CommandesView()
         {
             InitializeComponent();
-            _commandeService = App.Services.GetRequiredService<ICommandeService>();
-            _clientService = App.Services.GetRequiredService<IClientService>();
-            _materielService = App.Services.GetRequiredService<IMaterielService>();
-            _whatsApp = App.Services.GetRequiredService<IWhatsAppService>();
-            _languageService = App.Services.GetRequiredService<ILanguageService>();
-            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
+            
+            try
+            {
+                _commandeService = App.Services.GetRequiredService<ICommandeService>();
+                _clientService = App.Services.GetRequiredService<IClientService>();
+                _materielService = App.Services.GetRequiredService<IMaterielService>();
+                _whatsApp = App.Services.GetRequiredService<IWhatsAppService>();
+                _languageService = App.Services.GetRequiredService<ILanguageService>();
+                _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
-            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-            _context = contextFactory.CreateDbContext();
+                var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                _context = contextFactory.CreateDbContext();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de l'initialisation des services : " + ex.Message,
+                    "Erreur d'initialisation", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
             Unloaded += (s, e) =>
             {
-                _context.Dispose();
+                _context?.Dispose();
                 // ✅ Se désabonner pour éviter les fuites mémoire
                 _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
                 _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
@@ -105,10 +116,28 @@ namespace GestionCoutureApp.Views
             CmbClient.ItemsSource = _clientService.ObtenirTous();
             CmbCouturier.ItemsSource = _context.Employes.Where(e => e.Statut == "Actif").ToList();
 
-            _typesVetement = _context.TypesVetements
-                .Include(t => t.MesuresRequises)
-                .Include(t => t.Descriptions)
-                .ToList();
+            // ✅ FIX : Protection complète autour du chargement des types de vêtements
+            try
+            {
+                _typesVetement = _context.TypesVetements
+                    .Include(t => t.MesuresRequises)
+                    .Include(t => t.Descriptions)
+                    .ToList();
+
+                // ✅ FIX : Protection si aucun type de vêtement dans la base
+                if (_typesVetement == null || _typesVetement.Count == 0)
+                {
+                    _typesVetement = new List<TypeVetement>();
+                    MessageBox.Show("Aucun type de vêtement n'est enregistré dans la base de données. Veuillez d'abord créer des types de vêtements dans l'écran Types de vêtements.",
+                        "Données manquantes", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                _typesVetement = new List<TypeVetement>();
+                MessageBox.Show("Erreur lors du chargement des types de vêtements : " + ex.Message,
+                    "Erreur de chargement", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
 
             CmbTypeVetement.ItemsSource = _typesVetement.Select(t => new
             {
@@ -246,60 +275,115 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private void CmbTypeVetement_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (CmbTypeVetement.SelectedValue == null) return;
-            int id = (int)CmbTypeVetement.SelectedValue;
-            var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == id);
-            if (type == null) return;
-
-            _prixBaseActuel = type.PrixBase;
-            TxtPrixBase.Text = "Prix de base : " + type.PrixBase + " FCFA";
-
-            if (!_chargementEnCours)
-                TxtMontant.Text = type.PrixBase.ToString();
-
-            CmbDescription.ItemsSource = type.Descriptions.ToList();
-
-            if (!_chargementEnCours)
-                CmbDescription.Text = string.Empty;
-
-            PanelMesuresDynamiques.Children.Clear();
-            TxtIndicationMesures.Text = type.MesuresRequises.Count + " mesure(s) requise(s) :";
-
-            foreach (var mesure in type.MesuresRequises)
+            try
             {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
-
-                var label = new TextBlock
+                // ✅ FIX : Protection si _typesVetement est null ou vide
+                if (_typesVetement == null || _typesVetement.Count == 0)
                 {
-                    Text = mesure.NomMesure,
-                    Width = 160,
-                    FontSize = 12,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
+                    MessageBox.Show("Aucun type de vêtement disponible. Veuillez créer des types de vêtements d'abord.",
+                        "Données manquantes", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
 
-                var combo = new ComboBox
+                if (CmbTypeVetement.SelectedValue == null) 
+                    return;
+
+                // ✅ FIX : Conversion sécurisée de SelectedValue en int
+                if (!int.TryParse(CmbTypeVetement.SelectedValue.ToString(), out int id))
                 {
-                    Width = 80,
-                    FontSize = 12,
-                    Tag = mesure.NomMesure,
-                    IsEditable = true,
-                    IsTextSearchEnabled = true
-                };
+                    MessageBox.Show("Erreur : valeur du type de vêtement invalide.",
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
 
-                for (int i = 20; i <= 300; i++)
-                    combo.Items.Add((i * 0.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cm");
-                combo.SelectedIndex = 0;
+                var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == id);
+                if (type == null)
+                {
+                    MessageBox.Show("Type de vêtement introuvable dans la liste.",
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
 
-                row.Children.Add(label);
-                row.Children.Add(combo);
-                PanelMesuresDynamiques.Children.Add(row);
+                _prixBaseActuel = type.PrixBase;
+                TxtPrixBase.Text = "Prix de base : " + type.PrixBase + " FCFA";
+
+                if (!_chargementEnCours)
+                    TxtMontant.Text = type.PrixBase.ToString();
+                
+                // ✅ FIX : Protection contre null - éviter le crash si descriptions non chargées
+                if (type.Descriptions != null && type.Descriptions.Any())
+                    CmbDescription.ItemsSource = type.Descriptions.ToList();
+                else
+                    CmbDescription.ItemsSource = new List<DescriptionCourante>();
+
+                if (!_chargementEnCours)
+                    CmbDescription.Text = string.Empty;
+
+                PanelMesuresDynamiques.Children.Clear();
+
+                // ✅ FIX : Protection contre null pour MesuresRequises
+                if (type.MesuresRequises != null && type.MesuresRequises.Any())
+                {
+                    TxtIndicationMesures.Text = type.MesuresRequises.Count + " mesure(s) requise(s) :";
+
+                    foreach (var mesure in type.MesuresRequises)
+                    {
+                        // ✅ FIX : Protection contre null pour NomMesure
+                        if (string.IsNullOrWhiteSpace(mesure.NomMesure))
+                            continue;
+
+                        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+
+                        var label = new TextBlock
+                        {
+                            Text = mesure.NomMesure,
+                            Width = 160,
+                            FontSize = 12,
+                            VerticalAlignment = VerticalAlignment.Center
+                        };
+
+                        var combo = new ComboBox
+                        {
+                            Width = 80,
+                            FontSize = 12,
+                            Tag = mesure.NomMesure,
+                            IsEditable = true,
+                            IsTextSearchEnabled = true
+                        };
+
+                        for (int i = 20; i <= 300; i++)
+                            combo.Items.Add((i * 0.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cm");
+                        combo.SelectedIndex = 0;
+
+                        row.Children.Add(label);
+                        row.Children.Add(combo);
+                        PanelMesuresDynamiques.Children.Add(row);
+                    }
+                }
+                else
+                {
+                    TxtIndicationMesures.Text = "Aucune mesure requise pour ce type";
+                }
+
+                if (!_chargementEnCours)
+                    CalculerPrixTotal();
+
+                // Charger les mesures antérieures du client pour réutilisation
+                try
+                {
+                    ChargerMesuresAnterieures();
+                }
+                catch (Exception innerEx)
+                {
+                    // ✅ FIX : Ne pas planter si erreur de chargement des mesures antérieures
+                    System.Diagnostics.Debug.WriteLine($"Erreur ChargerMesuresAnterieures: {innerEx.Message}");
+                }
             }
-
-            if (!_chargementEnCours)
-                CalculerPrixTotal();
-
-            // Charger les mesures antérieures du client pour réutilisation
-            ChargerMesuresAnterieures();
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors du chargement du type de vêtement :\n\n{ex.Message}",
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void CmbAjustement_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -673,42 +757,62 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private void ChargerMesuresAnterieures()
         {
-            CmbMesuresAnterieures.ItemsSource = null;
-            CmbMesuresAnterieures.SelectedIndex = -1;
-
-            // Besoin d'un client ET d'un type pour interroger les pièces antérieures
-            if (CmbClient.SelectedValue == null || CmbTypeVetement.SelectedValue == null)
+            try
             {
-                LblReutilisationMesures.Text = "Reprendre les mesures — choisissez d'abord un type de vêtement";
-                return;
+                CmbMesuresAnterieures.ItemsSource = null;
+                CmbMesuresAnterieures.SelectedIndex = -1;
+
+                // Besoin d'un client ET d'un type pour interroger les pièces antérieures
+                if (CmbClient.SelectedValue == null || CmbTypeVetement.SelectedValue == null)
+                {
+                    LblReutilisationMesures.Text = "Reprendre les mesures — choisissez d'abord un type de vêtement";
+                    return;
+                }
+
+                // ✅ FIX : Conversion sécurisée des valeurs
+                if (!int.TryParse(CmbClient.SelectedValue.ToString(), out int idClient))
+                {
+                    LblReutilisationMesures.Text = "Erreur : client invalide";
+                    return;
+                }
+
+                if (!int.TryParse(CmbTypeVetement.SelectedValue.ToString(), out int idType))
+                {
+                    LblReutilisationMesures.Text = "Erreur : type de vêtement invalide";
+                    return;
+                }
+
+                var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idType);
+                if (type == null) return;
+
+                var piecesAnterieures = _commandeService.ObtenirPiecesAnterieuresClient(
+                    idClient,
+                    type.Nom,
+                    // On n'exclut PAS la commande courante : ses pièces existantes
+                    // (ex. un Boubou déjà dans le panier) sont les meilleures
+                    // mesures de référence pour la même pièce à dupliquer.
+                    // On passe null pour tout inclure.
+                    null);
+
+                if (piecesAnterieures.Count == 0)
+                {
+                    LblReutilisationMesures.Text =
+                        $"Aucune pièce {type.Nom} enregistrée pour ce client";
+                }
+                else
+                {
+                    LblReutilisationMesures.Text =
+                        $"Reprendre les mesures d'une pièce {type.Nom} existante ({piecesAnterieures.Count} trouvée(s))";
+                }
+
+                CmbMesuresAnterieures.ItemsSource = piecesAnterieures;
             }
-
-            int idClient = (int)CmbClient.SelectedValue;
-            int idType = (int)CmbTypeVetement.SelectedValue;
-            var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idType);
-            if (type == null) return;
-
-            var piecesAnterieures = _commandeService.ObtenirPiecesAnterieuresClient(
-                idClient,
-                type.Nom,
-                // On n'exclut PAS la commande courante : ses pièces existantes
-                // (ex. un Boubou déjà dans le panier) sont les meilleures
-                // mesures de référence pour la même pièce à dupliquer.
-                // On passe null pour tout inclure.
-                null);
-
-            if (piecesAnterieures.Count == 0)
+            catch (Exception ex)
             {
-                LblReutilisationMesures.Text =
-                    $"Aucune pièce {type.Nom} enregistrée pour ce client";
+                // ✅ FIX : Ne pas planter l'application si erreur de chargement des mesures antérieures
+                LblReutilisationMesures.Text = "Erreur lors du chargement des mesures antérieures";
+                System.Diagnostics.Debug.WriteLine("Erreur ChargerMesuresAnterieures: " + ex.Message);
             }
-            else
-            {
-                LblReutilisationMesures.Text =
-                    $"Reprendre les mesures d'une pièce {type.Nom} existante ({piecesAnterieures.Count} trouvée(s))";
-            }
-
-            CmbMesuresAnterieures.ItemsSource = piecesAnterieures;
         }
 
         private void CmbMesuresAnterieures_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -839,9 +943,29 @@ namespace GestionCoutureApp.Views
                 if (!DemanderMotDePasse()) return;
             }
 
+            // ✅ FIX : Protection contre null pour _typesVetement
+            if (CmbTypeVetement.SelectedValue == null)
+            {
+                MessageBox.Show("Veuillez sélectionner un type de vêtement.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (!int.TryParse(CmbTypeVetement.SelectedValue.ToString(), out int idTypeVetement))
+            {
+                MessageBox.Show("Type de vêtement invalide.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var typeVetement = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idTypeVetement);
+            if (typeVetement == null)
+            {
+                MessageBox.Show("Type de vêtement introuvable.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
             var piece = new PieceCommande
             {
-                TypeVetement = _typesVetement.First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom,
+                TypeVetement = typeVetement.Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc
                     ? dc.Texte : CmbDescription.Text,
                 IdCouturier = CmbCouturier.SelectedValue as int?,
@@ -864,8 +988,20 @@ namespace GestionCoutureApp.Views
                 }
                 catch { }
 
-                string typeVet = _typesVetement.First(t =>
-                    t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom;
+                // ✅ FIX : Protection contre null pour _typesVetement
+                if (CmbTypeVetement.SelectedValue == null || !int.TryParse(CmbTypeVetement.SelectedValue.ToString(), out int idTypeVetement2))
+                {
+                    MessageBox.Show("Type de vêtement invalide.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var typeVetementMatch = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idTypeVetement2);
+                if (typeVetementMatch == null)
+                {
+                    MessageBox.Show("Type de vêtement introuvable.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                string typeVet = typeVetementMatch.Nom;
                 string description = CmbDescription.SelectedItem is DescriptionCourante dcr2
                     ? dcr2.Texte : CmbDescription.Text;
                 string couturier = "—";
@@ -1431,8 +1567,20 @@ namespace GestionCoutureApp.Views
                 ? $"{clientChoisi.Nom} {clientChoisi.Prenom}".Trim()
                 : "—";
 
-            string typeVetement = _typesVetement
-                .First(t => t.IdTypeVetement == (int)CmbTypeVetement.SelectedValue).Nom;
+            // ✅ FIX : Protection contre null pour _typesVetement
+            if (CmbTypeVetement.SelectedValue == null || !int.TryParse(CmbTypeVetement.SelectedValue.ToString(), out int idTypeVetement3))
+            {
+                MessageBox.Show("Type de vêtement invalide.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var typeVetementObj = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idTypeVetement3);
+            if (typeVetementObj == null)
+            {
+                MessageBox.Show("Type de vêtement introuvable.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+            string typeVetement = typeVetementObj.Nom;
 
             string description = CmbDescription.SelectedItem is DescriptionCourante dcr
                 ? dcr.Texte : CmbDescription.Text;

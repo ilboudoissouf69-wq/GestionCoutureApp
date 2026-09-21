@@ -8,7 +8,7 @@
                 <!-- ======================================================== -->
                 <!-- PALETTE — Retouche Choco / Ilassa Design                  -->
                 <!--   Rouge marque   : #CC0000                                -->
-                <!--   Rouge hover    : #A80000                                -->
+                <!--   Rouge hover    : #B30000                                -->
                 <!--   Noir charbon   : #1A1A1A                                -->
                 <!--   Fond chaud     : #F7F3F0  (blanc cassé, pas froid)      -->
                 <!--   Surface        : #FFFFFF                                -->
@@ -16,15 +16,16 @@
                 <!-- ======================================================== -->
                 <Color x:Key="PrimaryColor">#1A1A1A</Color>
                 <Color x:Key="AccentColor">#CC0000</Color>
-                <Color x:Key="AccentHoverColor">#A80000</Color>
-                <Color x:Key="DangerColor">#CC0000</Color>
-                <Color x:Key="WarningColor">#D97706</Color>
-                <Color x:Key="SuccessColor">#2E7D32</Color>
+                <Color x:Key="AccentHoverColor">#B30000</Color>
+                <Color x:Key="DangerColor">#DC2626</Color>
+                <Color x:Key="WarningColor">#F59E0B</Color>
+                <Color x:Key="SuccessColor">#10B981</Color>
                 <Color x:Key="SurfaceColor">#FFFFFF</Color>
                 <Color x:Key="BackgroundColor">#F7F3F0</Color>
-                <Color x:Key="BorderColor">#E0D6D0</Color>
+                <Color x:Key="BorderColor">#E5D0C8</Color>
                 <Color x:Key="TextPrimaryColor">#1A1A1A</Color>
                 <Color x:Key="TextSecondaryColor">#6B6460</Color>
+                <Color x:Key="SubtleBackgroundColor">#FAF5F2</Color>
 
                 <SolidColorBrush x:Key="PrimaryBrush"
                                  Color="{StaticResource PrimaryColor}"/>
@@ -48,6 +49,8 @@
                                  Color="{StaticResource TextPrimaryColor}"/>
                 <SolidColorBrush x:Key="TextSecondaryBrush"
                                  Color="{StaticResource TextSecondaryColor}"/>
+                <SolidColorBrush x:Key="SubtleBackgroundBrush"
+                                 Color="{StaticResource SubtleBackgroundColor}"/>
 
                 <!-- ======================================================== -->
                 <!-- STYLE TEXTBOX                                              -->
@@ -215,12 +218,24 @@
                                                                 <Setter TargetName="border"
                                                                         Property="Background"
                                                                         Value="{DynamicResource AccentHoverBrush}"/>
+                                                                <Setter TargetName="border"
+                                                                        Property="RenderTransform">
+                                                                    <Setter.Value>
+                                                                        <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
                                                         </Trigger>
                                                         <Trigger Property="IsPressed"
                                                                  Value="True">
                                                                 <Setter TargetName="border"
                                                                         Property="Opacity"
-                                                                        Value="0.80"/>
+                                                                        Value="0.85"/>
+                                                                <Setter TargetName="border"
+                                                                        Property="RenderTransform">
+                                                                    <Setter.Value>
+                                                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
                                                         </Trigger>
                                                         <Trigger Property="IsEnabled"
                                                                  Value="False">
@@ -270,11 +285,9 @@
                         <Setter Property="Foreground"
                                 Value="{DynamicResource TextSecondaryBrush}"/>
                         <Setter Property="Background"
-                                Value="#F0EAE6"/>
+                                Value="Transparent"/>
                         <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="BorderBrush"
-                                Value="{DynamicResource BorderBrush}"/>
+                                Value="0"/>
                         <Setter Property="Cursor"
                                 Value="Hand"/>
                         <Setter Property="Padding"
@@ -284,8 +297,6 @@
                                         <ControlTemplate TargetType="Button">
                                                 <Border x:Name="border"
                                                         Background="{TemplateBinding Background}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
                                                         CornerRadius="7"
                                                         Padding="{TemplateBinding Padding}">
                                                         <ContentPresenter HorizontalAlignment="Center"
@@ -296,7 +307,19 @@
                                                                  Value="True">
                                                                 <Setter TargetName="border"
                                                                         Property="Background"
-                                                                        Value="#E0D6D0"/>
+                                                                        Value="{DynamicResource SubtleBackgroundBrush}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed"
+                                                                 Value="True">
+                                                                <Setter TargetName="border"
+                                                                        Property="Opacity"
+                                                                        Value="0.7"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled"
+                                                                 Value="False">
+                                                                <Setter TargetName="border"
+                                                                        Property="Opacity"
+                                                                        Value="0.3"/>
                                                         </Trigger>
                                                 </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -357,21 +380,21 @@
                                 <Setter.Value>
                                         <Style TargetType="DataGridRow">
                                                 <Setter Property="Height"
-                                                        Value="42"/>
+                                                        Value="44"/>
                                                 <Setter Property="Cursor"
                                                         Value="Hand"/>
                                                 <Style.Triggers>
-                                                        <Trigger Property="IsSelected"
-                                                                 Value="True">
-                                                                <Setter Property="Background"
-                                                                        Value="#FCEAEA"/>
-                                                                <Setter Property="Foreground"
-                                                                        Value="#CC0000"/>
-                                                        </Trigger>
                                                         <Trigger Property="IsMouseOver"
-                                                                 Value="True">
+                                                                Value="True">
                                                                 <Setter Property="Background"
-                                                                        Value="#FFF5F5"/>
+                                                                        Value="#F0EAE6"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsSelected"
+                                                                Value="True">
+                                                                <Setter Property="Background"
+                                                                        Value="#FFE8E0"/>
+                                                                <Setter Property="Foreground"
+                                                                        Value="#1A1A1A"/>
                                                         </Trigger>
                                                 </Style.Triggers>
                                         </Style>
@@ -408,15 +431,24 @@
                         <Setter Property="Background"
                                 Value="White"/>
                         <Setter Property="CornerRadius"
-                                Value="10"/>
+                                Value="12"/>
                         <Setter Property="BorderBrush"
                                 Value="{DynamicResource BorderBrush}"/>
                         <Setter Property="BorderThickness"
                                 Value="1"/>
                         <Setter Property="Padding"
-                                Value="20"/>
+                                Value="24"/>
                         <Setter Property="SnapsToDevicePixels"
                                 Value="True"/>
+                        <Setter Property="Effect">
+                                <Setter.Value>
+                                        <DropShadowEffect Color="#000000"
+                                                        Opacity="0.06"
+                                                        BlurRadius="12"
+                                                        ShadowDepth="2"
+                                                        Direction="270"/>
+                                </Setter.Value>
+                        </Setter>
                 </Style>
 
                 <!-- ======================================================== -->
@@ -449,13 +481,13 @@
                 <Style TargetType="TextBlock"
                        x:Key="CardTitle">
                         <Setter Property="FontSize"
-                                Value="14"/>
+                                Value="15"/>
                         <Setter Property="FontWeight"
                                 Value="SemiBold"/>
                         <Setter Property="Foreground"
                                 Value="{DynamicResource PrimaryBrush}"/>
                         <Setter Property="Margin"
-                                Value="0,0,0,14"/>
+                                Value="0,0,0,16"/>
                 </Style>
 
         </Application.Resources>

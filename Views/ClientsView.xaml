@@ -20,13 +20,13 @@
             </Grid.RowDefinitions>
 
             <!-- Titre -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <StackPanel Grid.Row="0" Margin="0,0,0,24">
                 <TextBlock Text="Gestion des Clients"
-                           FontSize="22" FontWeight="Bold"
+                           FontSize="24" FontWeight="Bold"
                            Foreground="{StaticResource PrimaryBrush}"/>
-                <Border Height="3" Width="40" CornerRadius="2"
+                <Border Height="3" Width="48" CornerRadius="2"
                         Background="#CC0000" HorizontalAlignment="Left"
-                        Margin="0,6,0,0"/>
+                        Margin="0,8,0,0"/>
             </StackPanel>
 
             <TextBox Grid.Row="1" x:Name="TxtRecherche"
@@ -105,7 +105,7 @@
                     </DataGrid>
                     
                     <!-- ═══════════════════════════════ PAGINATION ═══════════════════════ -->
-                    <Border Background="#F8F9FA" Padding="12,8" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0">
+                    <Border Background="#FAF5F2" Padding="16,12" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -115,17 +115,17 @@
                             
                             <!-- Info pagination -->
                             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock x:Name="TxtPaginationInfo" FontSize="11" Foreground="#6B7280"/>
+                                <TextBlock x:Name="TxtPaginationInfo" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" FontWeight="Medium"/>
                             </StackPanel>
                             
                             <!-- Boutons de navigation -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="BtnPagePrecedente" Content="◀" Width="32" Height="28" 
-                                        Margin="0,0,4,0" Click="BtnPagePrecedente_Click"
-                                        Style="{StaticResource BtnGhost}" IsEnabled="False"/>
-                                <Button x:Name="BtnPageSuivante" Content="▶" Width="32" Height="28"
+                                <Button x:Name="BtnPagePrecedente" Content="←" Width="36" Height="32" 
+                                        Margin="0,0,8,0" Click="BtnPagePrecedente_Click"
+                                        Style="{StaticResource BtnGhost}" IsEnabled="False" FontSize="14"/>
+                                <Button x:Name="BtnPageSuivante" Content="→" Width="36" Height="32"
                                         Click="BtnPageSuivante_Click"
-                                        Style="{StaticResource BtnGhost}" IsEnabled="False"/>
+                                        Style="{StaticResource BtnGhost}" IsEnabled="False" FontSize="14"/>
                             </StackPanel>
                         </Grid>
                     </Border>
