@@ -16,6 +16,9 @@ namespace GestionCoutureApp.Views
         private readonly IDepenseService _depenseService;
         private readonly IAuthService _authService;
         private bool _initialise = false;
+        
+        // ✅ Protection contre clics multiples
+        private bool _enCoursAjout = false;
 
         // Période courante
         private DateTime _debutPeriode;
@@ -190,38 +193,48 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private void BtnAjouter_Click(object sender, RoutedEventArgs e)
         {
-            TxtMessage.Text = "";
-
-            if (CmbCategorie.SelectedItem == null)
-            { AficherErreur("Sélectionnez une catégorie."); return; }
-
-            string type = CmbTypeDepense.Text.Trim();
-            if (string.IsNullOrEmpty(type))
-            { AficherErreur("Sélectionnez ou saisissez un type de dépense."); return; }
-
-            if (!decimal.TryParse(TxtMontant.Text.Replace(" ", ""), out decimal montant) || montant <= 0)
-            { AficherErreur("Saisissez un montant valide (supérieur à 0)."); return; }
-
-            if (DateDepense.SelectedDate == null)
-            { AficherErreur("Sélectionnez une date."); return; }
-
-            string cat    = ((ComboBoxItem)CmbCategorie.SelectedItem).Tag?.ToString() ?? "Divers";
-            string statut = (CmbStatutSaisie.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Validee";
-            var op = _authService.UtilisateurConnecte;
-
-            var depense = new Depense
+            // ✅ Protection contre clics multiples
+            if (_enCoursAjout)
             {
-                Categorie       = cat,
-                TypeDepense     = type,
-                Montant         = montant,
-                DateDepense     = DateDepense.SelectedDate.Value,
-                Description     = TxtDescription.Text.Trim(),
-                StatutValidation = statut,
-                NomOperateur    = op != null ? $"{op.Prenom} {op.Nom}" : ""
-            };
-
+                AficherErreur("Enregistrement en cours, veuillez patienter...");
+                return;
+            }
+            
+            _enCoursAjout = true;
+            BtnAjouter.IsEnabled = false;
+            
             try
             {
+                TxtMessage.Text = "";
+
+                if (CmbCategorie.SelectedItem == null)
+                { AficherErreur("Sélectionnez une catégorie."); return; }
+
+                string type = CmbTypeDepense.Text.Trim();
+                if (string.IsNullOrEmpty(type))
+                { AficherErreur("Sélectionnez ou saisissez un type de dépense."); return; }
+
+                if (!decimal.TryParse(TxtMontant.Text.Replace(" ", ""), out decimal montant) || montant <= 0)
+                { AficherErreur("Saisissez un montant valide (supérieur à 0)."); return; }
+
+                if (DateDepense.SelectedDate == null)
+                { AficherErreur("Sélectionnez une date."); return; }
+
+                string cat    = ((ComboBoxItem)CmbCategorie.SelectedItem).Tag?.ToString() ?? "Divers";
+                string statut = (CmbStatutSaisie.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Validee";
+                var op = _authService.UtilisateurConnecte;
+
+                var depense = new Depense
+                {
+                    Categorie       = cat,
+                    TypeDepense     = type,
+                    Montant         = montant,
+                    DateDepense     = DateDepense.SelectedDate.Value,
+                    Description     = TxtDescription.Text.Trim(),
+                    StatutValidation = statut,
+                    NomOperateur    = op != null ? $"{op.Prenom} {op.Nom}" : ""
+                };
+
                 _depenseService.Ajouter(depense);
                 CmbCategorie.SelectedIndex    = -1;
                 CmbTypeDepense.SelectedIndex  = -1;
@@ -238,6 +251,12 @@ namespace GestionCoutureApp.Views
             catch (Exception ex)
             {
                 AficherErreur("Erreur : " + ex.Message);
+            }
+            finally
+            {
+                // ✅ Toujours réactiver le bouton
+                _enCoursAjout = false;
+                BtnAjouter.IsEnabled = true;
             }
         }
 

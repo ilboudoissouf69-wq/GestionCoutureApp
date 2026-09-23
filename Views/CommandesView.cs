@@ -497,7 +497,13 @@ namespace GestionCoutureApp.Views
                     _cheminPhotoTemporaire = premiere.CheminPhoto ?? string.Empty;
                     if (!string.IsNullOrEmpty(_cheminPhotoTemporaire) && System.IO.File.Exists(_cheminPhotoTemporaire))
                     {
-                        ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(_cheminPhotoTemporaire));
+                        var image = new System.Windows.Media.Imaging.BitmapImage();
+                        image.BeginInit();
+                        image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                        image.UriSource = new Uri(_cheminPhotoTemporaire);
+                        image.EndInit();
+                        image.Freeze();
+                        ImgPhoto.Source = image;
                         TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
                         BtnSupprimerPhoto.Visibility = Visibility.Visible;
                     }
@@ -715,7 +721,13 @@ namespace GestionCoutureApp.Views
                 _cheminPhotoTemporaire = piece.CheminPhoto ?? string.Empty;
                 if (!string.IsNullOrEmpty(_cheminPhotoTemporaire) && System.IO.File.Exists(_cheminPhotoTemporaire))
                 {
-                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(_cheminPhotoTemporaire));
+                    var image = new System.Windows.Media.Imaging.BitmapImage();
+                    image.BeginInit();
+                    image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    image.UriSource = new Uri(_cheminPhotoTemporaire);
+                    image.EndInit();
+                    image.Freeze();
+                    ImgPhoto.Source = image;
                     TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
                     BtnSupprimerPhoto.Visibility = Visibility.Visible;
                 }
@@ -2155,9 +2167,9 @@ namespace GestionCoutureApp.Views
         // Import / Capture / Suppression photo
         // ==================================================================
         private static readonly string[] ExtensionsAutorisees = { ".jpg", ".jpeg", ".png", ".bmp" };
-        private const long TailleMaxOctets = 5 * 1024 * 1024;
+        private const long TailleMaxOctets = 1 * 1024 * 1024;  // 1 Mo max pour économiser Google Drive
 
-        private void BtnImporterPhoto_Click(object sender, RoutedEventArgs e)
+        private async void BtnImporterPhoto_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
@@ -2180,7 +2192,7 @@ namespace GestionCoutureApp.Views
                 if (info.Length > TailleMaxOctets)
                 {
                     MessageBox.Show(
-                        $"L'image est trop volumineuse ({info.Length / 1024 / 1024:N1} Mo).\nTaille max : 5 Mo.",
+                        $"L'image est trop volumineuse ({info.Length / 1024 / 1024:N2} Mo).\nTaille max : 1 Mo.",
                         "Fichier trop grand", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
@@ -2198,13 +2210,31 @@ namespace GestionCoutureApp.Views
 
                 System.IO.File.Copy(dialog.FileName, cheminDestination, overwrite: true);
 
-                // Compression JPEG 1024×768 / 70% à la source (après copie)
-                GestionCoutureApp.Helpers.PhotoCompressor.Compresser(cheminDestination, cheminDestination);
+                // Compression JPEG 1024×768 / 70% à la source (après copie) - async pour éviter freeze UI
+                LoadingIndicator.Visibility = Visibility.Visible;
+                await Task.Run(() => 
+                    GestionCoutureApp.Helpers.PhotoCompressor.Compresser(cheminDestination, cheminDestination)
+                );
+                LoadingIndicator.Visibility = Visibility.Collapsed;
 
                 _cheminPhotoTemporaire = cheminDestination;
-                ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(cheminDestination));
+                
+                // ✅ Chargement correct avec CacheOption.OnLoad pour éviter memory leak
+                var image = new System.Windows.Media.Imaging.BitmapImage();
+                image.BeginInit();
+                image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                image.UriSource = new Uri(cheminDestination);
+                image.EndInit();
+                image.Freeze();
+                ImgPhoto.Source = image;
+                
                 TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
                 BtnSupprimerPhoto.Visibility = Visibility.Visible;
+            }
+            catch (OutOfMemoryException)
+            {
+                MessageBox.Show("Mémoire insuffisante pour traiter cette image.\nEssayez avec une image plus petite.",
+                    "Erreur mémoire", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
@@ -2240,11 +2270,24 @@ namespace GestionCoutureApp.Views
                     !string.IsNullOrEmpty(webcamWindow.CapturedFilePath))
                 {
                     _cheminPhotoTemporaire = webcamWindow.CapturedFilePath;
-                    ImgPhoto.Source = new System.Windows.Media.Imaging.BitmapImage(
-                        new Uri(_cheminPhotoTemporaire));
+                    
+                    // ✅ Chargement correct avec CacheOption.OnLoad pour éviter memory leak
+                    var image = new System.Windows.Media.Imaging.BitmapImage();
+                    image.BeginInit();
+                    image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    image.UriSource = new Uri(_cheminPhotoTemporaire);
+                    image.EndInit();
+                    image.Freeze();
+                    ImgPhoto.Source = image;
+                    
                     TxtPhotoPlaceholder.Visibility = Visibility.Collapsed;
                     BtnSupprimerPhoto.Visibility = Visibility.Visible;
                 }
+            }
+            catch (OutOfMemoryException)
+            {
+                MessageBox.Show("Mémoire insuffisante pour capturer cette photo.",
+                    "Erreur mémoire", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {

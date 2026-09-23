@@ -148,7 +148,8 @@
                     <Separator Background="{StaticResource BorderBrush}"
                             Margin="0,0,0,14"/>
 
-                    <Button Content="Enregistrer"
+                    <Button x:Name="BtnEnregistrer"
+                            Content="Enregistrer"
                             Style="{StaticResource BtnSuccess}"
                             Click="BtnEnregistrer_Click"
                             Margin="0,0,0,8"/>

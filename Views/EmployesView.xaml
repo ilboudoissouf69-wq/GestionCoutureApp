@@ -123,11 +123,13 @@
                                         <Separator Background="{StaticResource BorderBrush}"
                                                    Margin="0,0,0,16"/>
 
-                                        <Button Content="Enregistrer"
+                                        <Button x:Name="BtnEnregistrer"
+                                                Content="Enregistrer"
                                                 Style="{StaticResource BtnSuccess}"
                                                 Click="BtnEnregistrer_Click"
                                                 Margin="0,0,0,8"/>
-                                        <Button Content="Modifier"
+                                        <Button x:Name="BtnModifier"
+                                                Content="Modifier"
                                                 Style="{StaticResource BtnNavy}"
                                                 Click="BtnModifier_Click"
                                                 Margin="0,0,0,8"/>

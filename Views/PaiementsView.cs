@@ -26,6 +26,9 @@ namespace GestionCoutureApp.Views
         // ✅ PAGINATION
         private const int PAGE_SIZE = 15;
         private int _currentPage = 1;
+        
+        // ✅ Protection contre double-clic
+        private bool _enCoursEnregistrement = false;
 
         public PaiementsView()
         {
@@ -243,6 +246,17 @@ namespace GestionCoutureApp.Views
 
         private void BtnEnregistrer_Click(object sender, RoutedEventArgs e)
         {
+            // ✅ Protection contre double-clic
+            if (_enCoursEnregistrement)
+            {
+                MessageBox.Show("Enregistrement en cours, veuillez patienter...",
+                    "Opération en cours", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            
+            _enCoursEnregistrement = true;
+            BtnEnregistrer.IsEnabled = false;
+            
             try
             {
                 // Validations de base
@@ -348,6 +362,12 @@ namespace GestionCoutureApp.Views
             catch (Exception ex)
             {
                 Alerte("Erreur inattendue : " + ex.Message);
+            }
+            finally
+            {
+                // ✅ Toujours réactiver le bouton
+                _enCoursEnregistrement = false;
+                BtnEnregistrer.IsEnabled = true;
             }
         }
 

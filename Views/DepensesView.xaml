@@ -230,7 +230,8 @@
                         </StackPanel>
 
                         <!-- Bouton ajouter -->
-                        <Button Grid.Column="4"
+                        <Button x:Name="BtnAjouter"
+                                Grid.Column="4"
                                 Content="➕  Enregistrer"
                                 Style="{StaticResource BtnSuccess}"
                                 Height="38" VerticalAlignment="Bottom"

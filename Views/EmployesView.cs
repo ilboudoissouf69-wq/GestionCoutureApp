@@ -14,6 +14,10 @@ namespace GestionCoutureApp.Views
     {
         private readonly ApplicationDbContext _context;
         private Employe? _employeSelectionne;
+        
+        // ✅ Protection contre double-clic
+        private bool _enCoursEnregistrement = false;
+        private bool _enCoursModification = false;
 
         public EmployesView()
         {
@@ -124,73 +128,87 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void BtnEnregistrer_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(TxtNom.Text) ||
-                string.IsNullOrWhiteSpace(TxtPrenom.Text) ||
-                string.IsNullOrWhiteSpace(TxtIdentifiant.Text) ||
-                string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
+            // ✅ Protection contre double-clic
+            if (_enCoursEnregistrement)
             {
-                AfficherMessage("Tous les champs sont requis.", succes: false);
+                AfficherMessage("Enregistrement en cours, veuillez patienter...", succes: false);
                 return;
             }
-
-            // ✅ Validation de sécurité pour le nom
-            if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
-            {
-                AfficherMessage($"Nom invalide : {erreurNom}", succes: false);
-                return;
-            }
-
-            // ✅ Validation de sécurité pour le prénom
-            if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
-            {
-                AfficherMessage($"Prénom invalide : {erreurPrenom}", succes: false);
-                return;
-            }
-
-            // ✅ Validation de sécurité pour l'identifiant
-            if (!ValidationHelper.EstTexteSecurise(TxtIdentifiant.Text.Trim(), out string erreurIdentifiant))
-            {
-                AfficherMessage($"Identifiant invalide : {erreurIdentifiant}", succes: false);
-                return;
-            }
-
-            // CORRECTIF (securite) : aucune longueur minimale n'etait imposee
-            // au mot de passe d'un employe, ce qui rend le hachage PBKDF2
-            // (voir Helpers/PasswordHasher.cs) quasi inutile face a une
-            // simple attaque par force brute sur un mot de passe trivial.
-            if (TxtMotDePasse.Password.Length < 6)
-            {
-                AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
-                return;
-            }
-
-            // Verifier si l'identifiant existe deja
-            if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()))
-            {
-                AfficherMessage("Cet identifiant existe déjà.", succes: false);
-                return;
-            }
-
-            if (CmbRole.SelectedIndex < 0)
-            {
-                AfficherMessage("Sélectionnez un rôle.", succes: false);
-                return;
-            }
-
-            var employe = new Employe
-            {
-                Nom = TxtNom.Text.Trim(),
-                Prenom = TxtPrenom.Text.Trim(),
-                Identifiant = TxtIdentifiant.Text.Trim(),
-                MotDePasse = HashMotDePasse(TxtMotDePasse.Password),
-                Role = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "",
-                Statut = "Actif"
-            };
-
+            
+            _enCoursEnregistrement = true;
+            BtnEnregistrer.IsEnabled = false;
+            
             try
             {
+                if (string.IsNullOrWhiteSpace(TxtNom.Text) ||
+                    string.IsNullOrWhiteSpace(TxtPrenom.Text) ||
+                    string.IsNullOrWhiteSpace(TxtIdentifiant.Text) ||
+                    string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
+                {
+                    AfficherMessage("Tous les champs sont requis.", succes: false);
+                    return;
+                }
+
+                // ✅ Validation de sécurité pour le nom
+                if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
+                {
+                    AfficherMessage($"Nom invalide : {erreurNom}", succes: false);
+                    return;
+                }
+
+                // ✅ Validation de sécurité pour le prénom
+                if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
+                {
+                    AfficherMessage($"Prénom invalide : {erreurPrenom}", succes: false);
+                    return;
+                }
+
+                // ✅ Validation de sécurité pour l'identifiant
+                if (!ValidationHelper.EstTexteSecurise(TxtIdentifiant.Text.Trim(), out string erreurIdentifiant))
+                {
+                    AfficherMessage($"Identifiant invalide : {erreurIdentifiant}", succes: false);
+                    return;
+                }
+
+                // CORRECTIF (securite) : aucune longueur minimale n'etait imposee
+                // au mot de passe d'un employe, ce qui rend le hachage PBKDF2
+                // (voir Helpers/PasswordHasher.cs) quasi inutile face a une
+                // simple attaque par force brute sur un mot de passe trivial.
+                if (TxtMotDePasse.Password.Length < 6)
+                {
+                    AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
+                    return;
+                }
+
+                // Verifier si l'identifiant existe deja
+                if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()))
+                {
+                    AfficherMessage("Cet identifiant existe déjà.", succes: false);
+                    return;
+                }
+
+                if (CmbRole.SelectedIndex < 0)
+                {
+                    AfficherMessage("Sélectionnez un rôle.", succes: false);
+                    return;
+                }
+
+                var employe = new Employe
+                {
+                    Nom = TxtNom.Text.Trim(),
+                    Prenom = TxtPrenom.Text.Trim(),
+                    Identifiant = TxtIdentifiant.Text.Trim(),
+                    MotDePasse = HashMotDePasse(TxtMotDePasse.Password),
+                    Role = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "",
+                    Statut = "Actif"
+                };
+
                 _context.Employes.Add(employe);
                 _context.SaveChanges();
+
+                AfficherMessage("Employé ajouté avec succès.", succes: true);
+                ChargerEmployes();
+                ViderFormulaire();
             }
             catch (DbUpdateException ex)
             {
@@ -198,12 +216,13 @@ namespace GestionCoutureApp.Views
                 // n'a rien trouve (course rare), l'index unique en base (voir
                 // ApplicationDbContext) refusera un identifiant en double.
                 AfficherMessage("Impossible d'enregistrer : " + (ex.InnerException?.Message ?? ex.Message), succes: false);
-                return;
             }
-
-            AfficherMessage("Employé ajouté avec succès.", succes: true);
-            ChargerEmployes();
-            ViderFormulaire();
+            finally
+            {
+                // ✅ Toujours réactiver le bouton
+                _enCoursEnregistrement = false;
+                BtnEnregistrer.IsEnabled = true;
+            }
         }
 
         // ------------------------------------------------------------------
@@ -211,111 +230,126 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void BtnModifier_Click(object sender, RoutedEventArgs e)
         {
-            if (_employeSelectionne == null)
+            // ✅ Protection contre double-clic
+            if (_enCoursModification)
             {
-                AfficherMessage("Sélectionnez un employé à modifier.", succes: false);
+                AfficherMessage("Modification en cours, veuillez patienter...", succes: false);
                 return;
             }
-
-            if (CmbRole.SelectedIndex < 0)
-            {
-                AfficherMessage("Sélectionnez un rôle.", succes: false);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(TxtNom.Text) ||
-                string.IsNullOrWhiteSpace(TxtPrenom.Text) ||
-                string.IsNullOrWhiteSpace(TxtIdentifiant.Text))
-            {
-                AfficherMessage("Le nom, le prénom et l'identifiant sont requis.", succes: false);
-                return;
-            }
-
-            // Un autre employe (different de celui en cours de modification)
-            // ne doit pas deja utiliser cet identifiant.
-            if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()
-                                           && emp.IdEmploye != _employeSelectionne.IdEmploye))
-            {
-                AfficherMessage("Cet identifiant est déjà utilisé par un autre employé.", succes: false);
-                return;
-            }
-
-            // CORRECTIF (incohérence métier / risque de verrouillage) : rien
-            // n'empêchait de changer le rôle du dernier compte "Boss" actif
-            // vers un autre rôle (Secrétaire/Couturier). Résultat possible :
-            // plus aucun compte "Boss" actif dans toute l'application, donc
-            // plus personne ne peut accéder à la gestion des employés, des
-            // types de vêtements ou des commissions — un verrouillage complet
-            // dont on ne peut se sortir qu'en modifiant la base à la main.
-            string nouveauRole = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "";
-            if (_employeSelectionne.Role == "Boss" && nouveauRole != "Boss")
-            {
-                int nbAutresBossActifs = _context.Employes.Count(emp =>
-                    emp.Role == "Boss" && emp.Statut == "Actif" && emp.IdEmploye != _employeSelectionne.IdEmploye);
-
-                if (nbAutresBossActifs == 0)
-                {
-                    AfficherMessage(
-                        "Impossible de changer ce rôle : c'est le dernier compte Boss actif. " +
-                        "Créez ou réactivez un autre compte Boss avant de modifier celui-ci.",
-                        succes: false);
-                    return;
-                }
-            }
-
-            // ✅ Validation de sécurité pour le nom
-            if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
-            {
-                AfficherMessage($"Nom invalide : {erreurNom}", succes: false);
-                return;
-            }
-
-            // ✅ Validation de sécurité pour le prénom
-            if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
-            {
-                AfficherMessage($"Prénom invalide : {erreurPrenom}", succes: false);
-                return;
-            }
-
-            // ✅ Validation de sécurité pour l'identifiant
-            if (!ValidationHelper.EstTexteSecurise(TxtIdentifiant.Text.Trim(), out string erreurIdentifiant))
-            {
-                AfficherMessage($"Identifiant invalide : {erreurIdentifiant}", succes: false);
-                return;
-            }
-
-            _employeSelectionne.Nom = TxtNom.Text.Trim();
-            _employeSelectionne.Prenom = TxtPrenom.Text.Trim();
-            _employeSelectionne.Identifiant = TxtIdentifiant.Text.Trim();
-            _employeSelectionne.Role = nouveauRole;
-
-            // Mettre a jour le mot de passe seulement si saisi
-            if (!string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
-            {
-                // CORRECTIF (securite) : meme controle de longueur minimale
-                // qu'a la creation (voir BtnEnregistrer_Click).
-                if (TxtMotDePasse.Password.Length < 6)
-                {
-                    AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
-                    return;
-                }
-                _employeSelectionne.MotDePasse = HashMotDePasse(TxtMotDePasse.Password);
-            }
-
+            
+            _enCoursModification = true;
+            BtnModifier.IsEnabled = false;
+            
             try
             {
+                if (_employeSelectionne == null)
+                {
+                    AfficherMessage("Sélectionnez un employé à modifier.", succes: false);
+                    return;
+                }
+
+                if (CmbRole.SelectedIndex < 0)
+                {
+                    AfficherMessage("Sélectionnez un rôle.", succes: false);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(TxtNom.Text) ||
+                    string.IsNullOrWhiteSpace(TxtPrenom.Text) ||
+                    string.IsNullOrWhiteSpace(TxtIdentifiant.Text))
+                {
+                    AfficherMessage("Le nom, le prénom et l'identifiant sont requis.", succes: false);
+                    return;
+                }
+
+                // Un autre employe (different de celui en cours de modification)
+                // ne doit pas deja utiliser cet identifiant.
+                if (_context.Employes.Any(emp => emp.Identifiant == TxtIdentifiant.Text.Trim()
+                                               && emp.IdEmploye != _employeSelectionne.IdEmploye))
+                {
+                    AfficherMessage("Cet identifiant est déjà utilisé par un autre employé.", succes: false);
+                    return;
+                }
+
+                // CORRECTIF (incohérence métier / risque de verrouillage) : rien
+                // n'empêchait de changer le rôle du dernier compte "Boss" actif
+                // vers un autre rôle (Secrétaire/Couturier). Résultat possible :
+                // plus aucun compte "Boss" actif dans toute l'application, donc
+                // plus personne ne peut accéder à la gestion des employés, des
+                // types de vêtements ou des commissions — un verrouillage complet
+                // dont on ne peut se sortir qu'en modifiant la base à la main.
+                string nouveauRole = ((ComboBoxItem)CmbRole.SelectedItem).Content?.ToString() ?? "";
+                if (_employeSelectionne.Role == "Boss" && nouveauRole != "Boss")
+                {
+                    int nbAutresBossActifs = _context.Employes.Count(emp =>
+                        emp.Role == "Boss" && emp.Statut == "Actif" && emp.IdEmploye != _employeSelectionne.IdEmploye);
+
+                    if (nbAutresBossActifs == 0)
+                    {
+                        AfficherMessage(
+                            "Impossible de changer ce rôle : c'est le dernier compte Boss actif. " +
+                            "Créez ou réactivez un autre compte Boss avant de modifier celui-ci.",
+                            succes: false);
+                        return;
+                    }
+                }
+
+                // ✅ Validation de sécurité pour le nom
+                if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
+                {
+                    AfficherMessage($"Nom invalide : {erreurNom}", succes: false);
+                    return;
+                }
+
+                // ✅ Validation de sécurité pour le prénom
+                if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
+                {
+                    AfficherMessage($"Prénom invalide : {erreurPrenom}", succes: false);
+                    return;
+                }
+
+                // ✅ Validation de sécurité pour l'identifiant
+                if (!ValidationHelper.EstTexteSecurise(TxtIdentifiant.Text.Trim(), out string erreurIdentifiant))
+                {
+                    AfficherMessage($"Identifiant invalide : {erreurIdentifiant}", succes: false);
+                    return;
+                }
+
+                _employeSelectionne.Nom = TxtNom.Text.Trim();
+                _employeSelectionne.Prenom = TxtPrenom.Text.Trim();
+                _employeSelectionne.Identifiant = TxtIdentifiant.Text.Trim();
+                _employeSelectionne.Role = nouveauRole;
+
+                // Mettre a jour le mot de passe seulement si saisi
+                if (!string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
+                {
+                    // CORRECTIF (securite) : meme controle de longueur minimale
+                    // qu'a la creation (voir BtnEnregistrer_Click).
+                    if (TxtMotDePasse.Password.Length < 6)
+                    {
+                        AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
+                        return;
+                    }
+                    _employeSelectionne.MotDePasse = HashMotDePasse(TxtMotDePasse.Password);
+                }
+
                 _context.SaveChanges();
+                
+                AfficherMessage("Employé modifié avec succès.", succes: true);
+                ChargerEmployes();
+                // On ne vide PAS le formulaire après modification : l'utilisateur
+                // voit le message de succès et peut continuer à modifier si besoin.
             }
             catch (DbUpdateException ex)
             {
                 AfficherMessage("Impossible d'enregistrer : " + (ex.InnerException?.Message ?? ex.Message), succes: false);
-                return;
             }
-
-            AfficherMessage("Employé modifié avec succès.", succes: true);
-            ChargerEmployes();
-            // On ne vide PAS le formulaire après modification : l'utilisateur
-            // voit le message de succès et peut continuer à modifier si besoin.
+            finally
+            {
+                // ✅ Toujours réactiver le bouton
+                _enCoursModification = false;
+                BtnModifier.IsEnabled = true;
+            }
         }
 
         // ------------------------------------------------------------------

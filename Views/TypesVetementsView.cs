@@ -15,6 +15,9 @@ namespace GestionCoutureApp.Views
         private readonly ApplicationDbContext _context;
         private TypeVetement? _typeSelectionne;
         private readonly List<string> _mesuresTemporaires = new List<string>();
+        
+        // ✅ Protection contre double-clic
+        private bool _enCoursEnregistrement = false;
 
         public TypesVetementsView()
         {
@@ -136,22 +139,33 @@ namespace GestionCoutureApp.Views
 
         private void BtnEnregistrer_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(TxtNom.Text))
+            // ✅ Protection contre double-clic
+            if (_enCoursEnregistrement)
             {
-                TxtMessage.Text = "Saisissez le nom du type.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                TxtMessage.Text = "Enregistrement en cours...";
+                TxtMessage.Foreground = System.Windows.Media.Brushes.Orange;
                 return;
             }
-
-            if (!decimal.TryParse(TxtPrixBase.Text, out decimal prixBase) || prixBase <= 0)
-            {
-                TxtMessage.Text = "Saisissez un prix valide.";
-                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
-                return;
-            }
-
+            
+            _enCoursEnregistrement = true;
+            BtnEnregistrer.IsEnabled = false;
+            
             try
             {
+                if (string.IsNullOrWhiteSpace(TxtNom.Text))
+                {
+                    TxtMessage.Text = "Saisissez le nom du type.";
+                    TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                    return;
+                }
+
+                if (!decimal.TryParse(TxtPrixBase.Text, out decimal prixBase) || prixBase <= 0)
+                {
+                    TxtMessage.Text = "Saisissez un prix valide.";
+                    TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                    return;
+                }
+
                 if (_typeSelectionne == null)
                 {
                     var nouveau = new TypeVetement
@@ -193,6 +207,12 @@ namespace GestionCoutureApp.Views
             {
                 TxtMessage.Text = "Erreur : " + ex.Message;
                 TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+            }
+            finally
+            {
+                // ✅ Toujours réactiver le bouton
+                _enCoursEnregistrement = false;
+                BtnEnregistrer.IsEnabled = true;
             }
         }
 

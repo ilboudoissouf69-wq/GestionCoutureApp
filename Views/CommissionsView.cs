@@ -18,6 +18,9 @@ namespace GestionCoutureApp.Views
         private int? _idCouturierSelectionne;
         private bool _surMontantEncaisse = true; // "Encaisse" = index 0 = recommande par defaut
         private List<ApercuCommission> _dernierApercu = new();
+        
+        // ✅ Protection contre double-clic
+        private bool _enCoursEnregistrement = false;
 
         public CommissionsView()
         {
@@ -205,6 +208,14 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void BtnEnregistrer_Click(object sender, RoutedEventArgs e)
         {
+            // ✅ Protection contre double-clic
+            if (_enCoursEnregistrement)
+            {
+                MessageBox.Show("Enregistrement en cours, veuillez patienter...",
+                    "Opération en cours", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            
             if (_dernierApercu.Count == 0)
             {
                 MessageBox.Show("Aucun aperçu à enregistrer. Cliquez d'abord sur \"Aperçu\".",
@@ -230,12 +241,15 @@ namespace GestionCoutureApp.Views
 
             if (confirmation != MessageBoxResult.Yes) return;
 
-            decimal.TryParse(TxtPourcentage.Text, out decimal pourcentage);
-            DateTime dateDebut = DateDebut.SelectedDate ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-            DateTime dateFin = DateFin.SelectedDate ?? DateTime.Today;
-
+            _enCoursEnregistrement = true;
+            BtnEnregistrer.IsEnabled = false;
+            
             try
             {
+                decimal.TryParse(TxtPourcentage.Text, out decimal pourcentage);
+                DateTime dateDebut = DateDebut.SelectedDate ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+                DateTime dateFin = DateFin.SelectedDate ?? DateTime.Today;
+
                 _commissionService.EnregistrerCommissions(
                     _dernierApercu, dateDebut, dateFin, pourcentage, _surMontantEncaisse,
                     _authService.UtilisateurConnecte!.IdEmploye,
@@ -251,6 +265,12 @@ namespace GestionCoutureApp.Views
             {
                 MessageBox.Show("Erreur lors de l'enregistrement : " + ex.Message, "Erreur",
                     MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                // ✅ Toujours réactiver le bouton
+                _enCoursEnregistrement = false;
+                BtnEnregistrer.IsEnabled = true;
             }
         }
 
