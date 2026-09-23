@@ -253,7 +253,20 @@ namespace GestionCoutureApp.Views
                 Height = 36,
                 FontSize = 13,
                 Text = estModification ? existant.Designation : "",
-                Margin = new Thickness(0, 0, 0, 12)
+                Margin = new Thickness(0, 0, 0, 12),
+                MaxLength = 200
+            };
+            // ✅ Validation sécurisée pour la désignation
+            txtDesignation.PreviewTextInput += (s, e) =>
+            {
+                try
+                {
+                    ValidationHelper.TextBox_PreviewTextInputTexteSecurise(s, e);
+                }
+                catch
+                {
+                    e.Handled = true;
+                }
             };
             panel.Children.Add(txtDesignation);
 
@@ -382,6 +395,15 @@ namespace GestionCoutureApp.Views
                 {
                     MessageBox.Show("Prix unitaire invalide.",
                         "Champ invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // ✅ Validation de sécurité pour la désignation
+                string designation = txtDesignation.Text.Trim();
+                if (!ValidationHelper.EstTexteSecurise(designation, out string erreur))
+                {
+                    MessageBox.Show($"Désignation invalide : {erreur}",
+                        "Erreur de validation", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 

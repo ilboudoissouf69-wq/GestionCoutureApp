@@ -1,10 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 
 namespace GestionCoutureApp.Views
 {
@@ -131,6 +133,27 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // ✅ Validation de sécurité pour le nom
+            if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
+            {
+                AfficherMessage($"Nom invalide : {erreurNom}", succes: false);
+                return;
+            }
+
+            // ✅ Validation de sécurité pour le prénom
+            if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
+            {
+                AfficherMessage($"Prénom invalide : {erreurPrenom}", succes: false);
+                return;
+            }
+
+            // ✅ Validation de sécurité pour l'identifiant
+            if (!ValidationHelper.EstTexteSecurise(TxtIdentifiant.Text.Trim(), out string erreurIdentifiant))
+            {
+                AfficherMessage($"Identifiant invalide : {erreurIdentifiant}", succes: false);
+                return;
+            }
+
             // CORRECTIF (securite) : aucune longueur minimale n'etait imposee
             // au mot de passe d'un employe, ce qui rend le hachage PBKDF2
             // (voir Helpers/PasswordHasher.cs) quasi inutile face a une
@@ -238,6 +261,27 @@ namespace GestionCoutureApp.Views
                         succes: false);
                     return;
                 }
+            }
+
+            // ✅ Validation de sécurité pour le nom
+            if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
+            {
+                AfficherMessage($"Nom invalide : {erreurNom}", succes: false);
+                return;
+            }
+
+            // ✅ Validation de sécurité pour le prénom
+            if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
+            {
+                AfficherMessage($"Prénom invalide : {erreurPrenom}", succes: false);
+                return;
+            }
+
+            // ✅ Validation de sécurité pour l'identifiant
+            if (!ValidationHelper.EstTexteSecurise(TxtIdentifiant.Text.Trim(), out string erreurIdentifiant))
+            {
+                AfficherMessage($"Identifiant invalide : {erreurIdentifiant}", succes: false);
+                return;
             }
 
             _employeSelectionne.Nom = TxtNom.Text.Trim();
@@ -361,5 +405,44 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private static string HashMotDePasse(string motDePasse)
             => GestionCoutureApp.Helpers.PasswordHasher.Hasher(motDePasse);
+
+        // ✅ Validation sécurisée pour le nom de l'employé
+        private void TxtNom_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
+        }
+
+        // ✅ Validation sécurisée pour le prénom de l'employé
+        private void TxtPrenom_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
+        }
+
+        // ✅ Validation sécurisée pour l'identifiant de l'employé
+        private void TxtIdentifiant_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
+        }
     }
 }

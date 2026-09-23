@@ -84,19 +84,25 @@
                                                    Style="{StaticResource FieldLabel}"/>
                                         <TextBox x:Name="TxtNom"
                                                  Style="{StaticResource ModernTextBox}"
-                                                 Margin="0,0,0,12"/>
+                                                 Margin="0,0,0,12"
+                                                 PreviewTextInput="TxtNom_PreviewTextInput"
+                                                 MaxLength="200"/>
 
                                         <TextBlock Text="Prenom *"
                                                    Style="{StaticResource FieldLabel}"/>
                                         <TextBox x:Name="TxtPrenom"
                                                  Style="{StaticResource ModernTextBox}"
-                                                 Margin="0,0,0,12"/>
+                                                 Margin="0,0,0,12"
+                                                 PreviewTextInput="TxtPrenom_PreviewTextInput"
+                                                 MaxLength="200"/>
 
                                         <TextBlock Text="Identifiant *"
                                                    Style="{StaticResource FieldLabel}"/>
                                         <TextBox x:Name="TxtIdentifiant"
                                                  Style="{StaticResource ModernTextBox}"
-                                                 Margin="0,0,0,12"/>
+                                                 Margin="0,0,0,12"
+                                                 PreviewTextInput="TxtIdentifiant_PreviewTextInput"
+                                                 MaxLength="200"/>
 
                                         <TextBlock Text="Mot de passe *"
                                                    Style="{StaticResource FieldLabel}"/>

@@ -88,12 +88,12 @@ namespace GestionCoutureApp.Models
         // car c'est le montant total facturé au client que PaiementsView doit solder.
         [NotMapped]
         public decimal ResteAPayer =>
-            MontantTotalAvecMateriaux - Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+            MontantTotalAvecMateriaux - (Paiements?.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye) ?? 0m);
 
         // Total réellement encaissé (paiements valides) — base pour les commissions
         [NotMapped]
         public decimal MontantEncaisse =>
-            Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+            Paiements?.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye) ?? 0m;
 
         public TimeSpan HeureDebut { get; set; }
         public TimeSpan? HeureFin { get; set; }
@@ -113,7 +113,7 @@ namespace GestionCoutureApp.Models
         // ============================================================
 
         [NotMapped]
-        public decimal MontantTotalCalcule => Pieces.Sum(p => p.MontantCouture);
+        public decimal MontantTotalCalcule => Pieces?.Sum(p => p.MontantCouture) ?? 0m;
 
         // Point 2 — Matériaux/suppléments (cahier des charges V2)
         // Ce montant est celui que le CLIENT paie réellement sur sa facture :
@@ -123,11 +123,11 @@ namespace GestionCoutureApp.Models
         // dans PaiementsView comme "montant total de la facture".
         [NotMapped]
         public decimal MontantTotalAvecMateriaux =>
-            MontantTotalCalcule + MaterielSupplements.Sum(m => m.Montant);
+            MontantTotalCalcule + (MaterielSupplements?.Sum(m => m.Montant) ?? 0m);
 
         // Montant uniquement matériaux (pour affichage informatif)
         [NotMapped]
-        public decimal TotalMateriaux => MaterielSupplements.Sum(m => m.Montant);
+        public decimal TotalMateriaux => MaterielSupplements?.Sum(m => m.Montant) ?? 0m;
 
         [NotMapped]
         public string TypeVetementAffiche => Pieces.Count switch

@@ -98,17 +98,25 @@ namespace GestionCoutureApp.Views
 
         private void ChargerCommandes()
         {
-            var commandes = _commandeService.ObtenirTous();
-            CmbCommande.ItemsSource = commandes.Select(c => new
+            try
             {
-                c.IdCommande,
-                // MontantTotalAvecMateriaux = couture + matériaux (Point 2) :
-                // c'est le montant réel que le client doit payer sur sa facture.
-                DisplayText = (c.Client?.Nom ?? "") + " " + (c.Client?.Prenom ?? "")
-                              + " — " + c.TypeVetementAffiche
-                              + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA)"
-            }).ToList();
-            CmbCommande.SelectedValuePath = "IdCommande";
+                var commandes = _commandeService.ObtenirTous();
+                CmbCommande.ItemsSource = commandes.Select(c => new
+                {
+                    c.IdCommande,
+                    // MontantTotalAvecMateriaux = couture + matériaux (Point 2) :
+                    // c'est le montant réel que le client doit payer sur sa facture.
+                    DisplayText = (c.Client?.Nom ?? "") + " " + (c.Client?.Prenom ?? "")
+                                  + " — " + (c.TypeVetementAffiche ?? "(aucun vêtement)")
+                                  + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA)"
+                }).ToList();
+                CmbCommande.SelectedValuePath = "IdCommande";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message, 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async Task ChargerPaiements()
@@ -164,43 +172,59 @@ namespace GestionCoutureApp.Views
 
         private void CmbCommande_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (CmbCommande.SelectedValue == null) return;
-            int idCmd = (int)CmbCommande.SelectedValue;
+            try
+            {
+                if (CmbCommande.SelectedValue == null) return;
+                int idCmd = (int)CmbCommande.SelectedValue;
 
-            _commandeSelectionnee = _commandeService.ObtenirTous()
-                .FirstOrDefault(c => c.IdCommande == idCmd);
-            if (_commandeSelectionnee == null) return;
+                // Utiliser ObtenirParId pour charger toutes les relations nécessaires
+                _commandeSelectionnee = _commandeService.ObtenirParId(idCmd);
+                if (_commandeSelectionnee == null) return;
 
-            TxtInfoClient.Text = "Client : "
-                + (_commandeSelectionnee.Client?.Nom ?? "") + " "
-                + (_commandeSelectionnee.Client?.Prenom ?? "");
+                // Protection contre les propriétés null
+                string nomClient = _commandeSelectionnee.Client?.Nom ?? "";
+                string prenomClient = _commandeSelectionnee.Client?.Prenom ?? "";
+                TxtInfoClient.Text = "Client : " + nomClient + " " + prenomClient;
 
-            decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
+                decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
 
-            // MontantTotalAvecMateriaux = couture + matériaux (Point 2).
-            // C'est le montant total de la FACTURE que le client doit régler.
-            // La commission du couturier sera calculée séparément sur MontantTotalCalcule
-            // (couture seule) — les matériaux n'y entrent jamais.
-            decimal montantTotal = _commandeSelectionnee.MontantTotalAvecMateriaux;
-            decimal montantCouture = _commandeSelectionnee.MontantTotalCalcule;
-            decimal montantMateriaux = _commandeSelectionnee.TotalMateriaux;
-            decimal reste = montantTotal - totalValide;
+                // MontantTotalAvecMateriaux = couture + matériaux (Point 2).
+                // C'est le montant total de la FACTURE que le client doit régler.
+                // La commission du couturier sera calculée séparément sur MontantTotalCalcule
+                // (couture seul) — les matériaux n'y entrent jamais.
+                decimal montantTotal = _commandeSelectionnee.MontantTotalAvecMateriaux;
+                decimal montantCouture = _commandeSelectionnee.MontantTotalCalcule;
+                decimal montantMateriaux = _commandeSelectionnee.TotalMateriaux;
+                decimal reste = montantTotal - totalValide;
 
-            TxtInfoMontant.Text = montantMateriaux > 0
-                ? $"Total facture : {montantTotal:N0} FCFA  (couture {montantCouture:N0} + materiaux {montantMateriaux:N0})"
-                : $"Total facture : {montantTotal:N0} FCFA";
-            TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
-            TxtInfoReste.Text = "Reste : " + Math.Max(0m, reste).ToString("N0") + " FCFA";
+                TxtInfoMontant.Text = montantMateriaux > 0
+                    ? $"Total facture : {montantTotal:N0} FCFA  (couture {montantCouture:N0} + materiaux {montantMateriaux:N0})"
+                    : $"Total facture : {montantTotal:N0} FCFA";
+                TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
+                TxtInfoReste.Text = "Reste : " + Math.Max(0m, reste).ToString("N0") + " FCFA";
 
-            // Historique detaille
-            var historique = _paiementService.ObtenirParCommande(idCmd);
-            ListeHistorique.ItemsSource = historique
-                .Select(p => p.AffichageHistorique)
-                .ToList();
+                // Historique detaille - avec protection
+                try
+                {
+                    var historique = _paiementService.ObtenirParCommande(idCmd);
+                    ListeHistorique.ItemsSource = historique
+                        .Select(p => p.AffichageHistorique)
+                        .ToList();
+                }
+                catch (Exception histEx)
+                {
+                    ListeHistorique.ItemsSource = new List<string> { "Erreur historique: " + histEx.Message };
+                }
 
-            // Desactive le champ montant si tout est paye
-            TxtMontant.IsEnabled    = reste > 0.01m;
-            BtnEnregistrer.IsEnabled = reste > 0.01m;
+                // Desactive le champ montant si tout est paye
+                TxtMontant.IsEnabled    = reste > 0.01m;
+                BtnEnregistrer.IsEnabled = reste > 0.01m;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Erreur lors de la sélection de la commande : {ex.Message}\n\nDétails : {ex.StackTrace}", 
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // ----------------------------------------------------------------
@@ -219,57 +243,67 @@ namespace GestionCoutureApp.Views
 
         private void BtnEnregistrer_Click(object sender, RoutedEventArgs e)
         {
-            // Validations de base
-            if (CmbCommande.SelectedValue == null)
-            { Alerte("Selectionnez une commande."); return; }
-
-            if (!decimal.TryParse(TxtMontant.Text.Replace(" ", ""), out decimal montant) || montant <= 0)
-            { Alerte("Le montant doit etre un nombre positif."); return; }
-
-            if (_commandeSelectionnee == null)
-            { Alerte("Commande introuvable."); return; }
-
-            if (_operateurConnecte == null)
-            { Alerte("Aucun operateur connecte."); return; }
-
-            // Verification solde en temps reel sur le montant total facture
-            // (couture + materiaux) — c'est ce que le client doit rembourser.
-            decimal totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
-            decimal reste = _commandeSelectionnee.MontantTotalAvecMateriaux - totalValide;
-
-            if (reste <= 0.01m)
-            { Alerte("Cette commande est deja entierement payee."); return; }
-
-            if (montant > reste + 0.01m)
-            {
-                Alerte($"Le montant saisi ({montant:N0} FCFA) depasse\nle reste a payer ({reste:N0} FCFA).");
-                return;
-            }
-
-            // Confirmation avant enregistrement
-            string modeChoisi = ((ComboBoxItem)CmbModePaiement.SelectedItem).Content?.ToString() ?? "Especes";
-            decimal totalFacture = _commandeSelectionnee.MontantTotalAvecMateriaux;
-            decimal totalMateriaux = _commandeSelectionnee.TotalMateriaux;
-            string ligneTotal = totalMateriaux > 0
-                ? $"Total facture : {totalFacture:N0} FCFA (dont {totalMateriaux:N0} materiaux)\n"
-                : $"Total facture : {totalFacture:N0} FCFA\n";
-
-            var confirmation = MessageBox.Show(
-                $"Confirmer l'enregistrement du paiement ?\n\n" +
-                $"Client  : {_commandeSelectionnee.Client?.Nom} {_commandeSelectionnee.Client?.Prenom}\n" +
-                ligneTotal +
-                $"Montant : {montant:N0} FCFA\n" +
-                $"Mode    : {modeChoisi}\n" +
-                $"Reste apres : {(reste - montant):N0} FCFA\n\n" +
-                $"Operateur : {_operateurConnecte.Prenom} {_operateurConnecte.Nom}",
-                "Confirmation du paiement",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (confirmation != MessageBoxResult.Yes) return;
-
             try
             {
+                // Validations de base
+                if (CmbCommande.SelectedValue == null)
+                { Alerte("Selectionnez une commande."); return; }
+
+                if (!decimal.TryParse(TxtMontant.Text.Replace(" ", ""), out decimal montant) || montant <= 0)
+                { Alerte("Le montant doit etre un nombre positif."); return; }
+
+                if (_commandeSelectionnee == null)
+                { Alerte("Commande introuvable."); return; }
+
+                if (_operateurConnecte == null)
+                { Alerte("Aucun operateur connecte."); return; }
+
+                // Vérification du mode de paiement
+                if (CmbModePaiement.SelectedItem == null)
+                { Alerte("Selectionnez un mode de paiement."); return; }
+
+                // Verification solde en temps reel sur le montant total facture
+                // (couture + materiaux) — c'est ce que le client doit rembourser.
+                decimal totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
+                decimal reste = _commandeSelectionnee.MontantTotalAvecMateriaux - totalValide;
+
+                if (reste <= 0.01m)
+                { Alerte("Cette commande est deja entierement payee."); return; }
+
+                if (montant > reste + 0.01m)
+                {
+                    Alerte($"Le montant saisi ({montant:N0} FCFA) depasse\nle reste a payer ({reste:N0} FCFA).");
+                    return;
+                }
+
+                // Confirmation avant enregistrement
+                string modeChoisi = CmbModePaiement.SelectedItem is ComboBoxItem item 
+                    ? item.Content?.ToString() ?? "Especes" 
+                    : CmbModePaiement.SelectedItem?.ToString() ?? "Especes";
+                
+                decimal totalFacture = _commandeSelectionnee.MontantTotalAvecMateriaux;
+                decimal totalMateriaux = _commandeSelectionnee.TotalMateriaux;
+                string ligneTotal = totalMateriaux > 0
+                    ? $"Total facture : {totalFacture:N0} FCFA (dont {totalMateriaux:N0} materiaux)\n"
+                    : $"Total facture : {totalFacture:N0} FCFA\n";
+
+                string nomClient = (_commandeSelectionnee.Client?.Nom ?? "") + " " + (_commandeSelectionnee.Client?.Prenom ?? "");
+                string nomOperateur = _operateurConnecte.Prenom + " " + _operateurConnecte.Nom;
+
+                var confirmation = MessageBox.Show(
+                    $"Confirmer l'enregistrement du paiement ?\n\n" +
+                    $"Client  : {nomClient}\n" +
+                    ligneTotal +
+                    $"Montant : {montant:N0} FCFA\n" +
+                    $"Mode    : {modeChoisi}\n" +
+                    $"Reste apres : {(reste - montant):N0} FCFA\n\n" +
+                    $"Operateur : {nomOperateur}",
+                    "Confirmation du paiement",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (confirmation != MessageBoxResult.Yes) return;
+
                 var paiement = new Paiement
                 {
                     IdCommande   = _commandeSelectionnee.IdCommande,
@@ -280,11 +314,22 @@ namespace GestionCoutureApp.Views
                 _paiementService.Ajouter(
                     paiement,
                     _operateurConnecte.IdEmploye,
-                    _operateurConnecte.Prenom + " " + _operateurConnecte.Nom);
+                    nomOperateur);
 
                 TxtMontant.Text = "";
                 _ = ChargerPaiements();
-                CmbCommande_SelectionChanged(null!, null!);
+                
+                // Rafraîchir avec protection
+                try
+                {
+                    CmbCommande_SelectionChanged(null!, null!);
+                }
+                catch (Exception refreshEx)
+                {
+                    // Ignorer les erreurs de rafraîchissement, le paiement est déjà enregistré
+                    MessageBox.Show("Paiement enregistre mais erreur lors du rafraichissement : " + refreshEx.Message,
+                        "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
 
                 MessageBox.Show(
                     $"Paiement enregistre avec succes !\n\n" +
@@ -299,6 +344,10 @@ namespace GestionCoutureApp.Views
             catch (InvalidOperationException ex)
             {
                 Alerte("Erreur : " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Alerte("Erreur inattendue : " + ex.Message);
             }
         }
 
@@ -684,12 +733,16 @@ namespace GestionCoutureApp.Views
         // ✅ Validation des montants décimaux
         private void TxtMontant_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
-            ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
-        }
-
-        private void TxtMontant_Pasting(object sender, DataObjectPastingEventArgs e)
-        {
-            ValidationHelper.TextBox_Pasting(sender, e);
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputDecimal(sender, e);
+            }
+            catch
+            {
+                // Empêcher le crash en cas d'erreur de validation
+                e.Handled = true;
+                // Ne pas afficher d'erreur à l'utilisateur pour ne pas perturber la saisie
+            }
         }
     }
 }

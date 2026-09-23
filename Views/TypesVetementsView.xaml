@@ -109,7 +109,9 @@
                         <TextBox x:Name="TxtNomMesure"
                                 Grid.Column="0"
                                  Style="{StaticResource ModernTextBox}"
-                                Height="36"/>
+                                Height="36"
+                                PreviewTextInput="TxtNomMesure_PreviewTextInput"
+                                MaxLength="200"/>
                         <Button Grid.Column="2"
                                 x:Name="BtnAjouterMesure"
                                 Content="+"

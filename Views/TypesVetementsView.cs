@@ -107,6 +107,14 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // ✅ Validation de sécurité pour le nom de mesure
+            if (!ValidationHelper.EstTexteSecurise(nom, out string erreur))
+            {
+                TxtMessage.Text = $"Nom invalide : {erreur}";
+                TxtMessage.Foreground = System.Windows.Media.Brushes.Red;
+                return;
+            }
+
             if (_mesuresTemporaires.Any(m => m.Equals(nom, StringComparison.OrdinalIgnoreCase)))
             {
                 TxtMessage.Text = "Cette mesure existe déjà.";
@@ -238,6 +246,19 @@ namespace GestionCoutureApp.Views
         private void TxtPrixBase_Pasting(object sender, DataObjectPastingEventArgs e)
         {
             ValidationHelper.TextBox_Pasting(sender, e);
+        }
+
+        // ✅ Validation sécurisée pour le nom de mesure
+        private void TxtNomMesure_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
         }
     }
 }

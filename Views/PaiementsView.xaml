@@ -279,15 +279,7 @@
                                  Style="{StaticResource ModernTextBox}"
                                  Margin="0,0,0,12"
                                  PreviewTextInput="TxtMontant_PreviewTextInput"
-                                 DataObject.Pasting="TxtMontant_Pasting">
-                            <TextBox.Text>
-                                <Binding Path="Text" RelativeSource="{RelativeSource Self}" UpdateSourceTrigger="PropertyChanged">
-                                    <Binding.ValidationRules>
-                                        <local:MontantPositifValidationRule xmlns:local="clr-namespace:GestionCoutureApp.Helpers" />
-                                    </Binding.ValidationRules>
-                                </Binding>
-                            </TextBox.Text>
-                        </TextBox>
+                                 Text=""/>
 
                         <TextBlock Text="Mode de paiement"
                                 Style="{StaticResource FieldLabel}"/>

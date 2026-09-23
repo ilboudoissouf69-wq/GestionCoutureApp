@@ -151,8 +151,16 @@ namespace GestionCoutureApp.Services
                     .FirstOrDefault(c => c.IdCommande == paiement.IdCommande)
                     ?? throw new InvalidOperationException("Commande introuvable.");
 
+                // ✅ CORRECTIF : Protection contre les listes null
+                if (commande.Pieces == null || commande.Pieces.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Impossible d'encaisser un paiement : cette commande n'a aucune pièce. " +
+                        "Ajoutez d'abord au moins une pièce à la commande.");
+                }
+
                 decimal montantCouture = commande.Pieces.Sum(p => p.MontantCouture);
-                decimal montantMateriaux = commande.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                decimal montantMateriaux = commande.MaterielSupplements?.Sum(m => m.Quantite * m.PrixUnitaire) ?? 0m;
                 decimal montantTotalFacture = montantCouture + montantMateriaux;
                 decimal resteReel = montantTotalFacture - totalValide;
 

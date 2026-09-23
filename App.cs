@@ -1,6 +1,5 @@
 ﻿using System.Windows;
 using System.Data;
-using System.Windows;
 using System.Diagnostics;
 using System.Windows.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -97,6 +96,25 @@ namespace GestionCoutureApp
             logService.LogInfo($"Version: 2.0 - Retouche Choco");
             logService.LogInfo($"Date de démarrage: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
             logService.LogInfo("═══════════════════════════════════════════════════");
+
+            // ✅ TESTS EDGE CASES : Exécuter les tests de robustesse au démarrage
+            // Désactivé en production - activer uniquement pour les tests
+            /*
+            try
+            {
+                string edgeCaseReport = EdgeCaseValidator.RunEdgeCaseTests();
+                logService.LogInfo("TESTS EDGE CASES EXÉCUTÉS AVEC SUCCÈS");
+                
+                // Sauvegarder le rapport dans un fichier
+                string reportPath = System.IO.Path.Combine(AppPaths.DossierApplication, "EdgeCaseReport.txt");
+                System.IO.File.WriteAllText(reportPath, edgeCaseReport);
+                logService.LogInfo($"Rapport sauvegardé: {reportPath}");
+            }
+            catch (Exception ex)
+            {
+                logService.LogError($"Erreur lors des tests edge cases: {ex.Message}");
+            }
+            */
 
             // Démarre la sauvegarde automatique dès le lancement
             Services.GetRequiredService<BackupService>();

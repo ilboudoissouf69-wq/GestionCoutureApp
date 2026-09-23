@@ -213,7 +213,8 @@ namespace GestionCoutureApp.Services
 
             var commande = context.Commandes
                 .Include(c => c.Paiements)
-                .Include(c => c.Pieces)
+                .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
+                .Include(c => c.MaterielSupplements)
                 .FirstOrDefault(c => c.IdCommande == id);
 
             if (commande == null) return;
@@ -231,6 +232,22 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette commande : au moins une de ses pièces est " +
                     "rattachée à une commission déjà enregistrée.");
+            }
+
+            // ✅ CORRECTIF : Supprimer d'abord les matériaux supplémentaires liés aux pièces
+            // pour éviter les conflits de contraintes de clé étrangère
+            foreach (var piece in commande.Pieces)
+            {
+                if (piece.MaterielSupplements.Any())
+                {
+                    context.MaterielsSupplements.RemoveRange(piece.MaterielSupplements);
+                }
+            }
+
+            // Supprimer les matériaux directement liés à la commande
+            if (commande.MaterielSupplements.Any())
+            {
+                context.MaterielsSupplements.RemoveRange(commande.MaterielSupplements);
             }
 
             context.Commandes.Remove(commande);

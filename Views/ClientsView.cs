@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
@@ -290,6 +292,23 @@ namespace GestionCoutureApp.Views
                     "Champs manquants", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return true;
             }
+
+            // ✅ Validation de sécurité pour le nom
+            if (!ValidationHelper.EstTexteSecurise(TxtNom.Text.Trim(), out string erreurNom))
+            {
+                MessageBox.Show($"Nom invalide : {erreurNom}",
+                    "Erreur de validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return true;
+            }
+
+            // ✅ Validation de sécurité pour le prénom
+            if (!ValidationHelper.EstTexteSecurise(TxtPrenom.Text.Trim(), out string erreurPrenom))
+            {
+                MessageBox.Show($"Prénom invalide : {erreurPrenom}",
+                    "Erreur de validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return true;
+            }
+
             return false;
         }
 
@@ -300,6 +319,32 @@ namespace GestionCoutureApp.Views
             TxtPrenom.Text    = "";
             TxtTelephone.Text = "";
             GridClients.SelectedItem = null;
+        }
+
+        // ✅ Validation sécurisée pour le nom du client
+        private void TxtNom_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
+        }
+
+        // ✅ Validation sécurisée pour le prénom du client
+        private void TxtPrenom_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            try
+            {
+                ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
         }
     }
 }

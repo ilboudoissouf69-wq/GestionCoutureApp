@@ -147,11 +147,15 @@
                 <StackPanel Margin="20,16,20,20">
                     <TextBlock Text="Nom *" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="TxtNom" Style="{StaticResource ModernTextBox}"
-                             Margin="0,0,0,12"/>
+                             Margin="0,0,0,12"
+                             PreviewTextInput="TxtNom_PreviewTextInput"
+                             MaxLength="200"/>
 
                     <TextBlock Text="Prénom *" Style="{StaticResource FieldLabel}"/>
                     <TextBox x:Name="TxtPrenom" Style="{StaticResource ModernTextBox}"
-                             Margin="0,0,0,12"/>
+                             Margin="0,0,0,12"
+                             PreviewTextInput="TxtPrenom_PreviewTextInput"
+                             MaxLength="200"/>
 
                     <!-- Téléphone + bouton WhatsApp -->
                     <TextBlock Text="Téléphone" Style="{StaticResource FieldLabel}"/>

@@ -1175,6 +1175,15 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // ✅ Validation de sécurité pour la désignation
+            if (!Helpers.ValidationHelper.EstTexteSecurise(designation, out string erreur))
+            {
+                MessageBox.Show($"Désignation invalide : {erreur}",
+                    "Erreur de validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                TxtMatDesignation.Focus();
+                return;
+            }
+
             if (!int.TryParse(TxtMatQuantite.Text.Trim(), out int quantite) || quantite <= 0)
             {
                 MessageBox.Show("La quantité doit être un entier positif.",
@@ -2578,6 +2587,19 @@ namespace GestionCoutureApp.Views
         private void TxtMontant_Pasting(object sender, DataObjectPastingEventArgs e)
         {
             Helpers.ValidationHelper.TextBox_Pasting(sender, e);
+        }
+
+        // ✅ Validation sécurisée pour la désignation de matériel
+        private void TxtMatDesignation_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+        {
+            try
+            {
+                Helpers.ValidationHelper.TextBox_PreviewTextInputTexteSecurise(sender, e);
+            }
+            catch
+            {
+                e.Handled = true;
+            }
         }
     }
 }

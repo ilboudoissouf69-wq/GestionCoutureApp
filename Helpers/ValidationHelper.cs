@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace GestionCoutureApp.Helpers
 {
@@ -106,7 +107,10 @@ namespace GestionCoutureApp.Helpers
             if (string.IsNullOrWhiteSpace(texte))
                 return false;
 
-            if (!decimal.TryParse(texte, out valeur))
+            // Nettoyer la chaîne (espaces, virgules -> points)
+            string texteNettoye = texte.Replace(" ", "").Replace(",", ".");
+
+            if (!decimal.TryParse(texteNettoye, NumberStyles.Any, CultureInfo.InvariantCulture, out valeur))
                 return false;
 
             return valeur > 0;
@@ -135,12 +139,99 @@ namespace GestionCoutureApp.Helpers
         public static void TextBox_PreviewTextInputTexteSecurise(object sender, TextCompositionEventArgs e)
         {
             // Bloquer certains caractères potentiellement dangereux
-            char[] caracteresInterdits = { '<', '>', '{', '}', '|', '\\', '^', '`' };
+            char[] caracteresInterdits = { '<', '>', '{', '}', '|', '\\', '^', '`', ';', '-', '\'', '"' };
             
             if (e.Text.Any(c => caracteresInterdits.Contains(c)))
             {
                 e.Handled = true;
             }
+        }
+
+        /// <summary>
+        /// Détecte les patterns d'injection SQL dans une chaîne de caractères.
+        /// </summary>
+        public static bool ContientInjectionSQL(string texte)
+        {
+            if (string.IsNullOrWhiteSpace(texte))
+                return false;
+
+            string texteMaj = texte.ToUpper();
+            string[] patternsSQL = 
+            {
+                "DROP TABLE", "DELETE FROM", "INSERT INTO", "UPDATE", "SELECT",
+                "UNION SELECT", "OR 1=1", "AND 1=1", "'; DROP", "'; --", "' OR '",
+                "--", "/*", "*/", "XP_", "EXEC(", "EXECUTE", "TRUNCATE", "ALTER TABLE",
+                "CREATE TABLE", "GRANT", "REVOKE"
+            };
+
+            return patternsSQL.Any(pattern => texteMaj.Contains(pattern));
+        }
+
+        /// <summary>
+        /// Valide qu'une chaîne de texte est sécurisée (pas d'injection SQL ou XSS).
+        /// </summary>
+        public static bool EstTexteSecurise(string texte, out string erreur)
+        {
+            erreur = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(texte))
+            {
+                erreur = "Le texte ne peut pas être vide";
+                return false;
+            }
+
+            // Limite de longueur raisonnable pour les noms et descriptions
+            if (texte.Length > 200)
+            {
+                erreur = "Le texte est trop long (maximum 200 caractères)";
+                return false;
+            }
+
+            // Vérifier les caractères de contrôle et invisibles dangereux
+            foreach (char c in texte)
+            {
+                if (char.IsControl(c) && c != '\n' && c != '\r' && c != '\t')
+                {
+                    erreur = "Le texte contient des caractères de contrôle non autorisés";
+                    return false;
+                }
+                
+                // Bloquer les caractères invisibles spécifiques
+                if (c == '\u0000' || c == '\u200B' || c == '\u200C' || c == '\u200D' || c == '\uFEFF')
+                {
+                    erreur = "Le texte contient des caractères invisibles non autorisés";
+                    return false;
+                }
+            }
+
+            if (ContientInjectionSQL(texte))
+            {
+                erreur = "Le texte contient des caractères ou patterns dangereux";
+                return false;
+            }
+
+            // Détecter XSS basique
+            string texteMaj = texte.ToUpper();
+            if (texteMaj.Contains("<SCRIPT>") || texteMaj.Contains("JAVASCRIPT:") || 
+                texteMaj.Contains("ONERROR=") || texteMaj.Contains("ONLOAD="))
+            {
+                erreur = "Le texte contient du code potentiellement dangereux";
+                return false;
+            }
+
+            // Vérifier uniquement les patterns d'injection SQL réellement dangereux
+            // Autoriser les apostrophes dans les noms (ex: "O'Connor") mais bloquer les combos
+            string[] patternsInjection = { "'; DROP", "'; --", "1' OR", "1' AND", " OR '1", " AND '1" };
+            foreach (string pattern in patternsInjection)
+            {
+                if (texteMaj.Contains(pattern.ToUpper()))
+                {
+                    erreur = "Le texte contient des patterns d'injection interdits";
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }
