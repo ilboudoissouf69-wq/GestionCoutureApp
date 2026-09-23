@@ -28,7 +28,14 @@ namespace GestionCoutureApp.Models
         [MaxLength(200)]
         public string Description { get; set; } = string.Empty;
 
-        // Tracabilité
+        // ── Traçabilité ───────────────────────────────────────────────────
+        // IdOperateur complète NomOperateur (déjà présent) : permet la recherche
+        // par identité sans dépendre d'une correspondance de nom (qui peut changer
+        // ou être usurpée). Valeur 0 pour les dépenses historiques.
+        [Required]
+        public int IdOperateur { get; set; }
+
+        // Tracabilité nom (snapshot au moment de la saisie)
         public string NomOperateur { get; set; } = string.Empty;
 
         // ── Statut de validation (workflow Secrétaire → Boss) ─────────────

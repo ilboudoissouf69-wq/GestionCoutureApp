@@ -43,8 +43,17 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
-        public void Ajouter(MaterielSupplement materiel)
+        public void Ajouter(MaterielSupplement materiel, int idOperateur, string nomOperateur)
         {
+            if (idOperateur <= 0)
+                throw new InvalidOperationException(
+                    "Impossible d'ajouter un matériau sans opérateur identifié. " +
+                    "Vérifiez que IdOperateur est renseigné depuis AuthService.UtilisateurConnecte.");
+
+            // Renseignement automatique de la traçabilité — invisible pour l'opérateur
+            materiel.IdOperateur  = idOperateur;
+            materiel.NomOperateur = (nomOperateur ?? string.Empty).Trim();
+
             using var context = _contextFactory.CreateDbContext();
             context.MaterielsSupplements.Add(materiel);
             context.SaveChanges();

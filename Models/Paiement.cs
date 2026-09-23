@@ -26,7 +26,13 @@ namespace GestionCoutureApp.Models
         public string RecuNumero { get; set; } = string.Empty;
 
         // Traçabilité : opérateur qui a enregistré le paiement
-        public int? IdOperateur { get; set; }
+        // ✅ CORRECTIF AUDIT : IdOperateur devient OBLIGATOIRE (non-nullable)
+        // Tout paiement doit avoir un opérateur identifié pour la traçabilité
+        [Required]
+        public int IdOperateur { get; set; }
+        
+        [Required]
+        [MaxLength(200)]
         public string NomOperateur { get; set; } = string.Empty;
 
         // Annulation : jamais de suppression, seulement annulation avec motif

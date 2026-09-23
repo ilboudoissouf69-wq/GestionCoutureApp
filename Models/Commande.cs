@@ -72,6 +72,34 @@ namespace GestionCoutureApp.Models
 
         public string Statut { get; set; } = "A faire";
 
+        // ============================================================
+        // TRAÇABILITÉ DE CRÉATION (parité avec Paiement.IdOperateur)
+        // ------------------------------------------------------------
+        // Qui a créé cette commande ? Renseigné automatiquement par
+        // CommandeService.Ajouter() depuis l'utilisateur connecté —
+        // aucune ressaisie de mot de passe : zéro friction opérateur.
+        // ============================================================
+
+        /// <summary>Identifiant de l'employé qui a créé la commande.</summary>
+        [Required]
+        public int IdOperateurCreation { get; set; }
+
+        /// <summary>Nom complet snapshot de l'opérateur au moment de la création.</summary>
+        [MaxLength(200)]
+        public string NomOperateurCreation { get; set; } = string.Empty;
+
+        /// <summary>Horodatage UTC de la création (immuable après SaveChanges).</summary>
+        public DateTime DateCreation { get; set; } = DateTime.UtcNow;
+
+        // ✅ CORRECTIF AUDIT : Suppression logique au lieu de physique
+        // Comme Paiement, Depense, Commission et Retour, Commande ne doit jamais
+        // être supprimée physiquement. Marquer comme supprimée avec traçabilité.
+        public bool EstSupprimee { get; set; } = false;
+        public string? MotifSuppression { get; set; }
+        public DateTime? DateSuppression { get; set; }
+        public int? IdOperateurSuppression { get; set; }
+        public string? NomOperateurSuppression { get; set; }
+
         public List<Mesure> Mesures { get; set; } = new();
         public List<Paiement> Paiements { get; set; } = new();
         public List<MaterielSupplement> MaterielSupplements { get; set; } = new();

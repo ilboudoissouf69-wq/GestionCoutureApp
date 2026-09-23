@@ -46,6 +46,13 @@ namespace GestionCoutureApp.Services
 
         public void Ajouter(Depense depense)
         {
+            // IdOperateur est obligatoire — 0 indique que l'appelant n'a pas
+            // transmis l'utilisateur connecté, ce qui est une erreur de programmation.
+            if (depense.IdOperateur <= 0)
+                throw new InvalidOperationException(
+                    "Impossible d'enregistrer une dépense sans opérateur identifié. " +
+                    "Vérifiez que IdOperateur est renseigné depuis AuthService.UtilisateurConnecte.");
+
             using var context = _contextFactory.CreateDbContext();
             context.Depenses.Add(depense);
             context.SaveChanges();

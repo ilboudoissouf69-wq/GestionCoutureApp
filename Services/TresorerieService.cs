@@ -236,5 +236,131 @@ namespace GestionCoutureApp.Services
 
             return aPaiements || aDepenses || aCommissions;
         }
+
+        /// <summary>
+        /// ✅ CORRECTIF AUDIT SÉCURITÉ : Rapport de cohérence argent/travail
+        /// Compare le montant total facturé des commandes livrées/terminées avec
+        /// les paiements encaissés (valides + annulés avec motifs) sur une période.
+        /// Signale tout écart significatif qui pourrait indiquer une disparition d'argent.
+        /// </summary>
+        public RapportCoherenceFinanciere VerifierCoherenceArgentTravail(DateTime dateDebut, DateTime dateFin)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            _logger.LogInformation(
+                "Vérification cohérence argent/travail — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy}",
+                dateDebut, dateFin);
+
+            // 1. Commandes livrées/terminées dans la période (travail effectué et facturé)
+            var commandesPeriode = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Pieces)
+                .Include(c => c.MaterielSupplements)
+                .Include(c => c.Paiements)
+                .Where(c => !c.EstSupprimee // Ignorer les commandes supprimées logiquement
+                         && c.DateFin.Date >= dateDebut.Date 
+                         && c.DateFin.Date <= dateFin.Date
+                         && (c.Statut == "Terminee" || c.Statut == "Livree" 
+                             || c.Pieces.Any(p => p.Statut == "Terminee" || p.Statut == "Livree")))
+                .ToList();
+
+            decimal totalFactureTravailEffectue = 0m;
+            int nombreCommandesLivrees = 0;
+            var detailsCommandes = new List<DetailCommandeCoherence>();
+
+            foreach (var cmd in commandesPeriode)
+            {
+                var piecesTerminees = cmd.Pieces.Where(p => p.Statut == "Terminee" || p.Statut == "Livree").ToList();
+                if (!piecesTerminees.Any()) continue;
+
+                nombreCommandesLivrees++;
+                
+                decimal montantCouture = piecesTerminees.Sum(p => p.MontantCouture);
+                decimal montantMateriaux = cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                decimal totalFacture = montantCouture + montantMateriaux;
+                
+                decimal paiementsValides = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                decimal paiementsAnnules = cmd.Paiements.Where(p => p.EstAnnule).Sum(p => p.MontantPaye);
+                
+                decimal resteAPayer = totalFacture - paiementsValides;
+
+                totalFactureTravailEffectue += totalFacture;
+
+                detailsCommandes.Add(new DetailCommandeCoherence
+                {
+                    IdCommande = cmd.IdCommande,
+                    NomClient = cmd.Client != null ? $"{cmd.Client.Prenom} {cmd.Client.Nom}" : "?",
+                    DateLivraison = cmd.DateFin,
+                    MontantFacture = totalFacture,
+                    MontantEncaisse = paiementsValides,
+                    MontantAnnule = paiementsAnnules,
+                    ResteAPayer = resteAPayer,
+                    EstSolde = resteAPayer <= 0
+                });
+            }
+
+            // 2. Paiements encaissés dans la période (argent en caisse)
+            var paiementsPeriode = context.Paiements
+                .Where(p => p.DatePaiement.Date >= dateDebut.Date 
+                         && p.DatePaiement.Date <= dateFin.Date)
+                .ToList();
+
+            decimal totalPaiementsValides = paiementsPeriode.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+            decimal totalPaiementsAnnules = paiementsPeriode.Where(p => p.EstAnnule).Sum(p => p.MontantPaye);
+            int nombrePaiementsValides = paiementsPeriode.Count(p => !p.EstAnnule);
+            int nombrePaiementsAnnules = paiementsPeriode.Count(p => p.EstAnnule);
+
+            // 3. Analyse de cohérence
+            decimal ecart = totalPaiementsValides - totalFactureTravailEffectue;
+            decimal tauxCoherence = totalFactureTravailEffectue > 0 
+                ? (totalPaiementsValides / totalFactureTravailEffectue) * 100 
+                : 100m;
+
+            // Écarts acceptables (commandes livrées pas encore soldées, ou paiements avancés)
+            bool coherenceOk = Math.Abs(ecart) <= (totalFactureTravailEffectue * 0.15m); // tolérance 15%
+
+            string diagnostic;
+            if (ecart > totalFactureTravailEffectue * 0.15m)
+            {
+                diagnostic = $"⚠️ ALERTE : Encaissements SUPÉRIEURS au travail livré de {ecart:N0} FCFA ({(ecart/totalFactureTravailEffectue)*100:N1}%). " +
+                            "Vérifier s'il y a des avances ou des paiements pour des commandes à venir.";
+            }
+            else if (ecart < -(totalFactureTravailEffectue * 0.15m))
+            {
+                diagnostic = $"⚠️ ALERTE : Encaissements INFÉRIEURS au travail livré de {Math.Abs(ecart):N0} FCFA. " +
+                            $"{detailsCommandes.Count(d => !d.EstSolde)} commande(s) livrée(s) non soldée(s).";
+            }
+            else
+            {
+                diagnostic = "✅ Cohérence acceptable : les encaissements correspondent au travail livré (±15%).";
+            }
+
+            var rapport = new RapportCoherenceFinanciere
+            {
+                DateDebut = dateDebut.Date,
+                DateFin = dateFin.Date,
+                TotalFactureTravailEffectue = totalFactureTravailEffectue,
+                TotalPaiementsValides = totalPaiementsValides,
+                TotalPaiementsAnnules = totalPaiementsAnnules,
+                Ecart = ecart,
+                TauxCoherence = tauxCoherence,
+                NombreCommandesLivrees = nombreCommandesLivrees,
+                NombrePaiementsValides = nombrePaiementsValides,
+                NombrePaiementsAnnules = nombrePaiementsAnnules,
+                CommandesNonSoldees = detailsCommandes.Where(d => !d.EstSolde).ToList(),
+                DetailsCommandes = detailsCommandes,
+                CoherenceOk = coherenceOk,
+                Diagnostic = diagnostic
+            };
+
+            if (!coherenceOk)
+            {
+                _logger.LogWarning(
+                    "INCOHÉRENCE FINANCIÈRE détectée — Écart: {Ecart:N0} FCFA, Taux: {Taux:N1}% — {Diagnostic}",
+                    ecart, tauxCoherence, diagnostic);
+            }
+
+            return rapport;
+        }
     }
 }

@@ -26,6 +26,15 @@ namespace GestionCoutureApp.Models
         [Column(TypeName = "TEXT")]
         public decimal PrixUnitaire { get; set; }
 
+        // ── Traçabilité opérateur ─────────────────────────────────────────
+        // Qui a ajouté ce matériau ? Renseigné automatiquement par
+        // IMaterielService.Ajouter() depuis l'utilisateur connecté.
+        [Required]
+        public int IdOperateur { get; set; }
+
+        [MaxLength(200)]
+        public string NomOperateur { get; set; } = string.Empty;
+
         [NotMapped]
         public decimal Montant => Quantite * PrixUnitaire;
 

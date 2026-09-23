@@ -175,6 +175,10 @@ namespace GestionCoutureApp.Views
 
         private void CmbCommande_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // Réinitialiser l'état du formulaire à chaque changement de sélection
+            TxtMontant.IsEnabled     = true;
+            BtnEnregistrer.IsEnabled = true;
+
             try
             {
                 if (CmbCommande.SelectedValue == null) return;
@@ -219,9 +223,13 @@ namespace GestionCoutureApp.Views
                     ListeHistorique.ItemsSource = new List<string> { "Erreur historique: " + histEx.Message };
                 }
 
-                // Desactive le champ montant si tout est paye
-                TxtMontant.IsEnabled    = reste > 0.01m;
-                BtnEnregistrer.IsEnabled = reste > 0.01m;
+                // Désactive le champ montant si tout est payé.
+                // CORRECTIF : si montantTotal == 0 (commande sans pièces chargées),
+                // on garde le champ actif pour ne pas bloquer l'opérateur.
+                bool peutPayer = montantTotal <= 0.01m  // pas de montant calculé : laisser actif
+                              || reste > 0.01m;          // reste à payer : actif
+                TxtMontant.IsEnabled     = peutPayer;
+                BtnEnregistrer.IsEnabled = peutPayer;
             }
             catch (Exception ex)
             {

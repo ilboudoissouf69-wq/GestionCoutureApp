@@ -1,25 +1,41 @@
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GestionCoutureApp.Services
 {
     public class CommandeService : ICommandeService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly ILogger<CommandeService> _logger;
 
         // ✅ CORRECTIF AUDIT #1 : Event pour notifier les vues des changements
         public event EventHandler<CommandeChangedEventArgs>? CommandeChanged;
 
-        public CommandeService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        // ── Détection anti double-soumission ─────────────────────────────
+        // Clé : (idOperateur, idClient, typeVetement, montant) — valeur : horodatage UTC
+        // de la dernière création. Thread-safe via ConcurrentDictionary.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>
+            _dernieresCreations = new();
+
+        /// <summary>Durée pendant laquelle une commande identique est considérée
+        /// comme un double-clic accidentel.</summary>
+        private static readonly TimeSpan FenetreDoublon = TimeSpan.FromSeconds(60);
+
+        public CommandeService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            ILogger<CommandeService> logger)
         {
             _contextFactory = contextFactory;
+            _logger = logger;
         }
 
         public List<Commande> ObtenirTous()
         {
             using var context = _contextFactory.CreateDbContext();
             return context.Commandes
+                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
@@ -36,6 +52,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
+                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
@@ -65,6 +82,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
+                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
                 .Include(c => c.Client)
                 .Include(c => c.Pieces) // Seulement les pièces de base, sans mesures/matériaux
                 .OrderByDescending(c => c.DateDebut);
@@ -97,10 +115,62 @@ namespace GestionCoutureApp.Services
                 .FirstOrDefault(c => c.IdCommande == id);
         }
 
-        public void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures)
+        public void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
+            int idOperateur, string nomOperateur)
         {
+            // ── Validation de l'opérateur ────────────────────────────────────
+            if (idOperateur <= 0)
+                throw new InvalidOperationException(
+                    "Impossible de créer une commande : aucun utilisateur connecté identifiable. " +
+                    "Veuillez vous déconnecter et vous reconnecter.");
+
+            if (string.IsNullOrWhiteSpace(nomOperateur))
+                throw new InvalidOperationException(
+                    "Le nom de l'opérateur est obligatoire pour la traçabilité de la commande.");
+
+            // ── Détection anti double-soumission (fenêtre 60 s) ─────────────
+            // Clé unique : opérateur + client + type de vêtement + montant.
+            // Couvre le double-clic accidentel et la soumission répétée.
+            // N'empêche PAS un client de recommander légitimement le même
+            // vêtement au même prix après la fenêtre.
+            string cleDoublon = $"{idOperateur}|{commande.IdClient}|{piece.TypeVetement}|{piece.MontantCouture:F2}";
+            DateTime maintenant = DateTime.UtcNow;
+
+            if (_dernieresCreations.TryGetValue(cleDoublon, out DateTime derniereCreation))
+            {
+                TimeSpan ecart = maintenant - derniereCreation;
+                if (ecart < FenetreDoublon)
+                {
+                    int resteSecondes = (int)(FenetreDoublon - ecart).TotalSeconds;
+                    _logger.LogWarning(
+                        "Double-soumission détectée par {Operateur} (IdClient={IdClient}, " +
+                        "Type={Type}, Montant={Montant}) — écart {Ecart:F1}s < fenêtre {Fenetre}s.",
+                        nomOperateur, commande.IdClient, piece.TypeVetement, piece.MontantCouture,
+                        ecart.TotalSeconds, FenetreDoublon.TotalSeconds);
+
+                    throw new DoublonCommandeException(
+                        $"Une commande identique (client #{commande.IdClient}, " +
+                        $"{piece.TypeVetement}, {piece.MontantCouture:N0} FCFA) " +
+                        $"vient d'être créée il y a {(int)ecart.TotalSeconds} seconde(s) " +
+                        $"par {nomOperateur}.\n\n" +
+                        $"S'il s'agit d'une vraie nouvelle commande, " +
+                        $"attendez {resteSecondes} seconde(s) et recommencez.",
+                        cleDoublon,
+                        ecart);
+                }
+            }
+
+            // ── Persistance ──────────────────────────────────────────────────
             using var context = _contextFactory.CreateDbContext();
-            commande.DateDebut = DateTime.Now;
+
+            DateTime now = DateTime.Now;
+            commande.DateDebut = now;
+
+            // Traçabilité de création — automatique, invisible pour l'opérateur
+            commande.IdOperateurCreation  = idOperateur;
+            commande.NomOperateurCreation = nomOperateur.Trim();
+            commande.DateCreation         = DateTime.UtcNow;
+
             context.Commandes.Add(commande);
             context.SaveChanges(); // génère IdCommande
 
@@ -113,10 +183,44 @@ namespace GestionCoutureApp.Services
             foreach (var mesure in mesures)
             {
                 mesure.IdPieceCommande = piece.IdPieceCommande;
-                mesure.IdCommande = commande.IdCommande;
+                mesure.IdCommande      = commande.IdCommande;
                 context.Mesures.Add(mesure);
             }
             context.SaveChanges();
+
+            // ── Enregistrement dans la fenêtre anti-doublon ──────────────────
+            _dernieresCreations[cleDoublon] = maintenant;
+
+            // Nettoyage périodique des entrées expirées (évite une croissance
+            // illimitée du dictionnaire sur des sessions longues).
+            NettoyerDernieresCreations();
+
+            _logger.LogInformation(
+                "Commande #{IdCommande} créée — Client #{IdClient}, {Type}, " +
+                "{Montant:N0} FCFA — par {Operateur} (Id={IdOperateur}) le {Date:dd/MM/yyyy HH:mm:ss}",
+                commande.IdCommande, commande.IdClient, piece.TypeVetement,
+                piece.MontantCouture, nomOperateur, idOperateur, now);
+        }
+
+        /// <summary>
+        /// Vide le cache anti-doublon. Réservé aux tests unitaires.
+        /// En production, les entrées expirent naturellement via NettoyerDernieresCreations().
+        /// </summary>
+        internal static void ViderCacheDoublonPourTests()
+            => _dernieresCreations.Clear();
+
+        /// <summary>
+        /// Retire les entrées anti-doublon dont la fenêtre est expirée.
+        /// Appelé à chaque création pour éviter la croissance illimitée du dictionnaire.
+        /// </summary>
+        private void NettoyerDernieresCreations()
+        {
+            DateTime limite = DateTime.UtcNow - FenetreDoublon;
+            foreach (var cle in _dernieresCreations.Keys.ToList())
+            {
+                if (_dernieresCreations.TryGetValue(cle, out DateTime ts) && ts < limite)
+                    _dernieresCreations.TryRemove(cle, out _);
+            }
         }
 
         public void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures)
@@ -203,55 +307,109 @@ namespace GestionCoutureApp.Services
             context.SaveChanges();
         }
 
-        public void Supprimer(int id)
+        /// <summary>
+        /// ✅ CORRECTIF AUDIT SÉCURITÉ FINANCIÈRE : Suppression LOGIQUE d'une commande
+        /// (au lieu de physique) avec autorisation Boss, traçabilité complète et audit.
+        /// Une commande ne doit JAMAIS être supprimée physiquement de la base si elle a
+        /// un historique financier (paiements, même annulés). La suppression logique
+        /// permet de garder une trace immuable tout en la masquant de l'UI normale.
+        /// </summary>
+        /// <param name="id">ID de la commande</param>
+        /// <param name="idOperateur">ID de l'opérateur effectuant la suppression</param>
+        /// <param name="nomOperateur">Nom de l'opérateur (traçabilité)</param>
+        /// <param name="motif">Motif OBLIGATOIRE de la suppression</param>
+        /// <param name="auditService">Service d'audit pour enregistrer l'action</param>
+        public async Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null)
         {
+            if (string.IsNullOrWhiteSpace(motif))
+                throw new InvalidOperationException(
+                    "Le motif de suppression est OBLIGATOIRE pour des raisons de traçabilité.");
+
             using var context = _contextFactory.CreateDbContext();
 
-            // ✅ CORRECTIF AUDIT #8 : Cette méthode devrait être réservée au Boss
-            // Note: actuellement appelée sans traçabilité de l'opérateur dans CommandesView
-            // TODO: ajouter paramètre idOperateur pour tracer qui supprime
+            // ✅ CORRECTIF : Vérifier que l'opérateur est Boss (seul autorisé à supprimer)
+            Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idOperateur, Models.RoleEmploye.Boss);
 
             var commande = context.Commandes
+                .Include(c => c.Client)
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
                 .Include(c => c.MaterielSupplements)
                 .FirstOrDefault(c => c.IdCommande == id);
 
-            if (commande == null) return;
+            if (commande == null)
+                throw new InvalidOperationException("Commande introuvable.");
 
+            if (commande.EstSupprimee)
+                throw new InvalidOperationException("Cette commande est déjà marquée comme supprimée.");
+
+            // ✅ CORRECTIF : Bloquer la suppression même si les paiements sont annulés
+            // (ils font partie de l'historique et prouvent qu'il y a eu une transaction)
             if (commande.Paiements.Any())
             {
                 throw new InvalidOperationException(
-                    "Impossible de supprimer cette commande : des paiements y sont rattachés. " +
-                    "Annulez d'abord les paiements concernés (avec motif), ou changez le statut " +
-                    "de la commande à \"Annulée\" plutôt que de la supprimer.");
+                    "Impossible de supprimer cette commande : des paiements y sont rattachés " +
+                    $"({commande.Paiements.Count} paiement(s), dont {commande.Paiements.Count(p => p.EstAnnule)} annulé(s)). " +
+                    "Pour des raisons de traçabilité comptable, une commande avec historique de paiements " +
+                    "doit rester visible dans le journal d'audit, même si tous les paiements sont annulés.");
             }
 
             if (commande.Pieces.Any(p => p.IdCommission.HasValue))
             {
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette commande : au moins une de ses pièces est " +
-                    "rattachée à une commission déjà enregistrée.");
+                    "rattachée à une commission déjà enregistrée. Annulez d'abord la commission concernée.");
             }
 
-            // ✅ CORRECTIF : Supprimer d'abord les matériaux supplémentaires liés aux pièces
-            // pour éviter les conflits de contraintes de clé étrangère
-            foreach (var piece in commande.Pieces)
+            // Snapshot de l'état avant suppression pour l'audit
+            var snapshot = new
             {
-                if (piece.MaterielSupplements.Any())
-                {
-                    context.MaterielsSupplements.RemoveRange(piece.MaterielSupplements);
-                }
-            }
+                commande.IdCommande,
+                Client = commande.Client?.Nom + " " + commande.Client?.Prenom,
+                commande.DateDebut,
+                commande.DateFin,
+                MontantTotal = commande.MontantTotalAvecMateriaux,
+                NombrePieces = commande.Pieces.Count,
+                Pieces = commande.Pieces.Select(p => new { p.TypeVetement, p.MontantCouture, p.Statut }).ToList(),
+                Statut = commande.StatutGlobal
+            };
 
-            // Supprimer les matériaux directement liés à la commande
-            if (commande.MaterielSupplements.Any())
-            {
-                context.MaterielsSupplements.RemoveRange(commande.MaterielSupplements);
-            }
+            // ✅ SUPPRESSION LOGIQUE : marquer comme supprimée au lieu de supprimer physiquement
+            commande.EstSupprimee = true;
+            commande.MotifSuppression = motif.Trim();
+            commande.DateSuppression = DateTime.Now;
+            commande.IdOperateurSuppression = idOperateur;
+            commande.NomOperateurSuppression = nomOperateur;
 
-            context.Commandes.Remove(commande);
             context.SaveChanges();
+
+            // ✅ AUDIT : Enregistrer dans le journal d'audit immuable avec notification
+            if (auditService != null)
+            {
+                await auditService.EnregistrerActionAsync(
+                    idOperateur: idOperateur,
+                    nomOperateur: nomOperateur,
+                    roleOperateur: "Boss", // vérifié par RequireRoleByIdEnum ci-dessus
+                    typeAction: "COMMANDE_SUPPRIMEE",
+                    entite: "Commande",
+                    idEntite: id,
+                    valeursAvant: snapshot,
+                    valeursApres: null, // suppression = pas d'état "après"
+                    motif: motif,
+                    envoyerNotification: true // notification WhatsApp automatique pour supervision
+                );
+            }
+        }
+
+        // ✅ ANCIENNE MÉTHODE DÉPRÉCIÉE : gardée temporairement pour compatibilité
+        // avec les appelants existants, mais lève une exception pour forcer la migration
+        [Obsolete("Utilisez SupprimerAsync avec idOperateur/motif pour traçabilité complète")]
+        public void Supprimer(int id)
+        {
+            throw new InvalidOperationException(
+                "La suppression de commande sans traçabilité est interdite. " +
+                "Utilisez SupprimerAsync(id, idOperateur, nomOperateur, motif, auditService) " +
+                "pour une suppression logique avec autorisation Boss et audit complet.");
         }
 
         public List<Commande> Rechercher(string motCle)
@@ -313,6 +471,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
+                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
                 .Include(c => c.Client)
                 .Include(c => c.Pieces)
                 .Where(c => c.Client != null && (

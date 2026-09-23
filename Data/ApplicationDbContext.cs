@@ -41,6 +41,9 @@ namespace GestionCoutureApp.Data
         // Point 2 - Matériaux supplémentaires
         public DbSet<MaterielSupplement> MaterielsSupplements { get; set; }
 
+        // ✅ CORRECTIF AUDIT : Journal d'audit immuable avec chaînage de hash
+        public DbSet<JournalAudit> JournalAudit { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
 

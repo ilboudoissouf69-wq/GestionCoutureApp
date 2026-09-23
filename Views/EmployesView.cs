@@ -187,6 +187,29 @@ namespace GestionCoutureApp.Views
                     return;
                 }
 
+                // ── Avertissement doublon Nom+Prénom (non bloquant) ──────────
+                // Deux employés distincts peuvent avoir le même nom (homonymes).
+                // On avertit l'opérateur sans l'empêcher de continuer, pour
+                // éviter la confusion entre deux fiches sans être autoritaire.
+                string nomTxt    = TxtNom.Text.Trim();
+                string prenomTxt = TxtPrenom.Text.Trim();
+                bool doublonNomPrenom = _context.Employes.Any(emp =>
+                    emp.Nom == nomTxt && emp.Prenom == prenomTxt);
+
+                if (doublonNomPrenom)
+                {
+                    var confirm = MessageBox.Show(
+                        $"Attention : un employé nommé « {prenomTxt} {nomTxt} » existe déjà.\n\n" +
+                        "S'il s'agit d'une personne différente (homonyme), " +
+                        "assurez-vous d'utiliser un identifiant de connexion distinct.\n\n" +
+                        "Voulez-vous continuer la création ?",
+                        "Doublon de nom possible",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (confirm != MessageBoxResult.Yes) return;
+                }
+
                 if (CmbRole.SelectedIndex < 0)
                 {
                     AfficherMessage("Sélectionnez un rôle.", succes: false);

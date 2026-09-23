@@ -40,6 +40,11 @@ namespace GestionCoutureApp.Migrations
 
                     b.HasKey("IdClient");
 
+                    b.HasIndex("Telephone")
+                        .IsUnique()
+                        .HasFilter("Telephone IS NOT NULL AND Telephone != ''")
+                        .HasDatabaseName("IX_Clients_Telephone_Unique");
+
                     b.ToTable("Clients");
                 });
 
@@ -51,6 +56,9 @@ namespace GestionCoutureApp.Migrations
 
                     b.Property<string>("CheminPhoto")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DateCreation")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("DateDebut")
@@ -78,11 +86,22 @@ namespace GestionCoutureApp.Migrations
                     b.Property<int?>("IdCouturier")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("IdOperateurCreation")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("MontantTotal")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Statut")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IdOperateurCreation")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NomOperateurCreation")
+                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TypeVetement")
@@ -96,6 +115,9 @@ namespace GestionCoutureApp.Migrations
                     b.HasIndex("IdCommission");
 
                     b.HasIndex("IdCouturier");
+
+                    b.HasIndex("IdOperateurCreation")
+                        .HasDatabaseName("IX_Commandes_IdOperateurCreation");
 
                     b.ToTable("Commandes");
                 });
@@ -170,6 +192,12 @@ namespace GestionCoutureApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Categorie")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Divers");
+
                     b.Property<DateTime?>("DateAnnulation")
                         .HasColumnType("TEXT");
 
@@ -182,6 +210,9 @@ namespace GestionCoutureApp.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("EstAnnulee")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("IdOperateur")
                         .HasColumnType("INTEGER");
 
                     b.Property<decimal>("Montant")
@@ -197,9 +228,13 @@ namespace GestionCoutureApp.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("StatutValidation")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TypeDepense")
                         .IsRequired()
-                        .HasMaxLength(50)
+                        .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
                     b.HasKey("IdDepense");
@@ -289,8 +324,16 @@ namespace GestionCoutureApp.Migrations
                     b.Property<int>("IdCommande")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("IdOperateur")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("IdPieceCommande")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("NomOperateur")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
 
                     b.Property<decimal>("PrixUnitaire")
                         .HasColumnType("TEXT");

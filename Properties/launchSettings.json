@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "GestionCoutureApp": {
+      "commandName": "Executable",
+      "executablePath": "$(TargetDir)$(TargetFileName)",
+      "workingDirectory": "$(ProjectDir)"
+    },
+    "GestionCoutureApp (dotnet)": {
+      "commandName": "Project"
+    }
+  }
+}

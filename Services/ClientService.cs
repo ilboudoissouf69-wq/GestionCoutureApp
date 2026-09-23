@@ -52,10 +52,71 @@ namespace GestionCoutureApp.Services
         public void Ajouter(Client client)
         {
             ValiderClient(client);
+
             using var context = _contextFactory.CreateDbContext();
+
+            // ── Détection de doublon Nom+Prénom+Téléphone ────────────────────
+            // Normalisation anti-accents/casse pour éviter les doublons orthographiques
+            // ("Koné" vs "Kone", "Marie" vs "marie").
+            // Règle :
+            //   • Si téléphone renseigné : doublon = même (nomPrenom normalisé) ET même téléphone
+            //   • Si téléphone vide      : doublon = même (nomPrenom normalisé) seulement
+            //     → avertissement moins fort car deux personnes du même nom peuvent
+            //       n'avoir aucun téléphone sans être la même personne.
+            string nomPrenomNormalise = Helpers.TexteHelper.NormaliserPourRecherche(
+                $"{client.Nom} {client.Prenom}");
+
+            var candidats = context.Clients
+                .AsEnumerable()
+                .Where(c =>
+                    Helpers.TexteHelper.NormaliserPourRecherche($"{c.Nom} {c.Prenom}") == nomPrenomNormalise)
+                .ToList();
+
+            if (candidats.Count > 0)
+            {
+                bool telephoneRenseigne = !string.IsNullOrWhiteSpace(client.Telephone);
+
+                if (telephoneRenseigne)
+                {
+                    // Doublon fort : même nom normalisé ET même numéro de téléphone
+                    var doublonStrict = candidats.FirstOrDefault(c =>
+                        !string.IsNullOrWhiteSpace(c.Telephone) &&
+                        c.Telephone.Trim() == client.Telephone.Trim());
+
+                    if (doublonStrict != null)
+                    {
+                        _logger.LogWarning(
+                            "Tentative de création d'un client doublon — " +
+                            "{Prenom} {Nom} / {Tel} — existe déjà sous Id #{Id}.",
+                            client.Prenom, client.Nom, client.Telephone, doublonStrict.IdClient);
+
+                        throw new DuplicatClientException(doublonStrict);
+                    }
+                }
+                else
+                {
+                    // Doublon faible : même nom normalisé, aucun téléphone des deux côtés
+                    // → lever quand même l'exception pour laisser l'UI décider
+                    var doublonSanstel = candidats.FirstOrDefault(c =>
+                        string.IsNullOrWhiteSpace(c.Telephone));
+
+                    if (doublonSanstel != null)
+                    {
+                        _logger.LogWarning(
+                            "Tentative de création d'un client potentiellement en doublon " +
+                            "(même nom, sans téléphone) — {Prenom} {Nom} — existe sous Id #{Id}.",
+                            client.Prenom, client.Nom, doublonSanstel.IdClient);
+
+                        throw new DuplicatClientException(doublonSanstel);
+                    }
+                }
+            }
+
             context.Clients.Add(client);
             context.SaveChanges();
-            _logger.LogInformation("Client ajouté — {Prenom} {Nom}", client.Prenom, client.Nom);
+            _logger.LogInformation(
+                "Client ajouté — #{Id} {Prenom} {Nom} / {Tel}",
+                client.IdClient, client.Prenom, client.Nom, client.Telephone);
         }
 
         public void Modifier(Client client)
@@ -149,6 +210,29 @@ namespace GestionCoutureApp.Services
                 Page = page,
                 PageSize = pageSize
             };
+        }
+
+        // ----------------------------------------------------------------
+        // Rapport de détection des doublons existants (pour le Boss)
+        // ----------------------------------------------------------------
+        public List<GroupeDoublonsClient> RechercherDoublons()
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            // Chargement complet en mémoire : SQLite ne gère pas les
+            // fonctions de normalisation côté base — traitement .NET nécessaire.
+            var tousLesClients = context.Clients.ToList();
+
+            return tousLesClients
+                .GroupBy(c => Helpers.TexteHelper.NormaliserPourRecherche($"{c.Nom} {c.Prenom}"))
+                .Where(g => g.Count() > 1)           // garder uniquement les groupes avec ≥ 2 fiches
+                .Select(g => new GroupeDoublonsClient
+                {
+                    CleNormalise  = g.Key,
+                    Clients       = g.OrderBy(c => c.IdClient).ToList()
+                })
+                .OrderBy(g => g.CleNormalise)
+                .ToList();
         }
 
         // ----------------------------------------------------------------

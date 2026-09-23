@@ -70,6 +70,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IMaterielService, MaterielService>();
             services.AddSingleton<IWhatsAppService, WhatsAppService>();
             services.AddSingleton<ITresorerieService, TresorerieService>();
+            services.AddSingleton<IAuditService, AuditService>();
             
             // ✅ CORRECTIF AUDIT #14 : EventAggregator pour notifications globales
             services.AddSingleton<IEventAggregator, EventAggregator>();

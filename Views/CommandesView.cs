@@ -35,6 +35,17 @@ namespace GestionCoutureApp.Views
         private string _cheminPhotoTemporaire = string.Empty;
         private string _roleUtilisateur;
 
+        // ── Helper opérateur connecté ─────────────────────────────────────
+        // Centralise la récupération de l'opérateur pour éviter la répétition
+        // dans chaque appel à materielService.Ajouter / commandeService.Ajouter.
+        private (int id, string nom) OperateurConnecte()
+        {
+            var op = App.Services.GetRequiredService<IAuthService>().UtilisateurConnecte;
+            return op != null
+                ? (op.IdEmploye, $"{op.Prenom} {op.Nom}".Trim())
+                : (0, string.Empty);
+        }
+
         // Pièces chargées pour la commande sélectionnée
         private List<PieceCommande> _piecesCommande = new();
 
@@ -1059,13 +1070,14 @@ namespace GestionCoutureApp.Views
                         var nouvellepiece = piecesRechar.LastOrDefault(p => p.TypeVetement == piece.TypeVetement);
                         if (nouvellepiece != null)
                         {
+                            var (opId, opNom) = OperateurConnecte();
                             foreach (var mat in _materiauxTemporaires)
                             {
                                 // Remettre IdMateriel à 0 pour que EF Core génère l'ID en base
                                 mat.IdMateriel = 0;
                                 mat.IdCommande = _commandeSelectionneeId;
                                 mat.IdPieceCommande = nouvellepiece.IdPieceCommande;
-                                _materielService.Ajouter(mat);
+                                _materielService.Ajouter(mat, opId, opNom);
                             }
                         }
                         _materiauxTemporaires.Clear();
@@ -1231,9 +1243,10 @@ namespace GestionCoutureApp.Views
                 // Pièce existante en base → persister directement
                 try
                 {
+                    var (opId, opNom) = OperateurConnecte();
                     materiau.IdCommande = _commandeSelectionneeId;
                     materiau.IdPieceCommande = _pieceSelectionneeId.Value;
-                    _materielService.Ajouter(materiau);
+                    _materielService.Ajouter(materiau, opId, opNom);
                     RafraichirMateriaux();
                     RafraichirTotalAvecMateriaux();
                 }
@@ -1650,7 +1663,19 @@ namespace GestionCoutureApp.Views
 
             try
             {
-                _commandeService.Ajouter(commande, piece, mesures);
+                // ── Désactiver le bouton pendant l'enregistrement ──────────────
+                // Empêche techniquement les double-clics même si le service a sa
+                // propre fenêtre anti-doublon côté données.
+                BtnCreer.IsEnabled = false;
+
+                // L'opérateur connecté est renseigné automatiquement — zéro friction.
+                var operateur = App.Services.GetRequiredService<IAuthService>().UtilisateurConnecte;
+                int idOp = operateur?.IdEmploye ?? 0;
+                string nomOp = operateur != null
+                    ? $"{operateur.Prenom} {operateur.Nom}".Trim()
+                    : string.Empty;
+
+                _commandeService.Ajouter(commande, piece, mesures, idOp, nomOp);
 
                 // Persister les matériaux du buffer temporaire
                 if (_materiauxTemporaires.Count > 0)
@@ -1659,13 +1684,14 @@ namespace GestionCoutureApp.Views
                     var premierePiece = piecesCreees.FirstOrDefault();
                     if (premierePiece != null)
                     {
+                        var (opId, opNom) = OperateurConnecte();
                         foreach (var mat in _materiauxTemporaires)
                         {
                             // Remettre IdMateriel à 0 pour que EF Core génère l'ID en base
                             mat.IdMateriel = 0;
                             mat.IdCommande = commande.IdCommande;
                             mat.IdPieceCommande = premierePiece.IdPieceCommande;
-                            _materielService.Ajouter(mat);
+                            _materielService.Ajouter(mat, opId, opNom);
                         }
                     }
                     _materiauxTemporaires.Clear();
@@ -1710,10 +1736,24 @@ namespace GestionCoutureApp.Views
                     ViderChamps();
                 }
             }
+            catch (DoublonCommandeException ex)
+            {
+                // Message dédié pour un double-clic probable — distinct d'une
+                // vraie erreur métier (InvalidOperationException).
+                MessageBox.Show(ex.Message,
+                    "Double envoi détecté",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
             catch (InvalidOperationException ex)
             {
                 MessageBox.Show(ex.Message, "Creation impossible",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                // Toujours réactiver le bouton, quoi qu'il arrive.
+                BtnCreer.IsEnabled = true;
             }
         }
 
@@ -2014,7 +2054,7 @@ namespace GestionCoutureApp.Views
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private void BtnSupprimer_Click(object sender, RoutedEventArgs e)
+        private async void BtnSupprimer_Click(object sender, RoutedEventArgs e)
         {
             if (_commandeSelectionneeId == 0)
             {
@@ -2023,25 +2063,154 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            var r = MessageBox.Show("Supprimer cette commande ?\n\nToutes les pieces seront supprimees.",
-                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            // ── Étape 1 : demander le motif (obligatoire pour traçabilité) ─
+            string? motif = DemanderMotifSuppression();
+            if (string.IsNullOrWhiteSpace(motif)) return; // annulé
 
-            if (r == MessageBoxResult.Yes)
+            // ── Étape 2 : confirmation finale ──────────────────────────────
+            var r = MessageBox.Show(
+                $"Supprimer définitivement cette commande ?\n\nMotif : {motif}\n\n" +
+                "Cette action est irréversible (suppression logique avec audit).",
+                "Confirmation suppression",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (r != MessageBoxResult.Yes) return;
+
+            try
             {
-                try
-                {
-                    _commandeService.Supprimer(_commandeSelectionneeId);
-                    _ = ChargerCommandes();
-                    ViderChamps();
-                    MessageBox.Show("Commande supprimee.", "Succes",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    MessageBox.Show(ex.Message, "Suppression impossible",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
+                BtnSupprimer.IsEnabled = false;
+
+                var op = App.Services.GetRequiredService<IAuthService>().UtilisateurConnecte;
+                int idOp   = op?.IdEmploye ?? 0;
+                string nomOp = op != null ? $"{op.Prenom} {op.Nom}".Trim() : string.Empty;
+
+                // Récupérer IAuditService s'il est enregistré (optionnel)
+                IAuditService? auditService = null;
+                try { auditService = App.Services.GetService<IAuditService>(); } catch { }
+
+                await _commandeService.SupprimerAsync(
+                    _commandeSelectionneeId,
+                    idOp,
+                    nomOp,
+                    motif,
+                    auditService);
+
+                await ChargerCommandes();
+                ViderChamps();
+                _commandeSelectionneeId = 0;
+
+                MessageBox.Show("Commande supprimée avec succès.", "Succès",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Suppression impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur inattendue : " + ex.Message, "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                BtnSupprimer.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Affiche une boîte de dialogue pour saisir le motif de suppression.
+        /// Retourne null si l'utilisateur annule.
+        /// </summary>
+        private string? DemanderMotifSuppression()
+        {
+            var dialog = new Window
+            {
+                Title = "Motif de suppression",
+                Width = 440,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.White,
+                SizeToContent = SizeToContent.Height
+            };
+
+            var sp = new StackPanel { Margin = new Thickness(22, 20, 22, 20) };
+
+            sp.Children.Add(new TextBlock
+            {
+                Text = "Motif de suppression * (10 caractères minimum)",
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var txMotif = new TextBox
+            {
+                Height = 72,
+                TextWrapping = TextWrapping.Wrap,
+                AcceptsReturn = true,
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            sp.Children.Add(txMotif);
+
+            var erreur = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                FontSize = 12,
+                Height = 18,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            sp.Children.Add(erreur);
+
+            var btns = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var btnOk = new Button
+            {
+                Content = "Confirmer",
+                Width = 110, Height = 36, FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            var btnAnn = new Button
+            {
+                Content = "Annuler",
+                Width = 90, Height = 36, FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Cursor = Cursors.Hand
+            };
+
+            btnOk.Click += (s, ev) =>
+            {
+                if (txMotif.Text.Trim().Length < 10)
+                {
+                    erreur.Text = "Le motif doit contenir au moins 10 caractères.";
+                    return;
+                }
+                dialog.Tag = txMotif.Text.Trim();
+                dialog.DialogResult = true;
+                dialog.Close();
+            };
+            btnAnn.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+
+            btns.Children.Add(btnOk);
+            btns.Children.Add(btnAnn);
+            sp.Children.Add(btns);
+            dialog.Content = sp;
+
+            return dialog.ShowDialog() == true ? (string)dialog.Tag : null;
         }
 
         private void BtnVider_Click(object sender, RoutedEventArgs e) { ViderChamps(); }

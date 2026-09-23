@@ -13,6 +13,7 @@ namespace GestionCoutureApp.Views
     public partial class MaterielsView : Page
     {
         private readonly IMaterielService _materielService;
+        private readonly IAuthService _authService;
         private readonly ApplicationDbContext _context;
         private List<MaterielSupplement> _tousLesMateriels;
         private List<Commande> _commandes;
@@ -22,6 +23,7 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
 
             _materielService = App.Services.GetRequiredService<IMaterielService>();
+            _authService     = App.Services.GetRequiredService<IAuthService>();
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
             Unloaded += (s, e) => _context.Dispose();
@@ -421,6 +423,10 @@ namespace GestionCoutureApp.Views
                     }
                     else
                     {
+                        var op = _authService.UtilisateurConnecte;
+                        int opId  = op?.IdEmploye ?? 0;
+                        string opNom = op != null ? $"{op.Prenom} {op.Nom}".Trim() : string.Empty;
+
                         var nouveau = new MaterielSupplement
                         {
                             IdCommande = (int)cmbCommande.SelectedValue,
@@ -430,7 +436,7 @@ namespace GestionCoutureApp.Views
                             PrixUnitaire = prix
                         };
 
-                        _materielService.Ajouter(nouveau);
+                        _materielService.Ajouter(nouveau, opId, opNom);
                     }
 
                     ChargerMateriels();

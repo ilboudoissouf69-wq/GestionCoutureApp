@@ -18,10 +18,27 @@ namespace GestionCoutureApp.Services
         // ✅ OPTIMISATION : Version légère pour affichage tableau (sans toutes les données incluses)
         Task<PagedResult<Commande>> ObtenirPageLightAsync(int page, int pageSize);
 
-        void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures);
+        /// <summary>
+        /// Crée une nouvelle commande avec sa première pièce et ses mesures.
+        /// <paramref name="idOperateur"/> et <paramref name="nomOperateur"/> sont
+        /// automatiquement renseignés depuis <c>AuthService.UtilisateurConnecte</c>
+        /// par l'appelant — aucune ressaisie de mot de passe, zéro friction.
+        /// </summary>
+        /// <exception cref="DoublonCommandeException">
+        /// Levée si une commande quasi-identique (même client + type + montant) a été
+        /// créée par le même opérateur dans les 60 dernières secondes.
+        /// </exception>
+        void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
+            int idOperateur, string nomOperateur);
+
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures);
 
+        // ✅ CORRECTIF AUDIT : Suppression logique avec autorisation Boss et traçabilité
+        Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null);
+
+        [Obsolete("Utilisez SupprimerAsync avec traçabilité complète")]
         void Supprimer(int id);
+        
         List<Commande> Rechercher(string motCle);
         
         // ✅ PAGINATION : Cherche des commandes avec pagination

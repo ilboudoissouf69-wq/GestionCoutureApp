@@ -1,9 +1,11 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using GestionCoutureApp.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
@@ -164,11 +166,85 @@ namespace GestionCoutureApp.Views
                 Prenom    = TxtPrenom.Text.Trim(),
                 Telephone = TxtTelephone.Text.Trim()
             };
-            _clientService.Ajouter(client);
-            ChargerClients();
-            ViderChamps();
-            MessageBox.Show("Client ajouté avec succès !", "Succès",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+
+            try
+            {
+                _clientService.Ajouter(client);
+                ChargerClients();
+                ViderChamps();
+                MessageBox.Show("Client ajouté avec succès !", "Succès",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (DuplicatClientException ex)
+            {
+                // ── Doublon détecté : proposer la fiche existante ────────────
+                // On ne crée pas silencieusement un doublon. L'opérateur choisit.
+                var existant = ex.ClientExistant;
+                string detail = $"Nom  : {existant.Nom} {existant.Prenom}\n" +
+                                $"Tél  : {(string.IsNullOrWhiteSpace(existant.Telephone) ? "—" : existant.Telephone)}\n" +
+                                $"Id   : #{existant.IdClient}";
+
+                var choix = MessageBox.Show(
+                    $"Ce client existe peut-être déjà :\n\n{detail}\n\n" +
+                    "Voulez-vous sélectionner cette fiche existante ?\n\n" +
+                    "• Oui → sélectionner la fiche existante\n" +
+                    "• Non → créer quand même (si c'est une personne différente)",
+                    "Doublon possible",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                if (choix == MessageBoxResult.Yes)
+                {
+                    // Sélectionner le client existant dans le tableau
+                    ChargerClients();
+                    ViderChamps();
+                    // Pré-remplir les champs avec la fiche existante pour que
+                    // l'opérateur puisse la consulter ou la compléter
+                    TxtNom.Text       = existant.Nom;
+                    TxtPrenom.Text    = existant.Prenom;
+                    TxtTelephone.Text = existant.Telephone;
+                    _clientSelectionneId = existant.IdClient;
+                }
+                else if (choix == MessageBoxResult.No)
+                {
+                    // Forcer la création malgré le doublon détecté
+                    // (deux personnes du même nom sans téléphone commun)
+                    try
+                    {
+                        // On passe par le contexte directement pour contourner
+                        // la détection — on valide quand même via DataAnnotations.
+                        using var ctx = App.Services
+                            .GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<Data.ApplicationDbContext>>()
+                            .CreateDbContext();
+                        var ctxValidation = new System.ComponentModel.DataAnnotations.ValidationContext(client);
+                        var errors = new System.Collections.Generic.List<System.ComponentModel.DataAnnotations.ValidationResult>();
+                        if (!System.ComponentModel.DataAnnotations.Validator
+                            .TryValidateObject(client, ctxValidation, errors, validateAllProperties: true))
+                        {
+                            MessageBox.Show(string.Join("\n", errors.Select(err => err.ErrorMessage)),
+                                "Données invalides", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                        ctx.Clients.Add(client);
+                        ctx.SaveChanges();
+                        ChargerClients();
+                        ViderChamps();
+                        MessageBox.Show("Client créé (doublon confirmé par l'opérateur).",
+                            "Créé", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    catch (Exception innerEx)
+                    {
+                        MessageBox.Show("Erreur lors de la création forcée : " + innerEx.Message,
+                            "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                // Cancel → ne rien faire, rester sur le formulaire
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Données invalides",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void BtnModifier_Click(object sender, RoutedEventArgs e)

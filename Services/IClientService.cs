@@ -13,7 +13,14 @@ namespace GestionCoutureApp.Services
         // ✅ PAGINATION : Récupère les clients avec pagination
         Task<PagedResult<Client>> ObtenirPageAsync(int page, int pageSize);
 
-        // Ajoute un nouveau client en base
+        /// <summary>
+        /// Ajoute un nouveau client.
+        /// </summary>
+        /// <exception cref="DuplicatClientException">
+        /// Levée si un client avec le même nom+prénom (normalisés, sans accents/casse)
+        /// ET le même numéro de téléphone existe déjà. L'UI peut intercepter cette
+        /// exception pour proposer la fiche existante au lieu de créer un doublon.
+        /// </exception>
         void Ajouter(Client client);
 
         // Met à jour un client existant
@@ -24,9 +31,29 @@ namespace GestionCoutureApp.Services
 
         // Cherche des clients par nom ou téléphone
         List<Client> Rechercher(string motCle);
-        
+
         // ✅ PAGINATION : Cherche des clients avec pagination
         Task<PagedResult<Client>> RechercherPageAsync(string motCle, int page, int pageSize);
+
+        /// <summary>
+        /// Rapport de détection des doublons existants en base (clients ayant le même
+        /// nom+prénom normalisé, avec ou sans téléphone identique).
+        /// Utilisé par le Boss pour décider de fusions manuelles.
+        /// </summary>
+        List<GroupeDoublonsClient> RechercherDoublons();
+    }
+
+    /// <summary>
+    /// Groupe de clients potentiellement en doublon, renvoyé par
+    /// <see cref="IClientService.RechercherDoublons"/>.
+    /// </summary>
+    public class GroupeDoublonsClient
+    {
+        /// <summary>Nom+Prénom normalisés (clé de regroupement).</summary>
+        public string CleNormalise { get; set; } = string.Empty;
+
+        /// <summary>Liste des fiches qui partagent cette clé.</summary>
+        public List<Client> Clients { get; set; } = new();
     }
     
     /// <summary>

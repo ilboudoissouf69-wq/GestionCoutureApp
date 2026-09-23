@@ -232,6 +232,7 @@ namespace GestionCoutureApp.Views
                     DateDepense     = DateDepense.SelectedDate.Value,
                     Description     = TxtDescription.Text.Trim(),
                     StatutValidation = statut,
+                    IdOperateur     = op?.IdEmploye ?? 0,
                     NomOperateur    = op != null ? $"{op.Prenom} {op.Nom}" : ""
                 };
 
