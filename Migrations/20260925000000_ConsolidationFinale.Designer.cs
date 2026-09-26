@@ -10,10 +10,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace GestionCoutureApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260923000000_AjoutJournalAuditEtSecuriteFinanciere")]
-    partial class AjoutJournalAuditEtSecuriteFinanciere
+    [Migration("20260925000000_ConsolidationFinale")]
+    partial class ConsolidationFinale
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

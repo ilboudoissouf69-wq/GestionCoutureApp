@@ -76,22 +76,14 @@ namespace GestionCoutureApp.Migrations
                 table: "Mesures",
                 column: "IdPieceCommande");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Mesures_PiecesCommande_IdPieceCommande",
-                table: "Mesures",
-                column: "IdPieceCommande",
-                principalTable: "PiecesCommande",
-                principalColumn: "IdPieceCommande",
-                onDelete: ReferentialAction.Cascade);
+            // Note: SQLite doesn't support adding foreign key constraints via ALTER TABLE
+            // The foreign key relationship is enforced by EF Core at the application level
+            // based on the model configuration in ApplicationDbContext
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Mesures_PiecesCommande_IdPieceCommande",
-                table: "Mesures");
-
             migrationBuilder.DropIndex(
                 name: "IX_Mesures_IdPieceCommande",
                 table: "Mesures");

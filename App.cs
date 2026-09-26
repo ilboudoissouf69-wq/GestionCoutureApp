@@ -125,10 +125,68 @@ namespace GestionCoutureApp
             {
                 var contextFactory = Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
                 using var context = contextFactory.CreateDbContext();
-                // Migrate() applique toutes les migrations en attente (crée la base
-                // si elle n'existe pas encore, sinon la met à jour sans perte de données).
-                // Remplace EnsureCreated() qui ne gérait jamais les évolutions de schéma.
+
+                // ── LOG DIAGNOSTIC (étape 1) : état AVANT Migrate() ──────────
+                LogDiagnosticSchema(logService, context, "AVANT Migrate()");
+
+                // ── Pré-correction : enregistrer les migrations déjà appliquées
+                // manuellement (ancien bloc colonnesRetours) sans passer par EF Core.
+                // Sans ça, Migrate() tente d'exécuter AddColumn sur des colonnes déjà
+                // présentes → SQLite Error "duplicate column name".
+                PreEnregistrerMigrationsAppliqueesManuellement(context, logService);
+
+                // Migrate() applique les migrations que EF Core reconnaît.
                 context.Database.Migrate();
+
+                // ── APPLICATION MANUELLE des migrations ignorées par EF Core ──
+                // EF Core ignore les migrations dont le .Designer.cs est minimal
+                // (sans BuildTargetModel complet). On les applique manuellement
+                // via ADO.NET en vérifiant __EFMigrationsHistory pour l'idempotence.
+                AppliquerMigrationsManquantes(context, logService);
+
+                // ── LOG DIAGNOSTIC (étape 2) : état APRÈS tout ───────────────
+                LogDiagnosticSchema(logService, context, "APRÈS Migrate() + corrections");
+
+                // ── Vérification bloquante du schéma ─────────────────────────
+                // Colonnes critiques dont l'absence cause des crashes immédiats.
+                // Noms exacts tels qu'ils apparaissent dans la base SQLite.
+                var tablesCritiques = new Dictionary<string, string[]>
+                {
+                    ["Mesures"]  = new[] { "IdMesure", "IdCommande", "NomMesure", "Valeur", "IdPieceCommande" },
+                    ["Commandes"] = new[] { "IdCommande", "IdClient", "DateDebut", "DateFin",
+                                           "MontantTotal", "Statut", "TypeVetement",
+                                           "EstSupprimee", "IdOperateurCreation" },
+                    ["Paiements"] = new[] { "IdPaiement", "IdCommande", "MontantPaye",
+                                           "DatePaiement", "ModePaiement", "IdOperateur" },
+                    ["Depenses"]  = new[] { "IdDepense", "TypeDepense", "Montant",
+                                           "Categorie", "StatutValidation", "IdOperateur" },
+                    ["MaterielsSupplements"] = new[] { "IdMateriel", "IdCommande",
+                                                       "IdOperateur", "NomOperateur" },
+                    ["JournalAudit"] = new[] { "IdJournal", "DateHeureUtc", "TypeAction",
+                                              "HashCourant" },
+                };
+
+                var erreursSchema = VerifierSchemaComplet(context, tablesCritiques);
+
+                if (erreursSchema.Length > 0)
+                {
+                    string messageErreur =
+                        $"Schéma de base de données incohérent après Migrate() :\n\n{erreursSchema}\n\n" +
+                        $"Base : {AppPaths.CheminBaseDeDonnees}\n\n" +
+                        "Supprimez le fichier .db (et .db-wal / .db-shm s'ils existent) " +
+                        "puis relancez l'application pour recréer un schéma propre.";
+
+                    logService.LogError("[SCHEMA] " + messageErreur);
+                    MessageBox.Show(
+                        messageErreur,
+                        "Erreur de schéma — démarrage impossible",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    Shutdown(-1);
+                    return;
+                }
+
+                logService.LogInfo("[SCHEMA] Toutes les tables critiques sont cohérentes.");
 
                 // ── Colonnes retours ajoutées progressivement (idempotent) ──
                 // ALTER TABLE en SQLite ne supporte pas IF NOT EXISTS.
@@ -159,10 +217,6 @@ namespace GestionCoutureApp
                         long count = (long)(cmd.ExecuteScalar() ?? 0L);
                         if (count == 0)
                         {
-                            // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql au lieu de ExecuteSqlRaw
-                            // Note : les valeurs col et def proviennent d'un tableau statique défini
-                            // dans le code (pas d'entrée utilisateur), donc pas de risque d'injection SQL.
-                            // Cependant, on utilise ExecuteSql pour respecter les bonnes pratiques.
                             FormattableString sql = $"ALTER TABLE Retours ADD COLUMN {col} {def};";
                             context.Database.ExecuteSql(sql);
                         }
@@ -179,10 +233,7 @@ namespace GestionCoutureApp
                     cmd2.CommandText = "SELECT COUNT(*) FROM pragma_table_info('Commissions') WHERE name='PrimeQualite'";
                     long cnt = (long)(cmd2.ExecuteScalar() ?? 0L);
                     if (cnt == 0)
-                    {
-                        // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql
                         context.Database.ExecuteSql($"ALTER TABLE Commissions ADD COLUMN PrimeQualite TEXT NOT NULL DEFAULT '0';");
-                    }
                 }
                 catch { /* déjà présente */ }
 
@@ -203,7 +254,6 @@ namespace GestionCoutureApp
                         long cnt3 = (long)(cmd3.ExecuteScalar() ?? 0L);
                         if (cnt3 == 0)
                         {
-                            // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql
                             FormattableString sql = $"ALTER TABLE Depenses ADD COLUMN {col} {def};";
                             context.Database.ExecuteSql(sql);
                         }
@@ -483,6 +533,407 @@ namespace GestionCoutureApp
             catch { /* ne jamais bloquer la fermeture */ }
 
             base.OnExit(e);
+        }
+
+        /// <summary>
+        /// Détecte les migrations dont le contenu a été appliqué manuellement (ancien code App.cs)
+        /// sans que EF Core en soit informé, et les enregistre dans __EFMigrationsHistory.
+        /// Sans ça, Migrate() tente d'exécuter AddColumn sur des colonnes existantes → crash.
+        /// Doit être appelé AVANT context.Database.Migrate().
+        /// </summary>
+        private static void PreEnregistrerMigrationsAppliqueesManuellement(
+            ApplicationDbContext context, ILogService log)
+        {
+            // Utilise une connexion ADO.NET SÉPARÉE pour éviter les conflits
+            // avec la connexion EF Core qui sera utilisée par Migrate() juste après.
+            string connStr = context.Database.GetConnectionString() ?? 
+                             AppPaths.ChaineConnexionSqlite;
+            try
+            {
+                using var conn = new Microsoft.Data.Sqlite.SqliteConnection(connStr);
+                conn.Open();
+
+                // __EFMigrationsHistory peut ne pas exister sur une base toute fraîche
+                using (var chkHist = conn.CreateCommand())
+                {
+                    chkHist.CommandText =
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'";
+                    if (chkHist.ExecuteScalar() == null)
+                    {
+                        log.LogInfo("[PRE-ENREG] __EFMigrationsHistory absente — base fraîche, Migrate() la créera.");
+                        return;
+                    }
+                }
+
+                var appliquees = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT MigrationId FROM __EFMigrationsHistory";
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) appliquees.Add(r.GetString(0));
+                }
+
+                void EnregistrerSiColonneExiste(string migrationId, string table, string colonne)
+                {
+                    if (appliquees.Contains(migrationId)) return;
+                    try
+                    {
+                        using var chk = conn.CreateCommand();
+                        chk.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name='{colonne}'";
+                        long existe = (long)(chk.ExecuteScalar() ?? 0L);
+                        if (existe > 0)
+                        {
+                            using var ins = conn.CreateCommand();
+                            ins.CommandText =
+                                $"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) " +
+                                $"VALUES ('{migrationId}', '8.0.11')";
+                            ins.ExecuteNonQuery();
+                            log.LogInfo($"[PRE-ENREG] {migrationId} enregistrée (colonnes déjà présentes).");
+                            appliquees.Add(migrationId);
+                        }
+                    }
+                    catch (Exception ex) { log.LogError($"[PRE-ENREG] {migrationId} : {ex.Message}", ex); }
+                }
+
+                void EnregistrerSiIndexExiste(string migrationId, string indexName)
+                {
+                    if (appliquees.Contains(migrationId)) return;
+                    try
+                    {
+                        using var chk = conn.CreateCommand();
+                        chk.CommandText = $"SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='{indexName}'";
+                        long existe = (long)(chk.ExecuteScalar() ?? 0L);
+                        if (existe > 0)
+                        {
+                            using var ins = conn.CreateCommand();
+                            ins.CommandText =
+                                $"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) " +
+                                $"VALUES ('{migrationId}', '8.0.11')";
+                            ins.ExecuteNonQuery();
+                            log.LogInfo($"[PRE-ENREG] {migrationId} enregistrée (index déjà présent).");
+                            appliquees.Add(migrationId);
+                        }
+                    }
+                    catch (Exception ex) { log.LogError($"[PRE-ENREG] {migrationId} : {ex.Message}", ex); }
+                }
+
+                EnregistrerSiColonneExiste("20260805205656_AjoutMotifExceptionPiece",             "Retours",  "EstAnnule");
+                EnregistrerSiColonneExiste("20260916000000_AjoutRetoursChampsReprise",             "Retours",  "CheminPhotoDefaut");
+                EnregistrerSiIndexExiste  ("20260918000000_AjoutContrainteUniqueRecuNumero",        "IX_Paiements_RecuNumero");
+                EnregistrerSiColonneExiste("20260918000001_AjoutDerniereModificationMotDePasse",   "Employes", "DerniereModificationMotDePasse");
+                EnregistrerSiColonneExiste("20260925000000_ConsolidationFinale",                   "Commandes","EstSupprimee");
+            }
+            catch (Exception ex)
+            {
+                log.LogError($"[PRE-ENREG] Erreur générale : {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Applique manuellement les migrations que EF Core ignore (fichiers .Designer.cs
+        /// minimaux sans BuildTargetModel complet). Vérifie __EFMigrationsHistory pour
+        /// l'idempotence — chaque migration n'est appliquée qu'une seule fois.
+        /// </summary>
+        private static void AppliquerMigrationsManquantes(ApplicationDbContext context, ILogService log)
+        {
+            // Connexion ADO.NET séparée — ne pas réutiliser celle du context EF Core
+            // qui vient d'exécuter Migrate() et peut avoir des locks residuels.
+            string connStr = context.Database.GetConnectionString() ?? AppPaths.ChaineConnexionSqlite;
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection(connStr);
+            conn.Open();
+
+            // Lire les migrations déjà appliquées
+            var appliquees = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT MigrationId FROM __EFMigrationsHistory";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) appliquees.Add(r.GetString(0));
+            }
+
+            // Helper : exécute SQL idempotent et enregistre dans __EFMigrationsHistory
+            void AppliquerSi(string migrationId, Action<System.Data.Common.DbConnection> action)
+            {
+                if (appliquees.Contains(migrationId)) return;
+                log.LogInfo($"[MIGRATION MANUELLE] Application de {migrationId}...");
+                try
+                {
+                    action(conn);
+                    using var ins = conn.CreateCommand();
+                    ins.CommandText =
+                        "INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) " +
+                        $"VALUES ('{migrationId}', '8.0.11')";
+                    ins.ExecuteNonQuery();
+                    log.LogInfo($"[MIGRATION MANUELLE] {migrationId} appliquée avec succès.");
+                }
+                catch (Exception ex)
+                {
+                    log.LogError($"[MIGRATION MANUELLE] Erreur sur {migrationId} : {ex.Message}", ex);
+                }
+            }
+
+            // Helper : ALTER TABLE idempotent (ignore "duplicate column name")
+            void AjouterCol(System.Data.Common.DbConnection c, string table, string col, string def)
+            {
+                try
+                {
+                    using var cmd = c.CreateCommand();
+                    cmd.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{col}\" {def}";
+                    cmd.ExecuteNonQuery();
+                }
+                catch { /* colonne déjà présente — ignoré */ }
+            }
+
+            // Helper : CREATE INDEX IF NOT EXISTS
+            void CreerIndex(System.Data.Common.DbConnection c, string sql)
+            {
+                try { using var cmd = c.CreateCommand(); cmd.CommandText = sql; cmd.ExecuteNonQuery(); }
+                catch { }
+            }
+
+            // ── 20260916000000_AjoutRetoursChampsReprise ──────────────────────
+            AppliquerSi("20260916000000_AjoutRetoursChampsReprise", c =>
+            {
+                AjouterCol(c, "Retours", "EstAnnule",          "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(c, "Retours", "MotifAnnulation",    "TEXT NULL");
+                AjouterCol(c, "Retours", "DateAnnulation",     "TEXT NULL");
+                AjouterCol(c, "Retours", "NomAnnulateur",      "TEXT NULL");
+                AjouterCol(c, "Retours", "IdCouturierReprise", "INTEGER NULL");
+                AjouterCol(c, "Retours", "CheminPhotoDefaut",  "TEXT NULL");
+                AjouterCol(c, "Retours", "DateRdvReprise",     "TEXT NULL");
+                AjouterCol(c, "Retours", "HeureDebutReprise",  "TEXT NULL");
+                AjouterCol(c, "Retours", "HeureFinReprise",    "TEXT NULL");
+            });
+
+            // ── 20260918000000_AjoutContrainteUniqueRecuNumero ────────────────
+            AppliquerSi("20260918000000_AjoutContrainteUniqueRecuNumero", c =>
+                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\")"));
+
+            // ── 20260918000001_AjoutDerniereModificationMotDePasse ────────────
+            AppliquerSi("20260918000001_AjoutDerniereModificationMotDePasse", c =>
+                AjouterCol(c, "Employes", "DerniereModificationMotDePasse", "TEXT NULL"));
+
+            // ── 20260925000000_ConsolidationFinale ────────────────────────────
+            AppliquerSi("20260925000000_ConsolidationFinale", c =>
+            {
+                // Commissions
+                AjouterCol(c, "Commissions", "PrimeQualite", "TEXT NOT NULL DEFAULT '0'");
+
+                // Paiements : recréer avec IdOperateur NOT NULL
+                // On vérifie si la table Paiements_V2 existe déjà (migration interrompue)
+                using (var chk = c.CreateCommand())
+                {
+                    chk.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Paiements_V2'";
+                    long exists = (long)(chk.ExecuteScalar() ?? 0L);
+                    if (exists == 0)
+                    {
+                        using var cr = c.CreateCommand();
+                        cr.CommandText = @"CREATE TABLE ""Paiements_V2"" (
+                            ""IdPaiement"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                            ""IdCommande"" INTEGER NOT NULL,
+                            ""MontantPaye"" TEXT NOT NULL,
+                            ""DatePaiement"" TEXT NOT NULL,
+                            ""ModePaiement"" TEXT NOT NULL DEFAULT 'Especes',
+                            ""RecuNumero"" TEXT NOT NULL DEFAULT '',
+                            ""IdOperateur"" INTEGER NOT NULL DEFAULT 0,
+                            ""NomOperateur"" TEXT NOT NULL DEFAULT '',
+                            ""EstAnnule"" INTEGER NOT NULL DEFAULT 0,
+                            ""MotifsAnnulation"" TEXT NULL,
+                            ""DateAnnulation"" TEXT NULL,
+                            ""NomAnnulateur"" TEXT NULL,
+                            ""MontantTotalCommande"" TEXT NOT NULL DEFAULT '0',
+                            ""ResteAvantPaiement"" TEXT NOT NULL DEFAULT '0',
+                            FOREIGN KEY (""IdCommande"") REFERENCES ""Commandes""(""IdCommande"") ON DELETE RESTRICT
+                        )";
+                        cr.ExecuteNonQuery();
+                    }
+                }
+                using (var ins = c.CreateCommand())
+                {
+                    ins.CommandText = @"INSERT OR IGNORE INTO ""Paiements_V2""
+                        (""IdPaiement"",""IdCommande"",""MontantPaye"",""DatePaiement"",""ModePaiement"",
+                         ""RecuNumero"",""IdOperateur"",""NomOperateur"",""EstAnnule"",""MotifsAnnulation"",
+                         ""DateAnnulation"",""NomAnnulateur"",""MontantTotalCommande"",""ResteAvantPaiement"")
+                        SELECT ""IdPaiement"",""IdCommande"",""MontantPaye"",""DatePaiement"",""ModePaiement"",
+                               ""RecuNumero"",COALESCE(""IdOperateur"",0),""NomOperateur"",""EstAnnule"",
+                               ""MotifsAnnulation"",""DateAnnulation"",""NomAnnulateur"",
+                               COALESCE(""MontantTotalCommande"",'0'),COALESCE(""ResteAvantPaiement"",'0')
+                        FROM ""Paiements""
+                        WHERE ""IdPaiement"" NOT IN (SELECT ""IdPaiement"" FROM ""Paiements_V2"")";
+                    ins.ExecuteNonQuery();
+                }
+                using (var drop = c.CreateCommand()) { drop.CommandText = "DROP TABLE \"Paiements\""; drop.ExecuteNonQuery(); }
+                using (var ren = c.CreateCommand()) { ren.CommandText = "ALTER TABLE \"Paiements_V2\" RENAME TO \"Paiements\""; ren.ExecuteNonQuery(); }
+                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\")");
+
+                // Employes
+                AjouterCol(c, "Employes", "DerniereModificationMotDePasse", "TEXT NULL");
+
+                // Depenses
+                AjouterCol(c, "Depenses", "Categorie",        "TEXT NOT NULL DEFAULT 'Divers'");
+                AjouterCol(c, "Depenses", "StatutValidation",  "TEXT NOT NULL DEFAULT 'Validee'");
+                AjouterCol(c, "Depenses", "IdOperateur",       "INTEGER NOT NULL DEFAULT 0");
+
+                // MaterielsSupplements
+                AjouterCol(c, "MaterielsSupplements", "IdOperateur",  "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(c, "MaterielsSupplements", "NomOperateur", "TEXT NOT NULL DEFAULT ''");
+
+                // Commandes
+                AjouterCol(c, "Commandes", "EstSupprimee",           "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(c, "Commandes", "MotifSuppression",       "TEXT NULL");
+                AjouterCol(c, "Commandes", "DateSuppression",        "TEXT NULL");
+                AjouterCol(c, "Commandes", "IdOperateurSuppression", "INTEGER NULL");
+                AjouterCol(c, "Commandes", "NomOperateurSuppression","TEXT NULL");
+                AjouterCol(c, "Commandes", "IdOperateurCreation",    "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(c, "Commandes", "NomOperateurCreation",   "TEXT NOT NULL DEFAULT ''");
+                AjouterCol(c, "Commandes", "DateCreation",           "TEXT NOT NULL DEFAULT '2000-01-01 00:00:00'");
+
+                using (var upd = c.CreateCommand())
+                {
+                    upd.CommandText = "UPDATE \"Commandes\" SET \"DateCreation\" = \"DateDebut\" WHERE \"DateCreation\" = '2000-01-01 00:00:00'";
+                    upd.ExecuteNonQuery();
+                }
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_Commandes_EstSupprimee\" ON \"Commandes\" (\"EstSupprimee\")");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_Commandes_IdOperateurCreation\" ON \"Commandes\" (\"IdOperateurCreation\")");
+                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Clients_Telephone_Unique\" ON \"Clients\" (\"Telephone\") WHERE \"Telephone\" IS NOT NULL AND \"Telephone\" != ''");
+
+                // Retours champs reprise
+                AjouterCol(c, "Retours", "CheminPhotoDefaut",  "TEXT NULL");
+                AjouterCol(c, "Retours", "DateRdvReprise",     "TEXT NULL");
+                AjouterCol(c, "Retours", "HeureDebutReprise",  "TEXT NULL");
+                AjouterCol(c, "Retours", "HeureFinReprise",    "TEXT NULL");
+                AjouterCol(c, "Retours", "IdCouturierReprise", "INTEGER NULL");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_Retours_IdCouturierReprise\" ON \"Retours\" (\"IdCouturierReprise\")");
+
+                // JournalAudit
+                using var jCmd = c.CreateCommand();
+                jCmd.CommandText = @"CREATE TABLE IF NOT EXISTS ""JournalAudit"" (
+                    ""IdJournal"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ""DateHeureUtc"" TEXT NOT NULL,
+                    ""IdOperateur"" INTEGER NOT NULL,
+                    ""NomOperateur"" TEXT NOT NULL,
+                    ""RoleOperateur"" TEXT NOT NULL,
+                    ""TypeAction"" TEXT NOT NULL,
+                    ""Entite"" TEXT NOT NULL,
+                    ""IdEntite"" INTEGER NOT NULL,
+                    ""ValeursAvant"" TEXT NULL,
+                    ""ValeursApres"" TEXT NULL,
+                    ""Motif"" TEXT NULL,
+                    ""HashPrecedent"" TEXT NULL,
+                    ""HashCourant"" TEXT NOT NULL,
+                    ""AdresseIp"" TEXT NULL,
+                    ""NotificationEnvoyee"" INTEGER NOT NULL DEFAULT 0
+                )";
+                jCmd.ExecuteNonQuery();
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_JournalAudit_DateHeureUtc\" ON \"JournalAudit\" (\"DateHeureUtc\")");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_JournalAudit_TypeAction\" ON \"JournalAudit\" (\"TypeAction\")");
+            });
+        }
+
+        /// <summary>
+        /// Log le chemin de la base, les migrations appliquées et le PRAGMA table_info
+        /// des tables critiques — pour diagnostiquer les erreurs "no such column" au démarrage.
+        /// </summary>
+        private static void LogDiagnosticSchema(ILogService log, ApplicationDbContext context, string etape)
+        {
+            try
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"[DIAG SCHEMA {etape}]");
+                sb.AppendLine($"  Base       : {AppPaths.CheminBaseDeDonnees}");
+                sb.AppendLine($"  Horodatage : {DateTime.Now:dd/MM/yyyy HH:mm:ss.fff}");
+
+                var conn = context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) conn.Open();
+
+                // Migrations appliquées
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'";
+                    bool historyExists = cmd.ExecuteScalar() != null;
+                    if (historyExists)
+                    {
+                        cmd.CommandText = "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId";
+                        using var r = cmd.ExecuteReader();
+                        sb.AppendLine("  Migrations appliquées :");
+                        while (r.Read()) sb.AppendLine($"    ✓ {r.GetString(0)}");
+                    }
+                    else
+                    {
+                        sb.AppendLine("  __EFMigrationsHistory : TABLE ABSENTE (base vide ou non migrée)");
+                    }
+                }
+
+                // PRAGMA table_info pour les tables critiques
+                foreach (var table in new[] { "Mesures", "Commandes", "Paiements", "Depenses", "MaterielsSupplements" })
+                {
+                    using var cmd2 = conn.CreateCommand();
+                    cmd2.CommandText = $"PRAGMA table_info('{table}')";
+                    using var r2 = cmd2.ExecuteReader();
+                    var cols = new System.Collections.Generic.List<string>();
+                    while (r2.Read()) cols.Add(r2.GetString(1));
+                    if (cols.Count == 0)
+                        sb.AppendLine($"  {table} : TABLE ABSENTE");
+                    else
+                        sb.AppendLine($"  {table} ({cols.Count} colonnes) : {string.Join(", ", cols)}");
+                }
+
+                log.LogInfo(sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                log.LogError($"[DIAG SCHEMA] Erreur lors du diagnostic ({etape}) : {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Vérifie que toutes les colonnes attendues existent dans la base.
+        /// Retourne une chaîne vide si tout est correct, ou la liste des écarts sinon.
+        /// </summary>
+        private static string VerifierSchemaComplet(
+            ApplicationDbContext context,
+            Dictionary<string, string[]> tablesCritiques)
+        {
+            var erreurs = new System.Text.StringBuilder();
+            try
+            {
+                var conn = context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) conn.Open();
+
+                foreach (var (table, colonnesAttendues) in tablesCritiques)
+                {
+                    // Vérifier d'abord que la table existe
+                    using var cmdTable = conn.CreateCommand();
+                    cmdTable.CommandText =
+                        $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{table}'";
+                    long tableExiste = (long)(cmdTable.ExecuteScalar() ?? 0L);
+
+                    if (tableExiste == 0)
+                    {
+                        erreurs.AppendLine($"  Table '{table}' : ABSENTE");
+                        continue;
+                    }
+
+                    // Lire les colonnes réelles
+                    using var cmdCols = conn.CreateCommand();
+                    cmdCols.CommandText = $"PRAGMA table_info('{table}')";
+                    using var reader = cmdCols.ExecuteReader();
+                    var colonnesReelles = new System.Collections.Generic.HashSet<string>(
+                        StringComparer.OrdinalIgnoreCase);
+                    while (reader.Read()) colonnesReelles.Add(reader.GetString(1));
+
+                    foreach (var col in colonnesAttendues)
+                    {
+                        if (!colonnesReelles.Contains(col))
+                            erreurs.AppendLine($"  Table '{table}' : colonne manquante '{col}'");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                erreurs.AppendLine($"  Exception lors de la vérification du schéma : {ex.Message}");
+            }
+            return erreurs.ToString();
         }
 
         /// <summary>

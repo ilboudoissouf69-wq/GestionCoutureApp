@@ -10,10 +10,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace GestionCoutureApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260923000100_TracabiliteCreationEtUniciteClient")]
-    partial class TracabiliteCreationEtUniciteClient
+    [Migration("20260916000000_AjoutRetoursChampsReprise")]
+    partial class AjoutRetoursChampsReprise
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -40,11 +40,6 @@ namespace GestionCoutureApp.Migrations
 
                     b.HasKey("IdClient");
 
-                    b.HasIndex("Telephone")
-                        .IsUnique()
-                        .HasFilter("Telephone IS NOT NULL AND Telephone != ''")
-                        .HasDatabaseName("IX_Clients_Telephone_Unique");
-
                     b.ToTable("Clients");
                 });
 
@@ -67,9 +62,15 @@ namespace GestionCoutureApp.Migrations
                     b.Property<DateTime>("DateFin")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("DateSuppression")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("DescriptionPrecision")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("EstSupprimee")
+                        .HasColumnType("INTEGER");
 
                     b.Property<TimeSpan>("HeureDebut")
                         .HasColumnType("TEXT");
@@ -89,19 +90,25 @@ namespace GestionCoutureApp.Migrations
                     b.Property<int>("IdOperateurCreation")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("IdOperateurSuppression")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("MontantTotal")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Statut")
-                        .IsRequired()
+                    b.Property<string>("MotifSuppression")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("IdOperateurCreation")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("NomOperateurCreation")
                         .IsRequired()
                         .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NomOperateurSuppression")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TypeVetement")
@@ -115,9 +122,6 @@ namespace GestionCoutureApp.Migrations
                     b.HasIndex("IdCommission");
 
                     b.HasIndex("IdCouturier");
-
-                    b.HasIndex("IdOperateurCreation")
-                        .HasDatabaseName("IX_Commandes_IdOperateurCreation");
 
                     b.ToTable("Commandes");
                 });
@@ -179,6 +183,9 @@ namespace GestionCoutureApp.Migrations
                     b.Property<decimal>("Pourcentage")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal>("PrimeQualite")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("IdCommission");
 
                     b.HasIndex("IdEmploye");
@@ -195,8 +202,7 @@ namespace GestionCoutureApp.Migrations
                     b.Property<string>("Categorie")
                         .IsRequired()
                         .HasMaxLength(50)
-                        .HasColumnType("TEXT")
-                        .HasDefaultValue("Divers");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DateAnnulation")
                         .HasColumnType("TEXT");
@@ -271,6 +277,9 @@ namespace GestionCoutureApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("DerniereModificationMotDePasse")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Identifiant")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -308,6 +317,72 @@ namespace GestionCoutureApp.Migrations
                         .IsUnique();
 
                     b.ToTable("Employes");
+                });
+
+            modelBuilder.Entity("GestionCoutureApp.Models.JournalAudit", b =>
+                {
+                    b.Property<int>("IdJournal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AdresseIp")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DateHeureUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Entite")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HashCourant")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HashPrecedent")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IdEntite")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("IdOperateur")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Motif")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NomOperateur")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("NotificationEnvoyee")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RoleOperateur")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TypeAction")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValeursApres")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValeursAvant")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("IdJournal");
+
+                    b.ToTable("JournalAudit");
                 });
 
             modelBuilder.Entity("GestionCoutureApp.Models.MaterielSupplement", b =>
@@ -417,7 +492,7 @@ namespace GestionCoutureApp.Migrations
                     b.Property<int>("IdCommande")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("IdOperateur")
+                    b.Property<int>("IdOperateur")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ModePaiement")
@@ -438,6 +513,7 @@ namespace GestionCoutureApp.Migrations
 
                     b.Property<string>("NomOperateur")
                         .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RecuNumero")
@@ -526,7 +602,13 @@ namespace GestionCoutureApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CheminPhotoDefaut")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("DateAnnulation")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DateRdvReprise")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DateResolution")
@@ -543,10 +625,19 @@ namespace GestionCoutureApp.Migrations
                     b.Property<bool>("EstAnnule")
                         .HasColumnType("INTEGER");
 
+                    b.Property<TimeSpan?>("HeureDebutReprise")
+                        .HasColumnType("TEXT");
+
+                    b.Property<TimeSpan?>("HeureFinReprise")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("IdCommande")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("IdCouturier")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("IdCouturierReprise")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("IdOperateurEnregistrement")
@@ -580,6 +671,8 @@ namespace GestionCoutureApp.Migrations
                     b.HasIndex("IdCommande");
 
                     b.HasIndex("IdCouturier");
+
+                    b.HasIndex("IdCouturierReprise");
 
                     b.HasIndex("IdPieceCommande");
 
@@ -747,6 +840,11 @@ namespace GestionCoutureApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GestionCoutureApp.Models.Employe", "CouturierReprise")
+                        .WithMany()
+                        .HasForeignKey("IdCouturierReprise")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GestionCoutureApp.Models.PieceCommande", "PieceCommande")
                         .WithMany()
                         .HasForeignKey("IdPieceCommande")
@@ -756,6 +854,8 @@ namespace GestionCoutureApp.Migrations
                     b.Navigation("Commande");
 
                     b.Navigation("Couturier");
+
+                    b.Navigation("CouturierReprise");
 
                     b.Navigation("PieceCommande");
                 });
