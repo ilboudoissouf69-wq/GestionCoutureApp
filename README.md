@@ -1,219 +1,263 @@
 # GestionCoutureApp
 
-Application de bureau WPF pour la gestion d'un atelier de couture.  
-Développée pour **Retoupe Choco / Ilassa Design** (Burkina Faso).
+Application de bureau Windows pour la gestion d'un atelier de couture.  
+Développée pour **Retoupe Choco / Ilassa Design** — Burkina Faso.
 
 ---
 
 ## Table des matières
 
 1. [Prérequis](#prérequis)
-2. [Installation et premier lancement](#installation-et-premier-lancement)
-3. [Migrations de base de données](#migrations-de-base-de-données)
-4. [Rôles utilisateurs](#rôles-utilisateurs)
-5. [Fonctionnalités principales](#fonctionnalités-principales)
-6. [Documentation technique](#documentation-technique)
-7. [Données de démonstration](#données-de-démonstration)
-8. [Limitations connues et dettes techniques](#limitations-connues-et-dettes-techniques)
-9. [Licence](#licence)
+2. [Installation sur un nouveau poste](#installation-sur-un-nouveau-poste)
+3. [Premier démarrage](#premier-démarrage)
+4. [Lancer l'application au quotidien](#lancer-lapplication-au-quotidien)
+5. [Rôles utilisateurs](#rôles-utilisateurs)
+6. [Fonctionnalités](#fonctionnalités)
+7. [Sauvegarde et restauration](#sauvegarde-et-restauration)
+8. [Lancer les tests](#lancer-les-tests)
+9. [Limitations connues](#limitations-connues)
+10. [Licence](#licence)
 
 ---
 
 ## Prérequis
 
-|| Outil | Version minimale | Remarque |
-||---|---|---|
-|| Windows | 10 (64-bit) | Windows 11 recommandé |
-|| .NET Runtime | 8.0 | [Télécharger](https://dotnet.microsoft.com/download/dotnet/8.0) |
-|| .NET SDK | 8.0 | Requis pour compiler / migrer |
-|| Git | — | Pour cloner le dépôt |
+| Outil | Version | Lien de téléchargement |
+|---|---|---|
+| Windows | 10 64-bit minimum (Windows 11 recommandé) | — |
+| .NET Runtime | **8.0** | https://dotnet.microsoft.com/download/dotnet/8.0 |
+| .NET SDK | **8.0** | https://dotnet.microsoft.com/download/dotnet/8.0 |
+| Git | toute version récente | https://git-scm.com/download/win |
 
-> Le runtime seul suffit pour exécuter l'application. Le SDK est nécessaire pour
-> compiler, exécuter les migrations EF Core ou lancer les tests.
+> Le **.NET Runtime** suffit pour utiliser l'application au quotidien.  
+> Le **.NET SDK** est nécessaire uniquement pour compiler, migrer la base ou lancer les tests.
 
 ---
 
-## Installation et premier lancement
+## Installation sur un nouveau poste
 
-```bash
-# 1. Cloner le dépôt
+### Étape 1 — Installer .NET 8
+
+1. Télécharger le **SDK .NET 8** depuis https://dotnet.microsoft.com/download/dotnet/8.0  
+   (choisir *Windows x64 — SDK Installer*)
+2. Exécuter l'installeur et suivre les étapes (suivant → suivant → terminer)
+3. Vérifier l'installation dans un terminal PowerShell :
+
+```powershell
+dotnet --version
+# doit afficher : 8.0.xxx
+```
+
+### Étape 2 — Installer Git
+
+1. Télécharger Git depuis https://git-scm.com/download/win
+2. Installer avec les options par défaut
+3. Vérifier :
+
+```powershell
+git --version
+# doit afficher : git version 2.x.x
+```
+
+### Étape 3 — Cloner le dépôt
+
+Ouvrir PowerShell dans le dossier où vous souhaitez installer l'application, puis :
+
+```powershell
 git clone <url-du-depot>
 cd GestionCoutureApp
+```
 
-# 2. Compiler
+### Étape 4 — Compiler l'application
+
+```powershell
 dotnet build -c Release
+```
 
-# 3. Lancer (le premier démarrage crée la base et le compte Boss par défaut)
+La commande télécharge automatiquement tous les paquets NuGet nécessaires.  
+La première fois peut prendre 1 à 2 minutes selon la connexion internet.
+
+### Étape 5 — Lancer l'application
+
+```powershell
 dotnet run
 ```
 
-**Ou** ouvrir `GestionCoutureApp.sln` dans Visual Studio 2022+ et lancer avec F5.
-
-### Premier démarrage
-
-Au tout premier lancement :
-1. La base SQLite est créée automatiquement dans  
-   `%LOCALAPPDATA%\GestionCoutureApp\gestion_couture.db`
-2. Un compte administrateur par défaut est créé :
-   - Identifiant : `boss`
-   - Mot de passe : `boss123`
-3. **Une fenêtre de changement de mot de passe obligatoire s'affiche.**  
-   Vous ne pouvez pas accéder à l'application tant que ce mot de passe n'a pas
-   été changé. Choisissez un mot de passe fort (≥ 6 caractères).
+**C'est tout.** La base de données est créée automatiquement au premier démarrage.
 
 ---
 
-## Migrations de base de données
+## Premier démarrage
 
-Les migrations sont appliquées **automatiquement** à chaque démarrage de
-l'application (`context.Database.Migrate()` dans `App.cs`).
+Au tout premier lancement, l'application :
 
-Pour créer une nouvelle migration manuellement (développement) :
+1. Crée la base de données SQLite dans :
+   ```
+   C:\Users\<VotreNom>\AppData\Local\GestionCoutureApp\gestion_couture.db
+   ```
+2. Crée un compte administrateur par défaut :
+   - **Identifiant** : `boss`
+   - **Mot de passe** : `boss123`
+3. Affiche immédiatement une fenêtre de **changement de mot de passe obligatoire**.  
+   Vous ne pouvez pas continuer tant que le mot de passe n'est pas changé.  
+   Choisissez un mot de passe d'au moins 6 caractères et notez-le soigneusement.
 
-```bash
-# Depuis le dossier racine du projet
-dotnet ef migrations add NomDeLaMigration --project GestionCoutureApp
+> ⚠️ Ne communiquez jamais le mot de passe boss à une secrétaire ou un couturier.
 
-# Vérifier le SQL généré sans appliquer
-dotnet ef migrations script --project GestionCoutureApp
+---
 
-# Appliquer manuellement (optionnel, l'app le fait au démarrage)
-dotnet ef database update --project GestionCoutureApp
+## Lancer l'application au quotidien
+
+### Option A — Via PowerShell (recommandé pour développement)
+
+```powershell
+cd C:\chemin\vers\GestionCoutureApp
+dotnet run
 ```
 
-> La base est stockée dans `%LOCALAPPDATA%\GestionCoutureApp\` et non dans le
-> dossier de l'exécutable, pour éviter les problèmes de droits d'écriture sous
-> Windows (installation dans Program Files).
+### Option B — Double-clic sur l'exécutable compilé
+
+Après un `dotnet build -c Release`, l'exécutable se trouve dans :
+
+```
+GestionCoutureApp\bin\Release\net8.0-windows\GestionCoutureApp.exe
+```
+
+Vous pouvez créer un raccourci sur le bureau vers ce fichier `.exe`.
+
+### Option C — Via Visual Studio 2022
+
+1. Ouvrir `GestionCoutureApp.sln`
+2. Appuyer sur **F5** (ou le bouton ▶ Démarrer)
 
 ---
 
 ## Rôles utilisateurs
 
-L'application distingue trois rôles, assignés à la création d'un employé :
-
 ### Boss (administrateur)
-Accès complet à toutes les fonctionnalités :
-- Tableau de bord (statistiques, graphique de revenus)
-- Gestion des clients
-- Gestion des commandes (créer, modifier, supprimer)
-- Gestion des paiements
-- Gestion des types de vêtements et mesures requises
-- Gestion des employés (créer, modifier, suspendre)
+
+Accès complet :
+- Tableau de bord avec statistiques financières
+- Gestion des clients, commandes, paiements
+- Gestion des employés (créer, modifier, suspendre un compte)
 - Calcul et enregistrement des commissions couturiers
+- Configuration des types de vêtements et mesures
+- Paramètres de l'application, sauvegardes
+- Journal d'audit de sécurité (lecture seule)
+- Suppression logique de commandes (avec motif obligatoire, tracé)
+- Annulation de paiements (avec motif obligatoire, tracé)
 
 ### Secrétaire
+
 Accès partiel :
 - Tableau de bord
 - Gestion des clients
-- Création de commandes (avec confirmation par mot de passe)
-- Gestion des paiements
-- Pas d'accès : employés, types de vêtements, commissions
+- Création de commandes
+- Enregistrement de paiements
+- **Interdit** : annuler un paiement, supprimer une commande, accéder aux employés, aux commissions, aux paramètres de sécurité
 
 ### Couturier
+
 Accès restreint :
-- Tableau de bord personnel (ses propres commandes uniquement)
-- Pas d'accès aux données financières ni aux autres employés
+- Tableau de bord personnel (ses propres pièces uniquement)
+- **Aucun accès** aux données financières ni aux autres employés
 
 ---
 
-## Fonctionnalités principales
+## Fonctionnalités
 
-|| Module | Description |
-||---|---|
-|| **Authentification** | Anti brute-force (5 tentatives → verrouillage 2 min), PBKDF2+sel (100 000 itérations) |
-|| **Clients** | Fiche client, recherche accent-insensible |
-|| **Commandes** | Mesures dynamiques par type de vêtement (pas de 0,5 cm), photo client (import fichier ou webcam), suivi statut |
-|| **Paiements** | Pas de suppression — annulation avec motif obligatoire, génération de numéro de reçu unique, protection contre sur-paiement |
-|| **Commissions** | Aperçu avant enregistrement, verrouillage des commandes incluses, annulation avec déverrouillage et audit |
-|| **Types de vêtements** | Pantalon, Chemise, Robe, Boubou, Veste — mesures et descriptions configurables par le Boss |
-|| **Sauvegarde auto** | Toutes les 4 heures, rotation sur 15 fichiers, copie optionnelle vers support externe |
-
----
-
-## Documentation technique
-
-Pour la documentation détaillée des changements et procédures techniques, consultez :
-
-- **CHANGELOG.md** - Historique des versions et changements
-- **docs/** - Documentation technique détaillée :
-  - `LOGGING_README.md` - Guide du système de logging
-  - `AMELIORATIONS_RETOURS.md` - Détails interface RetoursView
-  - `TRESORERIE_GUIDE.md` - Guide trésorerie
-  - `GUIDE_TEST.md` - Guide de test étape par étape
-  - `AUDIT_IMPLEMENTATION_COMPLETE.md` - Rapport d'audit complet
-  - `CORRECTIONS_FINALES.md` - Synthèse des corrections
+| Module | Description |
+|---|---|
+| **Authentification** | Verrouillage après 5 tentatives (2 min), hashage PBKDF2 + sel (100 000 itérations) |
+| **Clients** | Fiche client, recherche insensible aux accents |
+| **Commandes** | Commandes multi-pièces, mesures dynamiques par type de vêtement, photo client (fichier ou webcam), suivi de statut |
+| **Paiements** | Annulation avec motif obligatoire (jamais de suppression), numéro de reçu unique, protection contre le sur-paiement |
+| **Commissions** | Aperçu avant validation, verrouillage des pièces incluses, annulation avec déverrouillage |
+| **Retours / Retouches** | Suivi des reprises gratuites et payantes |
+| **Dépenses** | Enregistrement et validation des dépenses atelier |
+| **Trésorerie** | Bilan financier par période, rapport de cohérence argent/travail |
+| **Journal d'audit** | Traçabilité immuable de toutes les actions financières sensibles (Boss uniquement, lecture seule) |
+| **Sauvegarde auto** | Toutes les 4 heures, rotation sur 15 fichiers locaux, copie optionnelle Google Drive |
+| **Types de vêtements** | Mesures requises configurables par le Boss |
 
 ---
 
-## Données de démonstration
+## Sauvegarde et restauration
 
-Par défaut, **aucune donnée de démonstration n'est insérée** (correctif de
-sécurité : l'ancien comportement créait 350 faux clients et des comptes employés
-avec des mots de passe connus dans le code source sur toute installation neuve).
+### Emplacement des sauvegardes locales
 
-Pour charger les données de démo (formation, présentation client) :
-
-```bash
-dotnet run -- --demo
+```
+C:\Users\<VotreNom>\AppData\Local\GestionCoutureApp\Backups\
 ```
 
-**Ne jamais utiliser `--demo` sur un poste de production.**
+Les sauvegardes sont nommées `gestion_couture_YYYYMMDD_HHMMSS.db`.  
+Les 15 plus récentes sont conservées automatiquement.
+
+### Restaurer une sauvegarde
+
+1. Fermer l'application
+2. Copier le fichier `.db` de sauvegarde vers :
+   ```
+   C:\Users\<VotreNom>\AppData\Local\GestionCoutureApp\gestion_couture.db
+   ```
+   (remplacer le fichier existant)
+3. Relancer l'application
+
+### Sauvegarde Google Drive (optionnel)
+
+Pour activer la sauvegarde vers Google Drive :
+
+1. Créer un projet Google Cloud et activer l'API Drive
+2. Télécharger le fichier `client_secret.json` (identifiants OAuth)
+3. Placer ce fichier dans :
+   ```
+   C:\Users\<VotreNom>\AppData\Local\GestionCoutureApp\client_secret.json
+   ```
+4. Activer la sauvegarde Drive dans **Paramètres → Sauvegarde**
+
+> ⚠️ Ne jamais mettre `client_secret.json` dans le dépôt Git.
 
 ---
 
-## Limitations connues et dettes techniques
+## Lancer les tests
 
-### Application mono-poste (SQLite)
+```powershell
+# Depuis le dossier racine du projet
+# (fermer l'application avant de lancer les tests)
+dotnet test GestionCoutureApp.Tests
+```
 
-Cette application est conçue pour **un seul poste à la fois**.  
-SQLite sur un partage réseau (NAS, SMB) est déconseillé par ses propres
-développeurs pour des accès simultanés : le verrouillage de fichier réseau est
-peu fiable selon le NAS/serveur utilisé, et les verrous en mémoire de
-l'application ne protègent qu'un seul processus.
+Résultat attendu : **41/41 réussis, 0 ignoré, 0 échec.**
 
-Si plusieurs postes doivent travailler simultanément sur les mêmes données
-(plusieurs secrétaires en caisse en même temps), la solution robuste est une
-vraie base serveur (PostgreSQL ou SQL Server). EF Core est déjà utilisé :
-la migration du provider SQLite vers PostgreSQL (`Npgsql.EntityFrameworkCore.PostgreSQL`)
-ne touche qu'au `csproj` et à la chaîne de connexion.
+> Si le build échoue avec "fichier verrouillé", c'est que l'application est encore
+> ouverte. Fermez-la complètement, vérifiez avec `Get-Process dotnet`, puis relancez.
 
-### Données en clair (pas de chiffrement au repos)
+---
 
-La base SQLite et les sauvegardes (y compris sur clé USB si configuré) sont
-stockées en clair. Si le poste ou la clé USB est volé, toutes les données
-clients (mesures, photos, historique financier) sont accessibles.
+## Limitations connues
 
-**Mitigations sans changement de base de données :**
-- Activer le chiffrement de lecteur Windows (BitLocker) sur le poste
-- Chiffrer le dossier de sauvegardes avec l'EFS Windows (Encrypting File System)
+### Application mono-poste
+
+L'application est conçue pour **un seul poste à la fois**.  
+SQLite sur un partage réseau (NAS, partage Windows) est déconseillé pour des accès simultanés.  
+Si plusieurs postes doivent travailler en même temps, la migration vers PostgreSQL
+est possible sans changer l'architecture (EF Core gère les deux providers).
+
+### Données non chiffrées au repos
+
+La base SQLite est stockée en clair. En cas de vol du poste ou de la clé USB
+de sauvegarde, toutes les données sont accessibles.
+
+**Mesures de protection recommandées :**
+- Activer BitLocker sur le disque du poste
+- Chiffrer le dossier de sauvegardes avec EFS Windows
 - Ne pas stocker les sauvegardes sur une clé USB non chiffrée
 
-**Solution complète :** migrer vers SQLCipher (`SQLitePCLRaw.bundle_e_sqlcipher`).
-C'est un remplacement direct de SQLite avec chiffrement AES-256 transparent.
-La migration nécessite : nouveau paquet NuGet, chaîne de connexion avec clé,
-et une opération de conversion de la base existante (`ATTACH ... AS ... KEY ...`).
+### Webcam (dépendance ancienne)
 
-### Dépendance webcam obsolète (AForge, 2013)
-
-`AForge.Video` et `AForge.Video.DirectShow` reposent sur l'ancienne API
-DirectShow (COM) et ne sont plus maintenus depuis 2013. Certaines webcams
-modernes sous Windows 10/11 ne sont pas détectées correctement.
-
-**Migration recommandée** (impact limité à `Views/WebcamCaptureWindow.cs`) :
-- `OpenCvSharp4.Windows` (NuGet) — wrapper .NET de OpenCV, Media Foundation
-- `Windows.Media.Capture` (WinRT) — API Microsoft native Windows 10+
-
-### Architecture code-behind (pas de MVVM)
-
-L'application utilise du code-behind WPF pur, sans pattern MVVM
-(pas d'`ObservableObject`, pas de `RelayCommand`). Ce choix est assumé pour
-une application de cette taille. Les fichiers les plus volumineux
-(`CommandesView.cs`, `PaiementsView.cs`) mélangent logique UI et logique
-métier, ce qui les rend plus difficiles à maintenir et impossibles à tester
-directement (les tests unitaires couvrent les *Services*, pas les vues).
-
-Si une migration MVVM progressive est engagée, `CommunityToolkit.Mvvm`
-(déjà retiré du `.csproj`) est la bibliothèque recommandée pour ce projet.
+La capture photo par webcam utilise la bibliothèque AForge (2013, API DirectShow).
+Certaines webcams récentes peuvent ne pas être détectées.  
+En cas de problème, utiliser l'import de photo par fichier (bouton "Choisir un fichier").
 
 ---
 
