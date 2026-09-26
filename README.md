@@ -1,7 +1,7 @@
 # GestionCoutureApp
 
 Application de bureau Windows pour la gestion d'un atelier de couture.  
-Développée pour **Retoupe Choco / Ilassa Design** — Burkina Faso.
+Développée pour **ILBOUDO ISSOUF— Burkina Faso.
 
 ---
 
@@ -263,5 +263,5 @@ En cas de problème, utiliser l'import de photo par fichier (bouton "Choisir un 
 
 ## Licence
 
-Propriétaire — © 2026 Retoupe Choco / Ilassa Design. Tous droits réservés.  
+Propriétaire — © 2026 Ilboudo Issouf. Tous droits réservés.  
 Usage interne uniquement. Ne pas redistribuer sans autorisation écrite.
