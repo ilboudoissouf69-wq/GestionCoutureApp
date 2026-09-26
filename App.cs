@@ -721,120 +721,150 @@ namespace GestionCoutureApp
                 AjouterCol(c, "Employes", "DerniereModificationMotDePasse", "TEXT NULL"));
 
             // ── 20260925000000_ConsolidationFinale ────────────────────────────
-            AppliquerSi("20260925000000_ConsolidationFinale", c =>
+            // ── 20260925000000_ConsolidationFinale ────────────────────────────
+            // Cette migration est un no-op EF Core (Up() vide) donc elle est toujours
+            // marquée "appliquée" dans __EFMigrationsHistory dès que Migrate() tourne.
+            // AppliquerSi() la sauterait immédiatement. On applique donc TOUJOURS les
+            // colonnes de façon inconditionnelle — AjouterCol / CreateTable IF NOT EXISTS
+            // / CreateIndex IF NOT EXISTS sont idempotents et sans risque.
             {
-                // Commissions
-                AjouterCol(c, "Commissions", "PrimeQualite", "TEXT NOT NULL DEFAULT '0'");
+                log.LogInfo("[MIGRATION MANUELLE] Application inconditionnelle ConsolidationFinale...");
 
-                // Paiements : recréer avec IdOperateur NOT NULL
-                // On vérifie si la table Paiements_V2 existe déjà (migration interrompue)
-                using (var chk = c.CreateCommand())
+                // Commissions
+                AjouterCol(conn, "Commissions", "PrimeQualite", "TEXT NOT NULL DEFAULT '0'");
+
+                // Paiements : recréer avec IdOperateur NOT NULL seulement si encore nullable
+                try
                 {
-                    chk.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Paiements_V2'";
-                    long exists = (long)(chk.ExecuteScalar() ?? 0L);
-                    if (exists == 0)
+                    using var chkPai = conn.CreateCommand();
+                    chkPai.CommandText = "PRAGMA table_info(\"Paiements\")";
+                    using var rPai = chkPai.ExecuteReader();
+                    bool idOpNotNull = false;
+                    while (rPai.Read())
+                        if (rPai.GetString(1) == "IdOperateur" && rPai.GetInt32(3) == 1)
+                            idOpNotNull = true;
+
+                    if (!idOpNotNull)
                     {
-                        using var cr = c.CreateCommand();
-                        cr.CommandText = @"CREATE TABLE ""Paiements_V2"" (
-                            ""IdPaiement"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                            ""IdCommande"" INTEGER NOT NULL,
-                            ""MontantPaye"" TEXT NOT NULL,
-                            ""DatePaiement"" TEXT NOT NULL,
-                            ""ModePaiement"" TEXT NOT NULL DEFAULT 'Especes',
-                            ""RecuNumero"" TEXT NOT NULL DEFAULT '',
-                            ""IdOperateur"" INTEGER NOT NULL DEFAULT 0,
-                            ""NomOperateur"" TEXT NOT NULL DEFAULT '',
-                            ""EstAnnule"" INTEGER NOT NULL DEFAULT 0,
-                            ""MotifsAnnulation"" TEXT NULL,
-                            ""DateAnnulation"" TEXT NULL,
-                            ""NomAnnulateur"" TEXT NULL,
-                            ""MontantTotalCommande"" TEXT NOT NULL DEFAULT '0',
-                            ""ResteAvantPaiement"" TEXT NOT NULL DEFAULT '0',
-                            FOREIGN KEY (""IdCommande"") REFERENCES ""Commandes""(""IdCommande"") ON DELETE RESTRICT
-                        )";
-                        cr.ExecuteNonQuery();
+                        using var chk = conn.CreateCommand();
+                        chk.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Paiements_V2'";
+                        long exists = (long)(chk.ExecuteScalar() ?? 0L);
+                        if (exists == 0)
+                        {
+                            using var cr = conn.CreateCommand();
+                            cr.CommandText = @"CREATE TABLE ""Paiements_V2"" (
+                                ""IdPaiement"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                                ""IdCommande"" INTEGER NOT NULL,
+                                ""MontantPaye"" TEXT NOT NULL,
+                                ""DatePaiement"" TEXT NOT NULL,
+                                ""ModePaiement"" TEXT NOT NULL DEFAULT 'Especes',
+                                ""RecuNumero"" TEXT NOT NULL DEFAULT '',
+                                ""IdOperateur"" INTEGER NOT NULL DEFAULT 0,
+                                ""NomOperateur"" TEXT NOT NULL DEFAULT '',
+                                ""EstAnnule"" INTEGER NOT NULL DEFAULT 0,
+                                ""MotifsAnnulation"" TEXT NULL,
+                                ""DateAnnulation"" TEXT NULL,
+                                ""NomAnnulateur"" TEXT NULL,
+                                ""MontantTotalCommande"" TEXT NOT NULL DEFAULT '0',
+                                ""ResteAvantPaiement"" TEXT NOT NULL DEFAULT '0',
+                                FOREIGN KEY (""IdCommande"") REFERENCES ""Commandes""(""IdCommande"") ON DELETE RESTRICT
+                            )";
+                            cr.ExecuteNonQuery();
+                        }
+                        using (var ins = conn.CreateCommand())
+                        {
+                            ins.CommandText = @"INSERT OR IGNORE INTO ""Paiements_V2""
+                                (""IdPaiement"",""IdCommande"",""MontantPaye"",""DatePaiement"",""ModePaiement"",
+                                 ""RecuNumero"",""IdOperateur"",""NomOperateur"",""EstAnnule"",""MotifsAnnulation"",
+                                 ""DateAnnulation"",""NomAnnulateur"",""MontantTotalCommande"",""ResteAvantPaiement"")
+                                SELECT ""IdPaiement"",""IdCommande"",""MontantPaye"",""DatePaiement"",""ModePaiement"",
+                                       ""RecuNumero"",COALESCE(""IdOperateur"",0),""NomOperateur"",""EstAnnule"",
+                                       ""MotifsAnnulation"",""DateAnnulation"",""NomAnnulateur"",
+                                       COALESCE(""MontantTotalCommande"",'0'),COALESCE(""ResteAvantPaiement"",'0')
+                                FROM ""Paiements""
+                                WHERE ""IdPaiement"" NOT IN (SELECT ""IdPaiement"" FROM ""Paiements_V2"")";
+                            ins.ExecuteNonQuery();
+                        }
+                        using (var drop = conn.CreateCommand()) { drop.CommandText = "DROP TABLE \"Paiements\""; drop.ExecuteNonQuery(); }
+                        using (var ren = conn.CreateCommand()) { ren.CommandText = "ALTER TABLE \"Paiements_V2\" RENAME TO \"Paiements\""; ren.ExecuteNonQuery(); }
+                        log.LogInfo("[MIGRATION MANUELLE] Paiements.IdOperateur migré NOT NULL.");
                     }
                 }
-                using (var ins = c.CreateCommand())
-                {
-                    ins.CommandText = @"INSERT OR IGNORE INTO ""Paiements_V2""
-                        (""IdPaiement"",""IdCommande"",""MontantPaye"",""DatePaiement"",""ModePaiement"",
-                         ""RecuNumero"",""IdOperateur"",""NomOperateur"",""EstAnnule"",""MotifsAnnulation"",
-                         ""DateAnnulation"",""NomAnnulateur"",""MontantTotalCommande"",""ResteAvantPaiement"")
-                        SELECT ""IdPaiement"",""IdCommande"",""MontantPaye"",""DatePaiement"",""ModePaiement"",
-                               ""RecuNumero"",COALESCE(""IdOperateur"",0),""NomOperateur"",""EstAnnule"",
-                               ""MotifsAnnulation"",""DateAnnulation"",""NomAnnulateur"",
-                               COALESCE(""MontantTotalCommande"",'0'),COALESCE(""ResteAvantPaiement"",'0')
-                        FROM ""Paiements""
-                        WHERE ""IdPaiement"" NOT IN (SELECT ""IdPaiement"" FROM ""Paiements_V2"")";
-                    ins.ExecuteNonQuery();
-                }
-                using (var drop = c.CreateCommand()) { drop.CommandText = "DROP TABLE \"Paiements\""; drop.ExecuteNonQuery(); }
-                using (var ren = c.CreateCommand()) { ren.CommandText = "ALTER TABLE \"Paiements_V2\" RENAME TO \"Paiements\""; ren.ExecuteNonQuery(); }
-                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\")");
+                catch (Exception ex) { log.LogError("[MIGRATION MANUELLE] Erreur Paiements : " + ex.Message, ex); }
+
+                CreerIndex(conn, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\")");
 
                 // Employes
-                AjouterCol(c, "Employes", "DerniereModificationMotDePasse", "TEXT NULL");
+                AjouterCol(conn, "Employes", "DerniereModificationMotDePasse", "TEXT NULL");
 
                 // Depenses
-                AjouterCol(c, "Depenses", "Categorie",        "TEXT NOT NULL DEFAULT 'Divers'");
-                AjouterCol(c, "Depenses", "StatutValidation",  "TEXT NOT NULL DEFAULT 'Validee'");
-                AjouterCol(c, "Depenses", "IdOperateur",       "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(conn, "Depenses", "Categorie",        "TEXT NOT NULL DEFAULT 'Divers'");
+                AjouterCol(conn, "Depenses", "StatutValidation",  "TEXT NOT NULL DEFAULT 'Validee'");
+                AjouterCol(conn, "Depenses", "IdOperateur",       "INTEGER NOT NULL DEFAULT 0");
 
                 // MaterielsSupplements
-                AjouterCol(c, "MaterielsSupplements", "IdOperateur",  "INTEGER NOT NULL DEFAULT 0");
-                AjouterCol(c, "MaterielsSupplements", "NomOperateur", "TEXT NOT NULL DEFAULT ''");
+                AjouterCol(conn, "MaterielsSupplements", "IdOperateur",  "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(conn, "MaterielsSupplements", "NomOperateur", "TEXT NOT NULL DEFAULT ''");
 
                 // Commandes
-                AjouterCol(c, "Commandes", "EstSupprimee",           "INTEGER NOT NULL DEFAULT 0");
-                AjouterCol(c, "Commandes", "MotifSuppression",       "TEXT NULL");
-                AjouterCol(c, "Commandes", "DateSuppression",        "TEXT NULL");
-                AjouterCol(c, "Commandes", "IdOperateurSuppression", "INTEGER NULL");
-                AjouterCol(c, "Commandes", "NomOperateurSuppression","TEXT NULL");
-                AjouterCol(c, "Commandes", "IdOperateurCreation",    "INTEGER NOT NULL DEFAULT 0");
-                AjouterCol(c, "Commandes", "NomOperateurCreation",   "TEXT NOT NULL DEFAULT ''");
-                AjouterCol(c, "Commandes", "DateCreation",           "TEXT NOT NULL DEFAULT '2000-01-01 00:00:00'");
+                AjouterCol(conn, "Commandes", "EstSupprimee",            "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(conn, "Commandes", "MotifSuppression",        "TEXT NULL");
+                AjouterCol(conn, "Commandes", "DateSuppression",         "TEXT NULL");
+                AjouterCol(conn, "Commandes", "IdOperateurSuppression",  "INTEGER NULL");
+                AjouterCol(conn, "Commandes", "NomOperateurSuppression", "TEXT NULL");
+                AjouterCol(conn, "Commandes", "IdOperateurCreation",     "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(conn, "Commandes", "NomOperateurCreation",    "TEXT NOT NULL DEFAULT ''");
+                AjouterCol(conn, "Commandes", "DateCreation",            "TEXT NOT NULL DEFAULT '2000-01-01 00:00:00'");
 
-                using (var upd = c.CreateCommand())
+                try
                 {
+                    using var upd = conn.CreateCommand();
                     upd.CommandText = "UPDATE \"Commandes\" SET \"DateCreation\" = \"DateDebut\" WHERE \"DateCreation\" = '2000-01-01 00:00:00'";
                     upd.ExecuteNonQuery();
                 }
-                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_Commandes_EstSupprimee\" ON \"Commandes\" (\"EstSupprimee\")");
-                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_Commandes_IdOperateurCreation\" ON \"Commandes\" (\"IdOperateurCreation\")");
-                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Clients_Telephone_Unique\" ON \"Clients\" (\"Telephone\") WHERE \"Telephone\" IS NOT NULL AND \"Telephone\" != ''");
+                catch { }
+
+                CreerIndex(conn, "CREATE INDEX IF NOT EXISTS \"IX_Commandes_EstSupprimee\" ON \"Commandes\" (\"EstSupprimee\")");
+                CreerIndex(conn, "CREATE INDEX IF NOT EXISTS \"IX_Commandes_IdOperateurCreation\" ON \"Commandes\" (\"IdOperateurCreation\")");
+                CreerIndex(conn, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Clients_Telephone_Unique\" ON \"Clients\" (\"Telephone\") WHERE \"Telephone\" IS NOT NULL AND \"Telephone\" != ''");
 
                 // Retours champs reprise
-                AjouterCol(c, "Retours", "CheminPhotoDefaut",  "TEXT NULL");
-                AjouterCol(c, "Retours", "DateRdvReprise",     "TEXT NULL");
-                AjouterCol(c, "Retours", "HeureDebutReprise",  "TEXT NULL");
-                AjouterCol(c, "Retours", "HeureFinReprise",    "TEXT NULL");
-                AjouterCol(c, "Retours", "IdCouturierReprise", "INTEGER NULL");
-                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_Retours_IdCouturierReprise\" ON \"Retours\" (\"IdCouturierReprise\")");
+                AjouterCol(conn, "Retours", "CheminPhotoDefaut", "TEXT NULL");
+                AjouterCol(conn, "Retours", "DateRdvReprise",    "TEXT NULL");
+                AjouterCol(conn, "Retours", "HeureDebutReprise", "TEXT NULL");
+                AjouterCol(conn, "Retours", "HeureFinReprise",   "TEXT NULL");
+                AjouterCol(conn, "Retours", "IdCouturierReprise","INTEGER NULL");
+                CreerIndex(conn, "CREATE INDEX IF NOT EXISTS \"IX_Retours_IdCouturierReprise\" ON \"Retours\" (\"IdCouturierReprise\")");
 
                 // JournalAudit
-                using var jCmd = c.CreateCommand();
-                jCmd.CommandText = @"CREATE TABLE IF NOT EXISTS ""JournalAudit"" (
-                    ""IdJournal"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                    ""DateHeureUtc"" TEXT NOT NULL,
-                    ""IdOperateur"" INTEGER NOT NULL,
-                    ""NomOperateur"" TEXT NOT NULL,
-                    ""RoleOperateur"" TEXT NOT NULL,
-                    ""TypeAction"" TEXT NOT NULL,
-                    ""Entite"" TEXT NOT NULL,
-                    ""IdEntite"" INTEGER NOT NULL,
-                    ""ValeursAvant"" TEXT NULL,
-                    ""ValeursApres"" TEXT NULL,
-                    ""Motif"" TEXT NULL,
-                    ""HashPrecedent"" TEXT NULL,
-                    ""HashCourant"" TEXT NOT NULL,
-                    ""AdresseIp"" TEXT NULL,
-                    ""NotificationEnvoyee"" INTEGER NOT NULL DEFAULT 0
-                )";
-                jCmd.ExecuteNonQuery();
-                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_JournalAudit_DateHeureUtc\" ON \"JournalAudit\" (\"DateHeureUtc\")");
-                CreerIndex(c, "CREATE INDEX IF NOT EXISTS \"IX_JournalAudit_TypeAction\" ON \"JournalAudit\" (\"TypeAction\")");
-            });
+                try
+                {
+                    using var jCmd = conn.CreateCommand();
+                    jCmd.CommandText = @"CREATE TABLE IF NOT EXISTS ""JournalAudit"" (
+                        ""IdJournal"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""DateHeureUtc"" TEXT NOT NULL,
+                        ""IdOperateur"" INTEGER NOT NULL,
+                        ""NomOperateur"" TEXT NOT NULL,
+                        ""RoleOperateur"" TEXT NOT NULL,
+                        ""TypeAction"" TEXT NOT NULL,
+                        ""Entite"" TEXT NOT NULL,
+                        ""IdEntite"" INTEGER NOT NULL,
+                        ""ValeursAvant"" TEXT NULL,
+                        ""ValeursApres"" TEXT NULL,
+                        ""Motif"" TEXT NULL,
+                        ""HashPrecedent"" TEXT NULL,
+                        ""HashCourant"" TEXT NOT NULL,
+                        ""AdresseIp"" TEXT NULL,
+                        ""NotificationEnvoyee"" INTEGER NOT NULL DEFAULT 0
+                    )";
+                    jCmd.ExecuteNonQuery();
+                    CreerIndex(conn, "CREATE INDEX IF NOT EXISTS \"IX_JournalAudit_DateHeureUtc\" ON \"JournalAudit\" (\"DateHeureUtc\")");
+                    CreerIndex(conn, "CREATE INDEX IF NOT EXISTS \"IX_JournalAudit_TypeAction\" ON \"JournalAudit\" (\"TypeAction\")");
+                }
+                catch (Exception ex) { log.LogError("[MIGRATION MANUELLE] Erreur JournalAudit : " + ex.Message, ex); }
+
+                log.LogInfo("[MIGRATION MANUELLE] ConsolidationFinale appliquée.");
+            }
         }
 
         /// <summary>
