@@ -1890,16 +1890,37 @@ namespace GestionCoutureApp.Views
             }
 
             // ── MATÉRIAUX / SUPPLÉMENTS ──
+            // Tous les matériaux : ceux des pièces existantes + ceux de la nouvelle pièce
             decimal totalMat = 0;
             var blcMat = CreerBlocRecap("📦  Matériaux / Suppléments");
-            if (materiaux.Count > 0)
+            bool aDesMateriaux = false;
+
+            // 1. Matériaux des pièces déjà enregistrées en base
+            if (piecesExistantes != null)
             {
-                foreach (var mat in materiaux)
+                foreach (var pe in piecesExistantes)
                 {
-                    AjouterLigneRecap(blcMat, mat.Designation,
-                        $"{mat.Quantite} × {mat.PrixUnitaire:N0} = {mat.Montant:N0} FCFA");
-                    totalMat += mat.Montant;
+                    foreach (var mat in pe.MaterielSupplements)
+                    {
+                        AjouterLigneRecap(blcMat, mat.Designation,
+                            $"{mat.Quantite} × {mat.PrixUnitaire:N0} = {mat.Montant:N0} FCFA");
+                        totalMat += mat.Montant;
+                        aDesMateriaux = true;
+                    }
                 }
+            }
+
+            // 2. Matériaux de la nouvelle pièce (buffer temporaire)
+            foreach (var mat in materiaux)
+            {
+                AjouterLigneRecap(blcMat, mat.Designation,
+                    $"{mat.Quantite} × {mat.PrixUnitaire:N0} = {mat.Montant:N0} FCFA");
+                totalMat += mat.Montant;
+                aDesMateriaux = true;
+            }
+
+            if (aDesMateriaux)
+            {
                 ((StackPanel)blcMat.Child).Children.Add(new Border
                 {
                     Height = 1,
