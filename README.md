@@ -221,16 +221,27 @@ Pour activer la sauvegarde vers Google Drive :
 
 ## Lancer les tests
 
+L'application doit être **fermée** avant de lancer les tests — sinon le build
+échoue car la DLL est verrouillée par le processus en cours.
+
 ```powershell
-# Depuis le dossier racine du projet
-# (fermer l'application avant de lancer les tests)
+# 1. Tuer tous les processus dotnet en cours (application + hôtes résiduels)
+Stop-Process -Name dotnet -Force
+
+# 2. Vérifier qu'il ne reste rien
+Get-Process dotnet
+# → doit ne rien afficher (erreur "introuvable" = c'est bon)
+
+# 3. Lancer les tests depuis le dossier racine du projet
 dotnet test GestionCoutureApp.Tests
 ```
 
 Résultat attendu : **41/41 réussis, 0 ignoré, 0 échec.**
 
-> Si le build échoue avec "fichier verrouillé", c'est que l'application est encore
-> ouverte. Fermez-la complètement, vérifiez avec `Get-Process dotnet`, puis relancez.
+> `-Force` est nécessaire car les processus `dotnet` résiduels ne répondent pas
+> toujours à une fermeture normale. Si vous connaissez le PID exact (visible dans
+> le message d'erreur), vous pouvez cibler un processus précis :
+> `Stop-Process -Id 27508 -Force`
 
 ---
 
