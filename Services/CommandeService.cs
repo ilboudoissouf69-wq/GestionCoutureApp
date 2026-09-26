@@ -656,6 +656,7 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
                 .Include(p => p.Mesures)
+                .Include(p => p.MaterielSupplements) // ✅ FIX FK : charger les matériaux liés
                 .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
 
@@ -681,6 +682,14 @@ namespace GestionCoutureApp.Services
                     "Impossible de supprimer la dernière pièce d'une commande. " +
                     "Supprimez la commande entière si nécessaire.");
             }
+
+            // ✅ FIX FK : supprimer les matériaux d'abord — la relation
+            // PieceCommande→MaterielSupplements est OnDelete(Restrict) (pas Cascade,
+            // car MaterielSupplement a déjà une FK Commande en Cascade et EF Core
+            // refuse deux chemins de cascade sur la même table). Sans ce RemoveRange,
+            // SQLite lève "FOREIGN KEY constraint failed".
+            if (piece.MaterielSupplements.Any())
+                context.MaterielsSupplements.RemoveRange(piece.MaterielSupplements);
 
             context.Mesures.RemoveRange(piece.Mesures);
             context.PiecesCommande.Remove(piece);

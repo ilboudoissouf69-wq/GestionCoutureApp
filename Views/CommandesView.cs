@@ -125,7 +125,12 @@ namespace GestionCoutureApp.Views
             }
 
             CmbClient.ItemsSource = _clientService.ObtenirTous();
-            CmbCouturier.ItemsSource = _context.Employes.Where(e => e.Statut == "Actif").ToList();
+            // ✅ FIX : filtrer par rôle Couturier — la secrétaire et le Boss
+            // n'ont pas à apparaître dans la liste d'attribution des pièces.
+            CmbCouturier.ItemsSource = _context.Employes
+                .Where(e => e.Statut == "Actif" && e.Role == "Couturier")
+                .OrderBy(e => e.Prenom)
+                .ToList();
 
             // ✅ FIX : Protection complète autour du chargement des types de vêtements
             try
@@ -960,10 +965,16 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // SECRETAIRE : confirmation + mot de passe pour l'ajout de pièce
+            // SECRETAIRE : avertissement simple — l'action est irréversible,
+            // mais pas besoin de redemander le mot de passe à chaque pièce.
             if (_roleUtilisateur == "Secretaire" && _pieceSelectionneeId == null)
             {
-                if (!DemanderMotDePasse()) return;
+                var rep = MessageBox.Show(
+                    "Attention : l'enregistrement de cette pièce est irréversible.\n\nConfirmer ?",
+                    "Confirmation",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Information);
+                if (rep != MessageBoxResult.OK) return;
             }
 
             // ✅ FIX : Protection contre null pour _typesVetement
@@ -1036,7 +1047,8 @@ namespace GestionCoutureApp.Views
 
                 if (!AfficherRecapitulatif(nomClient, typeVet, description, couturier,
                         montant, DateFin.SelectedDate ?? DateTime.Today,
-                        mesures, _materiauxTemporaires))
+                        mesures, _materiauxTemporaires,
+                        piecesExistantes: _piecesCommande))
                     return; // L'utilisateur a annulé
             }
 
@@ -1638,7 +1650,15 @@ namespace GestionCoutureApp.Views
             // SECRETAIRE : confirmation + mot de passe
             if (_roleUtilisateur == "Secretaire")
             {
-                if (!DemanderMotDePasse()) return;
+                // Avertissement simple — pas de mot de passe : la secrétaire est
+                // déjà authentifiée. Un simple message suffit pour l'informer
+                // que l'enregistrement de la commande est irréversible.
+                var rep = MessageBox.Show(
+                    "Attention : l'enregistrement de cette commande est irréversible.\n\nConfirmer la création ?",
+                    "Confirmation",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Information);
+                if (rep != MessageBoxResult.OK) return;
             }
 
             var commande = new Commande
@@ -1761,7 +1781,8 @@ namespace GestionCoutureApp.Views
         private bool AfficherRecapitulatif(
             string client, string typeVetement, string description,
             string couturier, decimal montant, DateTime dateRdv,
-            List<Mesure> mesures, List<MaterielSupplement> materiaux)
+            List<Mesure> mesures, List<MaterielSupplement> materiaux,
+            List<PieceCommande>? piecesExistantes = null)
         {
             var dialog = new Window
             {
@@ -1849,8 +1870,25 @@ namespace GestionCoutureApp.Views
             }
             root.Children.Add(blcMat);
 
+            // ── Pièces déjà enregistrées (ajout multi-pièces) ──
+            decimal montantPiecesExistantes = 0;
+            if (piecesExistantes != null && piecesExistantes.Count > 0)
+            {
+                var blcExist = CreerBlocRecap($"📋  Pièces déjà enregistrées ({piecesExistantes.Count})");
+                foreach (var pe in piecesExistantes)
+                {
+                    AjouterLigneRecap(blcExist,
+                        pe.TypeVetement,
+                        $"{pe.MontantCouture:N0} FCFA");
+                    montantPiecesExistantes += pe.MontantCouture;
+                }
+                AjouterLigneRecap(blcExist, "Sous-total existant",
+                    $"{montantPiecesExistantes:N0} FCFA", gras: true);
+                root.Children.Add(blcExist);
+            }
+
             // ── Total général ──
-            var totalGeneral = montant + totalMat;
+            var totalGeneral = montantPiecesExistantes + montant + totalMat;
             var blcTotal = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
