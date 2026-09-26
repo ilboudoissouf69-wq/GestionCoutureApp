@@ -1,12 +1,47 @@
-﻿bin/
+﻿# ── Binaires et artefacts de build ──────────────────────────────────────────
+bin/
 obj/
+# Dossier de build sans slash intermédiaire (ex: binDebugnet8.0-windows/)
+binDebug*/
+binRelease*/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# ── Bases SQLite (données locales) ──────────────────────────────────────────
 *.db
 *.db-shm
 *.db-wal
-.vs/
-*.user
-*.suo
+
+# ── Logs applicatifs ─────────────────────────────────────────────────────────
+*.log
+Logs/
+
+# ── Photos et médias uploadés ────────────────────────────────────────────────
 /PhotosCommandes/
 /Photos/
-*.log
+
+# ── Secrets OAuth Google Drive ───────────────────────────────────────────────
+# Ne JAMAIS committer ces fichiers — les placer dans
+# %LOCALAPPDATA%\GestionCoutureApp\ manuellement.
 client_secret.json
+credentials.json
+token.json
+*.credentials
+
+# ── Sauvegardes automatiques ─────────────────────────────────────────────────
+/Backups/
+
+# ── Fichiers temporaires ─────────────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+[Tt]humbs.db
+.DS_Store
+
+# ── Couverture de tests ───────────────────────────────────────────────────────
+TestResults/
+coverage.json
+coverage.cobertura.xml

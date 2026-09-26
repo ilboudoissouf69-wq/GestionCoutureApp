@@ -637,8 +637,15 @@ namespace GestionCoutureApp
         private static void AppliquerMigrationsManquantes(ApplicationDbContext context, ILogService log)
         {
             // Connexion ADO.NET séparée — ne pas réutiliser celle du context EF Core
-            // qui vient d'exécuter Migrate() et peut avoir des locks residuels.
-            string connStr = context.Database.GetConnectionString() ?? AppPaths.ChaineConnexionSqlite;
+            // qui vient d'exécuter Migrate() et peut avoir des locks résiduels.
+            // IMPORTANT : on retire Cache=Shared de la chaîne de connexion.
+            // Cache=Shared fait que SQLite partage le cache entre connexions du même
+            // processus — ce qui peut cacher les colonnes fraîchement ajoutées par
+            // Migrate() quand on ouvre une deuxième connexion juste après.
+            string connStr = AppPaths.ChaineConnexionSqlite
+                .Replace(";Cache=Shared", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("Cache=Shared;", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("Cache=Shared",  "", StringComparison.OrdinalIgnoreCase);
             using var conn = new Microsoft.Data.Sqlite.SqliteConnection(connStr);
             conn.Open();
 

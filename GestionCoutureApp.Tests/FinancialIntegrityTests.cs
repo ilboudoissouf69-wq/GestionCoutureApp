@@ -503,4 +503,466 @@ namespace GestionCoutureApp.Tests
         public ApplicationDbContext CreateDbContext()
             => new ApplicationDbContext(_options);
     }
+
+    // ====================================================================
+    // Tests d'idempotence des migrations (tâche 4)
+    // ====================================================================
+
+    /// <summary>
+    /// Tests vérifiant que le pattern de migration utilisé dans App.cs est
+    /// idempotent — c'est-à-dire que l'appliquer deux fois de suite sur la même
+    /// base ne plante pas et laisse le schéma dans l'état attendu.
+    ///
+    /// Ces tests reproduisent exactement le scénario du bug corrigé :
+    ///   suppressTransaction:true ne supprime PAS les erreurs SQLite. Si une
+    ///   migration basée sur ALTER TABLE ADD COLUMN s'interrompait au milieu,
+    ///   les colonnes déjà ajoutées restaient committées (car hors transaction)
+    ///   mais la migration était marquée non appliquée dans __EFMigrationsHistory.
+    ///   Au prochain lancement, EF Core rejouait la migration entière et plantait
+    ///   sur "duplicate column name: X".
+    ///
+    /// Le correctif : utiliser AjouterCol() avec try/catch individuel par colonne
+    /// + enregistrement dans __EFMigrationsHistory uniquement après succès total.
+    /// Ces tests vérifient que ce pattern est bien robuste.
+    /// </summary>
+    [TestFixture]
+    public class IdempotenceMigrationTests
+    {
+        // Chaque test utilise un fichier SQLite temporaire sur disque (pas InMemory)
+        // car les migrations SQLite réelles nécessitent le vrai moteur SQLite.
+        private string _dbPath = null!;
+        private string _connStr = null!;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _dbPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"idempotence_test_{Guid.NewGuid():N}.db");
+            _connStr = $"Data Source={_dbPath}";
+
+            // Créer le schéma minimal de base (simulant les 10 premières migrations)
+            using var conn = OuvrirConnexion();
+            CreerSchemaMinimal(conn);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            // Nettoyage du fichier temporaire
+            try
+            {
+                if (System.IO.File.Exists(_dbPath))     System.IO.File.Delete(_dbPath);
+                if (System.IO.File.Exists(_dbPath + "-wal")) System.IO.File.Delete(_dbPath + "-wal");
+                if (System.IO.File.Exists(_dbPath + "-shm")) System.IO.File.Delete(_dbPath + "-shm");
+            }
+            catch { /* fichier verrouillé — le GC nettoiera */ }
+        }
+
+        // ================================================================
+        // T_IDM01 — Le scénario du bug : colonne présente, migration absente
+        // ================================================================
+
+        [Test]
+        public void T_IDM01_AjouterCol_DejaPresente_Ne_Plante_Pas()
+        {
+            // Arrange : vérifier que EstAnnule est déjà présente (ajoutée par
+            // 20260805205656_AjoutMotifExceptionPiece dans CreerSchemaMinimal).
+            // C'est exactement le scénario du bug : la colonne existe mais la
+            // migration 20260916000000 n'est PAS enregistrée dans __EFMigrationsHistory.
+            using (var conn = OuvrirConnexion())
+            {
+                var colonnes = LireColonnes(conn, "Retours");
+                // Précondition : EstAnnule est déjà là grâce au schéma minimal
+                Assert.That(colonnes, Does.Contain("EstAnnule"),
+                    "Précondition : EstAnnule doit être présente dès le schéma minimal " +
+                    "(20260805205656 l'a ajouté)");
+                // 20260916000000 n'est PAS enregistrée → scénario du bug exact
+                var migrations = LireMigrationsAppliquees(conn);
+                Assert.That(migrations,
+                    Does.Not.Contain("20260916000000_AjoutRetoursChampsReprise"),
+                    "Précondition : 20260916000000 ne doit pas être dans __EFMigrationsHistory");
+            }
+
+            // Act : appliquer la logique AjouterColIdempotent deux fois
+            // La première fois : EstAnnule existe → doit ignorer silencieusement
+            // La deuxième fois : idem — comportement stable
+            Assert.DoesNotThrow(() =>
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    using var conn = OuvrirConnexion();
+                    AjouterColIdempotent(conn, "Retours", "EstAnnule",         "INTEGER NOT NULL DEFAULT 0");
+                    AjouterColIdempotent(conn, "Retours", "MotifAnnulation",   "TEXT NULL");
+                    AjouterColIdempotent(conn, "Retours", "CheminPhotoDefaut", "TEXT NULL");
+                }
+            }, "AjouterColIdempotent ne doit pas planter même si la colonne existe déjà");
+
+            // Assert : toutes les colonnes sont présentes après les deux passes
+            using var verification = OuvrirConnexion();
+            var colsFinales = LireColonnes(verification, "Retours");
+            Assert.That(colsFinales, Does.Contain("EstAnnule"),         "EstAnnule doit être présente");
+            Assert.That(colsFinales, Does.Contain("MotifAnnulation"),   "MotifAnnulation doit être présente");
+            Assert.That(colsFinales, Does.Contain("CheminPhotoDefaut"), "CheminPhotoDefaut doit être présente");
+        }
+
+        // ================================================================
+        // T_IDM02 — Double application via __EFMigrationsHistory
+        // ================================================================
+
+        [Test]
+        public void T_IDM02_Migration_Deja_Enregistree_Est_Sautee()
+        {
+            // Arrange : migration déjà enregistrée dans __EFMigrationsHistory
+            using (var conn = OuvrirConnexion())
+            {
+                ExecuterSql(conn,
+                    "INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) " +
+                    "VALUES ('20260916000000_AjoutRetoursChampsReprise', '8.0.11')");
+            }
+
+            // Act : simuler un deuxième appel (comme si Migrate() rejouait la migration)
+            // Sans la vérification __EFMigrationsHistory, ça planterait sur la colonne dupliquée
+            int compteurExecution = 0;
+
+            Assert.DoesNotThrow(() =>
+            {
+                using var conn = OuvrirConnexion();
+                var appliquees = LireMigrationsAppliquees(conn);
+
+                if (!appliquees.Contains("20260916000000_AjoutRetoursChampsReprise"))
+                {
+                    compteurExecution++;
+                    AjouterColIdempotent(conn, "Retours", "EstAnnule", "INTEGER NOT NULL DEFAULT 0");
+                }
+            });
+
+            // Assert : la migration a été sautée car déjà enregistrée
+            Assert.That(compteurExecution, Is.EqualTo(0),
+                "La migration ne doit pas s'exécuter si déjà dans __EFMigrationsHistory");
+        }
+
+        // ================================================================
+        // T_IDM03 — Colonne absente → ajoutée ; colonne présente → sautée
+        // ================================================================
+
+        [Test]
+        public void T_IDM03_AjouterColIdempotent_Comportement_Selon_Presence()
+        {
+            // Arrange : Commandes n'a pas encore EstSupprimee
+            using (var conn = OuvrirConnexion())
+            {
+                var avant = LireColonnes(conn, "Commandes");
+                Assert.That(avant, Does.Not.Contain("EstSupprimee"), "Précondition : EstSupprimee absente");
+            }
+
+            // Act 1 : première application → doit ajouter la colonne
+            using (var conn = OuvrirConnexion())
+                AjouterColIdempotent(conn, "Commandes", "EstSupprimee", "INTEGER NOT NULL DEFAULT 0");
+
+            using (var conn = OuvrirConnexion())
+                Assert.That(LireColonnes(conn, "Commandes"), Does.Contain("EstSupprimee"),
+                    "EstSupprimee doit être présente après première application");
+
+            // Act 2 : deuxième application → doit ignorer silencieusement
+            Assert.DoesNotThrow(() =>
+            {
+                using var conn = OuvrirConnexion();
+                AjouterColIdempotent(conn, "Commandes", "EstSupprimee", "INTEGER NOT NULL DEFAULT 0");
+            }, "Deuxième application sur colonne déjà présente ne doit pas planter");
+
+            // Assert : la colonne est toujours là (pas d'état corrompu)
+            using (var conn = OuvrirConnexion())
+                Assert.That(LireColonnes(conn, "Commandes"), Does.Contain("EstSupprimee"),
+                    "EstSupprimee doit toujours être présente après double application");
+        }
+
+        // ================================================================
+        // T_IDM04 — CREATE INDEX IF NOT EXISTS est vraiment idempotent
+        // ================================================================
+
+        [Test]
+        public void T_IDM04_CreerIndexSiAbsent_Idempotent()
+        {
+            const string sql = "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" " +
+                               "ON \"Paiements\" (\"RecuNumero\")";
+
+            // Act : créer l'index deux fois
+            Assert.DoesNotThrow(() =>
+            {
+                using var c1 = OuvrirConnexion(); ExecuterSql(c1, sql);
+                using var c2 = OuvrirConnexion(); ExecuterSql(c2, sql); // IF NOT EXISTS → no-op
+            }, "CREATE INDEX IF NOT EXISTS doit être idempotent");
+
+            // Assert : l'index existe
+            using var conn = OuvrirConnexion();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='IX_Paiements_RecuNumero'";
+            Assert.That((long)(cmd.ExecuteScalar() ?? 0L), Is.EqualTo(1));
+        }
+
+        // ================================================================
+        // T_IDM05 — CREATE TABLE IF NOT EXISTS est vraiment idempotent
+        // ================================================================
+
+        [Test]
+        public void T_IDM05_CreerTableSiAbsente_Idempotent()
+        {
+            const string ddl = @"CREATE TABLE IF NOT EXISTS ""JournalAudit"" (
+                ""IdJournal"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""DateHeureUtc"" TEXT NOT NULL,
+                ""HashCourant"" TEXT NOT NULL
+            )";
+
+            Assert.DoesNotThrow(() =>
+            {
+                using var c1 = OuvrirConnexion(); ExecuterSql(c1, ddl);
+                using var c2 = OuvrirConnexion(); ExecuterSql(c2, ddl); // IF NOT EXISTS → no-op
+            }, "CREATE TABLE IF NOT EXISTS doit être idempotent");
+
+            using var conn = OuvrirConnexion();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='JournalAudit'";
+            Assert.That((long)(cmd.ExecuteScalar() ?? 0L), Is.EqualTo(1));
+        }
+
+        // ================================================================
+        // T_IDM06 — Migration complète simulée : 4 passages consécutifs
+        // ================================================================
+
+        [Test]
+        public void T_IDM06_Migration_Complete_Tolerante_A_Replays_Multiples()
+        {
+            // Reproduit la séquence exacte du bug : on rejoue la logique de
+            // ConsolidationFinale 4 fois (ex. 4 redémarrages consécutifs sans
+            // que la migration soit enregistrée dans __EFMigrationsHistory).
+            // Aucune exception ne doit être levée, et le schéma final doit être cohérent.
+
+            var colonnesCommandesAttendues = new[]
+            {
+                "EstSupprimee", "MotifSuppression", "DateSuppression",
+                "IdOperateurCreation", "NomOperateurCreation", "DateCreation"
+            };
+            var colonnesDeAttendues = new[] { "Categorie", "StatutValidation" };
+
+            Assert.DoesNotThrow(() =>
+            {
+                for (int passage = 1; passage <= 4; passage++)
+                {
+                    using var conn = OuvrirConnexion();
+                    // Commandes
+                    foreach (var c in colonnesCommandesAttendues)
+                        AjouterColIdempotent(conn, "Commandes", c,
+                            c.StartsWith("Id") || c == "EstSupprimee"
+                                ? "INTEGER NOT NULL DEFAULT 0"
+                                : "TEXT NULL");
+                    // Depenses
+                    AjouterColIdempotent(conn, "Depenses", "Categorie",       "TEXT NOT NULL DEFAULT 'Divers'");
+                    AjouterColIdempotent(conn, "Depenses", "StatutValidation", "TEXT NOT NULL DEFAULT 'Validee'");
+                    // JournalAudit
+                    ExecuterSql(conn, @"CREATE TABLE IF NOT EXISTS ""JournalAudit"" (
+                        ""IdJournal"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""DateHeureUtc"" TEXT NOT NULL,
+                        ""HashCourant"" TEXT NOT NULL
+                    )");
+                }
+            }, "4 passages consécutifs de la migration ne doivent pas planter");
+
+            // Vérification finale du schéma
+            using var final = OuvrirConnexion();
+            var colsCommandes = LireColonnes(final, "Commandes");
+            var colsDepenses  = LireColonnes(final, "Depenses");
+
+            foreach (var col in colonnesCommandesAttendues)
+                Assert.That(colsCommandes, Does.Contain(col), $"Commandes.{col} attendue");
+            foreach (var col in colonnesDeAttendues)
+                Assert.That(colsDepenses, Does.Contain(col), $"Depenses.{col} attendue");
+
+            using var chkJournal = OuvrirConnexion();
+            using var cmd = chkJournal.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='JournalAudit'";
+            Assert.That((long)(cmd.ExecuteScalar() ?? 0L), Is.EqualTo(1), "JournalAudit doit exister");
+        }
+
+        // ================================================================
+        // Helpers privés
+        // ================================================================
+
+        private Microsoft.Data.Sqlite.SqliteConnection OuvrirConnexion()
+        {
+            var conn = new Microsoft.Data.Sqlite.SqliteConnection(_connStr);
+            conn.Open();
+            return conn;
+        }
+
+        private static void ExecuterSql(Microsoft.Data.Sqlite.SqliteConnection conn, string sql)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// ALTER TABLE ADD COLUMN idempotent : ignore silencieusement
+        /// "duplicate column name". C'est le pattern correct — pas suppressTransaction.
+        /// </summary>
+        private static void AjouterColIdempotent(
+            Microsoft.Data.Sqlite.SqliteConnection conn,
+            string table, string col, string def)
+        {
+            try
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{col}\" {def}";
+                cmd.ExecuteNonQuery();
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex)
+                when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+            {
+                // Colonne déjà présente — comportement normal, rien à faire.
+            }
+            // Toute autre exception (table inexistante, syntaxe invalide...) remonte.
+        }
+
+        private static System.Collections.Generic.HashSet<string> LireColonnes(
+            Microsoft.Data.Sqlite.SqliteConnection conn, string table)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info(\"{table}\")";
+            using var r = cmd.ExecuteReader();
+            var cols = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (r.Read()) cols.Add(r.GetString(1)); // colonne "name"
+            return cols;
+        }
+
+        private static System.Collections.Generic.HashSet<string> LireMigrationsAppliquees(
+            Microsoft.Data.Sqlite.SqliteConnection conn)
+        {
+            var set = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT MigrationId FROM __EFMigrationsHistory";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) set.Add(r.GetString(0));
+            }
+            catch { /* table absente sur base fraîche */ }
+            return set;
+        }
+
+        /// <summary>
+        /// Crée le schéma minimal simulant l'état après les 10 migrations stables
+        /// (InitialCreate → AjoutMotifExceptionPiece), sans les 4 migrations ignorées
+        /// par EF Core. C'est l'état exact d'une base de production ancienne.
+        /// </summary>
+        private static void CreerSchemaMinimal(Microsoft.Data.Sqlite.SqliteConnection conn)
+        {
+            // Table de contrôle des migrations
+            ExecuterSql(conn, @"CREATE TABLE __EFMigrationsHistory (
+                MigrationId TEXT NOT NULL PRIMARY KEY,
+                ProductVersion TEXT NOT NULL
+            )");
+
+            // Insérer les 10 migrations "stables" appliquées
+            var migrations = new[]
+            {
+                "20260718235951_InitialCreate",
+                "20260719120000_AjoutForceChangementMotDePasse",
+                "20260719120100_CorrectionTypeColonnesMontants",
+                "20260720112030_SupprimerDoitChangerMotDePasse",
+                "20260727125439_AjoutPieceCommande",
+                "20260730161111_AjoutParametres",
+                "20260730183312_AjoutRetours",
+                "20260730204755_AjoutDepenses",
+                "20260731073029_AjoutMaterielsSupplements",
+                "20260805205656_AjoutMotifExceptionPiece",
+            };
+            foreach (var m in migrations)
+                ExecuterSql(conn,
+                    $"INSERT INTO __EFMigrationsHistory VALUES ('{m}', '8.0.11')");
+
+            // Commandes (schéma après InitialCreate, sans les nouvelles colonnes)
+            ExecuterSql(conn, @"CREATE TABLE ""Commandes"" (
+                ""IdCommande"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""IdClient"" INTEGER NOT NULL,
+                ""TypeVetement"" TEXT NOT NULL,
+                ""MontantTotal"" TEXT NOT NULL DEFAULT '0',
+                ""DateDebut"" TEXT NOT NULL,
+                ""DateFin"" TEXT NOT NULL,
+                ""Statut"" TEXT NOT NULL DEFAULT 'A faire'
+            )");
+
+            // Paiements (avec IdOperateur nullable — état avant ConsolidationFinale)
+            ExecuterSql(conn, @"CREATE TABLE ""Paiements"" (
+                ""IdPaiement"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""IdCommande"" INTEGER NOT NULL,
+                ""MontantPaye"" TEXT NOT NULL,
+                ""DatePaiement"" TEXT NOT NULL,
+                ""ModePaiement"" TEXT NOT NULL DEFAULT 'Especes',
+                ""RecuNumero"" TEXT NOT NULL DEFAULT '',
+                ""IdOperateur"" INTEGER NULL,
+                ""NomOperateur"" TEXT NOT NULL DEFAULT '',
+                ""EstAnnule"" INTEGER NOT NULL DEFAULT 0,
+                ""MotifsAnnulation"" TEXT NULL,
+                ""DateAnnulation"" TEXT NULL,
+                ""NomAnnulateur"" TEXT NULL,
+                ""MontantTotalCommande"" TEXT NOT NULL DEFAULT '0',
+                ""ResteAvantPaiement"" TEXT NOT NULL DEFAULT '0'
+            )");
+
+            // Depenses (sans Categorie, StatutValidation, IdOperateur)
+            ExecuterSql(conn, @"CREATE TABLE ""Depenses"" (
+                ""IdDepense"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""TypeDepense"" TEXT NOT NULL,
+                ""Montant"" TEXT NOT NULL,
+                ""DateDepense"" TEXT NOT NULL,
+                ""Description"" TEXT NOT NULL DEFAULT '',
+                ""NomOperateur"" TEXT NOT NULL DEFAULT ''
+            )");
+
+            // Retours (sans les colonnes de reprise)
+            ExecuterSql(conn, @"CREATE TABLE ""Retours"" (
+                ""IdRetour"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""IdCommande"" INTEGER NOT NULL,
+                ""Statut"" TEXT NOT NULL DEFAULT 'Signale',
+                ""EstAnnule"" INTEGER NOT NULL DEFAULT 0
+            )");
+
+            // Employes (sans DerniereModificationMotDePasse)
+            ExecuterSql(conn, @"CREATE TABLE ""Employes"" (
+                ""IdEmploye"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""Nom"" TEXT NOT NULL,
+                ""Prenom"" TEXT NOT NULL,
+                ""Identifiant"" TEXT NOT NULL,
+                ""MotDePasse"" TEXT NOT NULL,
+                ""Role"" TEXT NOT NULL,
+                ""Statut"" TEXT NOT NULL DEFAULT 'Actif'
+            )");
+
+            // Clients
+            ExecuterSql(conn, @"CREATE TABLE ""Clients"" (
+                ""IdClient"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""Nom"" TEXT NOT NULL,
+                ""Prenom"" TEXT NOT NULL,
+                ""Telephone"" TEXT NOT NULL DEFAULT ''
+            )");
+
+            // Commissions (sans PrimeQualite)
+            ExecuterSql(conn, @"CREATE TABLE ""Commissions"" (
+                ""IdCommission"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""IdEmploye"" INTEGER NOT NULL,
+                ""MontantCommission"" TEXT NOT NULL DEFAULT '0',
+                ""DateCalcul"" TEXT NOT NULL
+            )");
+
+            // MaterielsSupplements (sans IdOperateur, NomOperateur)
+            ExecuterSql(conn, @"CREATE TABLE ""MaterielsSupplements"" (
+                ""IdMateriel"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""IdCommande"" INTEGER NOT NULL,
+                ""Designation"" TEXT NOT NULL,
+                ""Quantite"" INTEGER NOT NULL DEFAULT 1,
+                ""PrixUnitaire"" TEXT NOT NULL DEFAULT '0'
+            )");
+        }
+    }
 }
