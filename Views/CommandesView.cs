@@ -1778,6 +1778,13 @@ namespace GestionCoutureApp.Views
         }
 
         // ── Fenêtre de récapitulatif ───────────────────────────────────────
+        // Affiche un récap complet style reçu :
+        //   - En-tête commande (client, date RDV)
+        //   - DÉTAIL COUTURE : toutes les pièces (existantes + nouvelle en cours)
+        //     avec type, couturier et montant
+        //   - MESURES de la pièce en cours
+        //   - MATÉRIAUX / SUPPLÉMENTS de la pièce en cours
+        //   - S/T Couture, S/T Matériaux, TOTAL GÉNÉRAL
         private bool AfficherRecapitulatif(
             string client, string typeVetement, string description,
             string couturier, decimal montant, DateTime dateRdv,
@@ -1797,12 +1804,12 @@ namespace GestionCoutureApp.Views
             var scroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                MaxHeight = 580
+                MaxHeight = 620
             };
 
             var root = new StackPanel { Margin = new Thickness(28, 24, 28, 20) };
 
-            // ── En-tête rouge ──
+            // ── En-tête ──
             root.Children.Add(new TextBlock
             {
                 Text = "Récapitulatif de la commande",
@@ -1824,71 +1831,97 @@ namespace GestionCoutureApp.Views
             AjouterLigneRecap(blcCmd, "Date RDV", dateRdv.ToString("dd/MM/yyyy"));
             root.Children.Add(blcCmd);
 
-            // ── Bloc pièce ──
-            var blcPiece = CreerBlocRecap("🧵  Pièce");
-            AjouterLigneRecap(blcPiece, "Type", typeVetement);
-            AjouterLigneRecap(blcPiece, "Couturier", couturier);
-            AjouterLigneRecap(blcPiece, "Montant couture", $"{montant:N0} FCFA");
-            if (!string.IsNullOrWhiteSpace(description))
-                AjouterLigneRecap(blcPiece, "Description", description);
-            root.Children.Add(blcPiece);
+            // ── DÉTAIL COUTURE — toutes les pièces (existantes + nouvelle) ──
+            // Identique au reçu : chaque ligne = type + couturier + montant
+            var blcCouture = CreerBlocRecap("🧵  Détail couture");
+            decimal totalCouture = 0;
 
-            // ── Bloc mesures ──
+            // 1. Pièces déjà enregistrées en base
+            if (piecesExistantes != null)
+            {
+                foreach (var pe in piecesExistantes)
+                {
+                    AjouterLigneRecap(blcCouture, pe.TypeVetement, $"{pe.MontantCouture:N0} FCFA");
+                    // Sous-ligne couturier en grisé
+                    var spCout = (StackPanel)blcCouture.Child;
+                    string nomCout = pe.Couturier != null
+                        ? $"{pe.Couturier.Prenom} {pe.Couturier.Nom}".Trim()
+                        : "—";
+                    spCout.Children.Add(new TextBlock
+                    {
+                        Text = $"  Couturier : {nomCout}",
+                        FontSize = 11,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+                        Margin = new Thickness(0, -2, 0, 6)
+                    });
+                    totalCouture += pe.MontantCouture;
+                }
+            }
+
+            // 2. La nouvelle pièce en cours de saisie
+            AjouterLigneRecap(blcCouture, typeVetement, $"{montant:N0} FCFA");
+            var spCoutNouv = (StackPanel)blcCouture.Child;
+            spCoutNouv.Children.Add(new TextBlock
+            {
+                Text = $"  Couturier : {couturier}",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+                Margin = new Thickness(0, -2, 0, 6)
+            });
+            totalCouture += montant;
+
+            // Séparateur + sous-total couture
+            ((StackPanel)blcCouture.Child).Children.Add(new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
+                Margin = new Thickness(0, 4, 0, 4)
+            });
+            AjouterLigneRecap(blcCouture, "S/T Couture", $"{totalCouture:N0} FCFA", gras: true);
+            root.Children.Add(blcCouture);
+
+            // ── MESURES de la nouvelle pièce ──
             if (mesures.Count > 0)
             {
-                var blcMes = CreerBlocRecap("📐  Mesures");
+                var blcMes = CreerBlocRecap("📐  Mesures (pièce en cours)");
                 foreach (var m in mesures)
                     AjouterLigneRecap(blcMes, m.NomMesure, m.Valeur + " cm");
                 root.Children.Add(blcMes);
             }
 
-            // ── Bloc matériaux ──
+            // ── MATÉRIAUX / SUPPLÉMENTS ──
             decimal totalMat = 0;
-            var blcMat = CreerBlocRecap("📦  Matériaux & Suppléments");
+            var blcMat = CreerBlocRecap("📦  Matériaux / Suppléments");
             if (materiaux.Count > 0)
             {
                 foreach (var mat in materiaux)
                 {
                     AjouterLigneRecap(blcMat, mat.Designation,
-                        $"{mat.Quantite} × {mat.PrixUnitaire:N0} F = {mat.Montant:N0} FCFA");
+                        $"{mat.Quantite} × {mat.PrixUnitaire:N0} = {mat.Montant:N0} FCFA");
                     totalMat += mat.Montant;
                 }
-                AjouterLigneRecap(blcMat, "Sous-total matériaux",
-                    $"{totalMat:N0} FCFA", gras: true);
+                ((StackPanel)blcMat.Child).Children.Add(new Border
+                {
+                    Height = 1,
+                    Background = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
+                    Margin = new Thickness(0, 4, 0, 4)
+                });
+                AjouterLigneRecap(blcMat, "S/T Matériaux", $"{totalMat:N0} FCFA", gras: true);
             }
             else
             {
-                // Afficher explicitement "aucun matériau" pour que la section soit visible
-                var sp = (System.Windows.Controls.StackPanel)blcMat.Child;
-                sp.Children.Add(new System.Windows.Controls.TextBlock
+                ((StackPanel)blcMat.Child).Children.Add(new TextBlock
                 {
                     Text = "Aucun matériau — 0 FCFA",
                     FontSize = 12,
-                    FontStyle = System.Windows.FontStyles.Italic,
+                    FontStyle = FontStyles.Italic,
                     Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))
                 });
             }
             root.Children.Add(blcMat);
 
-            // ── Pièces déjà enregistrées (ajout multi-pièces) ──
-            decimal montantPiecesExistantes = 0;
-            if (piecesExistantes != null && piecesExistantes.Count > 0)
-            {
-                var blcExist = CreerBlocRecap($"📋  Pièces déjà enregistrées ({piecesExistantes.Count})");
-                foreach (var pe in piecesExistantes)
-                {
-                    AjouterLigneRecap(blcExist,
-                        pe.TypeVetement,
-                        $"{pe.MontantCouture:N0} FCFA");
-                    montantPiecesExistantes += pe.MontantCouture;
-                }
-                AjouterLigneRecap(blcExist, "Sous-total existant",
-                    $"{montantPiecesExistantes:N0} FCFA", gras: true);
-                root.Children.Add(blcExist);
-            }
-
-            // ── Total général ──
-            var totalGeneral = montantPiecesExistantes + montant + totalMat;
+            // ── TOTAL GÉNÉRAL ──
+            var totalGeneral = totalCouture + totalMat;
             var blcTotal = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
@@ -1897,13 +1930,15 @@ namespace GestionCoutureApp.Views
                 Margin = new Thickness(0, 8, 0, 20)
             };
             var spTotal = new StackPanel();
-            // Décomposition si matériaux
             if (totalMat > 0)
             {
-                var spDec = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
-                spDec.Children.Add(new TextBlock { Text = $"Couture : {montant:N0}  +  Matériaux : {totalMat:N0}  =",
-                    FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)) });
-                spTotal.Children.Add(spDec);
+                spTotal.Children.Add(new TextBlock
+                {
+                    Text = $"Couture : {totalCouture:N0}  +  Matériaux : {totalMat:N0}",
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+                    Margin = new Thickness(0, 0, 0, 6)
+                });
             }
             var rowTotal = new Grid();
             rowTotal.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1930,7 +1965,7 @@ namespace GestionCoutureApp.Views
             blcTotal.Child = spTotal;
             root.Children.Add(blcTotal);
 
-            // ── Boutons ──
+            // ── Boutons Corriger / Confirmer ──
             var errMsg = new TextBlock
             {
                 FontSize = 11,
