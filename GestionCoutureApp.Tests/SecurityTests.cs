@@ -214,8 +214,6 @@ namespace GestionCoutureApp.Tests
         // TEST #3 : Paiement sans opérateur refusé (FAILLE #2)
         // ================================================================
         [Test]
-        [Ignore("PaiementService.Ajouter ne valide pas encore IdOperateur=0. " +
-                "À implémenter dans PaiementService avant de réactiver.")]
         public void Test03_Paiement_Sans_Operateur_Refuse()
         {
             // Arrange : Créer une commande
@@ -256,9 +254,6 @@ namespace GestionCoutureApp.Tests
         // TEST #4 : Intégrité du chaînage d'audit (FAILLE #3)
         // ================================================================
         [Test]
-        [Ignore("Bug préexistant dans AuditService.VerifierIntegriteChaine() : " +
-                "renvoie intègre=true même après modification manuelle d'une entrée. " +
-                "À corriger dans AuditService avant de réactiver ce test.")]
         public async Task Test04_Modification_Entree_Audit_Detectee()
         {
             // Arrange : Créer 3 entrées d'audit chaînées
@@ -314,9 +309,6 @@ namespace GestionCoutureApp.Tests
         // TEST #5 : Suppression d'une entrée d'audit détectée (FAILLE #3)
         // ================================================================
         [Test]
-        [Ignore("Bug préexistant dans AuditService.VerifierIntegriteChaine() : " +
-                "renvoie intègre=true même après suppression d'une entrée. " +
-                "À corriger dans AuditService avant de réactiver ce test.")]
         public async Task Test05_Suppression_Entree_Audit_Detectee()
         {
             // Arrange : Créer 5 entrées d'audit

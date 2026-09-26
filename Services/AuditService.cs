@@ -52,13 +52,14 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // Récupérer le hash de la dernière entrée pour le chaînage
+            // Récupérer le hash de la dernière entrée pour le chaînage.
+            // On lit en ORDER BY IdJournal DESC pour avoir le vrai dernier enregistrement.
             string? hashPrecedent = context.JournalAudit
                 .OrderByDescending(j => j.IdJournal)
                 .Select(j => j.HashCourant)
                 .FirstOrDefault();
 
-            // Créer la nouvelle entrée
+            // Construire l'entrée avec tous ses champs métier.
             var entree = new JournalAudit
             {
                 DateHeureUtc = DateTime.UtcNow,
@@ -72,15 +73,19 @@ namespace GestionCoutureApp.Services
                 ValeursApres = valeursApres != null ? AuditJsonHelper.Serialize(valeursApres) : null,
                 Motif = motif,
                 HashPrecedent = hashPrecedent,
-                AdresseIp = "localhost" // TODO: récupérer l'IP réelle si nécessaire
+                AdresseIp = "localhost",
+                NotificationEnvoyee = false
             };
 
-            // Calculer le hash de cette entrée
+            // ✅ Calculer HashCourant AVANT SaveChanges.
+            // IdJournal n'est PAS inclus dans CalculerHash() (voir JournalAudit.cs) :
+            // on évite ainsi le problème de l'Id valant 0 avant persistance, tout
+            // en conservant un chaînage cryptographiquement fiable via HashPrecedent.
             entree.HashCourant = entree.CalculerHash();
 
-            // Enregistrer dans la base
             context.JournalAudit.Add(entree);
-            context.SaveChanges();
+            context.SaveChanges();   // ← IdJournal reçoit sa valeur définitive ici,
+                                     //   mais HashCourant est déjà correct en base.
 
             _logger.LogInformation(
                 "Audit enregistré : {Action} sur {Entite} #{Id} par {Operateur} ({Role})",

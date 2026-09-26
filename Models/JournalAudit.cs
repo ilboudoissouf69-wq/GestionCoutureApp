@@ -109,11 +109,19 @@ namespace GestionCoutureApp.Models
         public bool NotificationEnvoyee { get; set; } = false;
 
         /// <summary>
-        /// Calcule le hash SHA256 de cette entrée pour le chaînage
+        /// Calcule le hash SHA256 de cette entrée pour le chaînage.
+        /// IMPORTANT : IdJournal est volontairement EXCLU du hash.
+        /// IdJournal est un identifiant technique assigné par EF Core après
+        /// SaveChanges() — l'inclure forcerait un double SaveChanges ou un
+        /// calcul de hash avant persistance (où IdJournal vaut 0), ce qui
+        /// rendrait le hash stocké incohérent avec tout recalcul ultérieur.
+        /// L'intégrité du chaînage est assurée par HashPrecedent → HashCourant,
+        /// qui lie chaque entrée à la précédente par son contenu métier.
         /// </summary>
         public string CalculerHash()
         {
-            var data = $"{IdJournal}|{DateHeureUtc:O}|{IdOperateur}|{NomOperateur}|{RoleOperateur}|" +
+            // Toutes les colonnes métier, sauf IdJournal (clé technique).
+            var data = $"{DateHeureUtc:O}|{IdOperateur}|{NomOperateur}|{RoleOperateur}|" +
                       $"{TypeAction}|{Entite}|{IdEntite}|{ValeursAvant ?? ""}|{ValeursApres ?? ""}|" +
                       $"{Motif ?? ""}|{HashPrecedent ?? ""}|{AdresseIp ?? ""}";
 

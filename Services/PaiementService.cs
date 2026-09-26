@@ -128,6 +128,16 @@ namespace GestionCoutureApp.Services
 
         public void Ajouter(Paiement paiement, int idOperateur, string nomOperateur)
         {
+            // ✅ CORRECTIF AUDIT : validation opérateur obligatoire avant toute ouverture
+            // de contexte. Tout paiement doit être associé à un opérateur identifié —
+            // un paiement anonyme serait une faille de traçabilité financière.
+            if (idOperateur <= 0)
+                throw new InvalidOperationException(
+                    "L'identifiant de l'opérateur est obligatoire pour la traçabilité financière.");
+            if (string.IsNullOrWhiteSpace(nomOperateur))
+                throw new InvalidOperationException(
+                    "Le nom de l'opérateur est obligatoire pour la traçabilité financière.");
+
             lock (_verrou)
             {
                 using var context = _contextFactory.CreateDbContext();
