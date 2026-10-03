@@ -21,6 +21,11 @@ namespace GestionCoutureApp
         {
             base.OnStartup(e);
 
+            // Filet de sécurité pour les exceptions non gérées sur les threads
+            // d'arrière-plan (non-Dispatcher). L'handler Dispatcher n'intercepte
+            // que les exceptions du thread UI ; AppDomain couvre le reste.
+            AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
+
             // ✅ Activer la détection et le logging des erreurs de binding WPF
             // Ces erreurs sont normalement silencieuses et peuvent causer des bugs difficiles à détecter
             ConfigurerBindingErrorLogging();

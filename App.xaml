@@ -328,7 +328,11 @@
                 </Style>
 
                 <!-- ======================================================== -->
-                <!-- DATAGRID                                                   -->
+                <!-- DATAGRID — style global ModernGrid                        -->
+                <!--   • Séparateurs verticaux et horizontaux visibles         -->
+                <!--   • Colonnes redimensionnables par l'utilisateur          -->
+                <!--   • Sélection de ligne bien visible (fond + texte)        -->
+                <!--   • Cellules avec padding confortable et texte tronqué    -->
                 <!-- ======================================================== -->
                 <Style TargetType="DataGrid"
                        x:Key="ModernGrid">
@@ -338,10 +342,25 @@
                                 Value="True"/>
                         <Setter Property="HeadersVisibility"
                                 Value="Column"/>
+
+                        <!-- Grille complète : lignes H + séparateurs V bien visibles -->
                         <Setter Property="GridLinesVisibility"
-                                Value="Horizontal"/>
+                                Value="All"/>
                         <Setter Property="HorizontalGridLinesBrush"
-                                Value="#EDE6E2"/>
+                                Value="#E8E0DB"/>
+                        <Setter Property="VerticalGridLinesBrush"
+                                Value="#D8CFC9"/>
+
+                        <!-- Pas de scroll horizontal : les colonnes s'adaptent -->
+                        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility"
+                                Value="Disabled"/>
+
+                        <!-- Redimensionnement manuel activé -->
+                        <Setter Property="CanUserResizeColumns"
+                                Value="True"/>
+                        <Setter Property="CanUserReorderColumns"
+                                Value="False"/>
+
                         <Setter Property="Background"
                                 Value="White"/>
                         <Setter Property="BorderBrush"
@@ -356,6 +375,8 @@
                                 Value="13"/>
                         <Setter Property="SelectionMode"
                                 Value="Single"/>
+
+                        <!-- En-têtes de colonnes -->
                         <Setter Property="ColumnHeaderStyle">
                                 <Setter.Value>
                                         <Style TargetType="DataGridColumnHeader">
@@ -368,14 +389,26 @@
                                                 <Setter Property="FontSize"
                                                         Value="12"/>
                                                 <Setter Property="Padding"
-                                                        Value="12,10"/>
+                                                        Value="10,10"/>
+                                                <!-- Séparateur rouge en bas + gris à droite -->
                                                 <Setter Property="BorderBrush"
-                                                        Value="#CC0000"/>
+                                                        Value="#D8CFC9"/>
                                                 <Setter Property="BorderThickness"
-                                                        Value="0,0,0,2"/>
+                                                        Value="0,0,1,2"/>
+                                                <Setter Property="Cursor"
+                                                        Value="Arrow"/>
+                                                <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver"
+                                                                 Value="True">
+                                                                <Setter Property="Background"
+                                                                        Value="#EAE2DE"/>
+                                                        </Trigger>
+                                                </Style.Triggers>
                                         </Style>
                                 </Setter.Value>
                         </Setter>
+
+                        <!-- Style de ligne : hover et sélection bien contrastés -->
                         <Setter Property="RowStyle">
                                 <Setter.Value>
                                         <Style TargetType="DataGridRow">
@@ -383,16 +416,95 @@
                                                         Value="44"/>
                                                 <Setter Property="Cursor"
                                                         Value="Hand"/>
+                                                <!-- Fond sélectionné défini ici pour la ligne entière -->
+                                                <Setter Property="Background"
+                                                        Value="Transparent"/>
                                                 <Style.Triggers>
                                                         <Trigger Property="IsMouseOver"
-                                                                Value="True">
+                                                                 Value="True">
                                                                 <Setter Property="Background"
                                                                         Value="#F0EAE6"/>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected"
-                                                                Value="True">
+                                                                 Value="True">
                                                                 <Setter Property="Background"
-                                                                        Value="#FFE8E0"/>
+                                                                        Value="#FFE0D4"/>
+                                                                <Setter Property="Foreground"
+                                                                        Value="#1A1A1A"/>
+                                                        </Trigger>
+                                                        <!-- IsSelected ET IsMouseOver -->
+                                                        <MultiTrigger>
+                                                                <MultiTrigger.Conditions>
+                                                                        <Condition Property="IsSelected" Value="True"/>
+                                                                        <Condition Property="IsMouseOver" Value="True"/>
+                                                                </MultiTrigger.Conditions>
+                                                                <Setter Property="Background"
+                                                                        Value="#FFCDB8"/>
+                                                        </MultiTrigger>
+                                                </Style.Triggers>
+                                        </Style>
+                                </Setter.Value>
+                        </Setter>
+
+                        <!-- Style de cellule : padding confortable, texte tronqué + tooltip -->
+                        <Setter Property="CellStyle">
+                                <Setter.Value>
+                                        <Style TargetType="DataGridCell">
+                                                <!-- Padding confortable 8px -->
+                                                <Setter Property="Padding"
+                                                        Value="10,0"/>
+                                                <!-- Séparateur vertical de cellule visible -->
+                                                <Setter Property="BorderBrush"
+                                                        Value="#D8CFC9"/>
+                                                <Setter Property="BorderThickness"
+                                                        Value="0,0,1,0"/>
+                                                <Setter Property="VerticalAlignment"
+                                                        Value="Center"/>
+                                                <Setter Property="VerticalContentAlignment"
+                                                        Value="Center"/>
+                                                <Setter Property="FocusVisualStyle"
+                                                        Value="{x:Null}"/>
+                                                <Setter Property="Template">
+                                                        <Setter.Value>
+                                                                <ControlTemplate TargetType="DataGridCell">
+                                                                        <Border x:Name="CellBorder"
+                                                                                Background="{TemplateBinding Background}"
+                                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                Padding="{TemplateBinding Padding}"
+                                                                                SnapsToDevicePixels="True">
+                                                                                <ContentPresenter
+                                                                                        VerticalAlignment="Center"
+                                                                                        SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                                <!-- Sélection : fond discret, le RowStyle gère la couleur principale -->
+                                                                                <Trigger Property="IsSelected"
+                                                                                         Value="True">
+                                                                                        <Setter TargetName="CellBorder"
+                                                                                                Property="Background"
+                                                                                                Value="Transparent"/>
+                                                                                        <Setter TargetName="CellBorder"
+                                                                                                Property="BorderBrush"
+                                                                                                Value="#C8A898"/>
+                                                                                </Trigger>
+                                                                                <!-- Focus : bordure accent sans halo bleu système -->
+                                                                                <Trigger Property="IsFocused"
+                                                                                         Value="True">
+                                                                                        <Setter TargetName="CellBorder"
+                                                                                                Property="BorderBrush"
+                                                                                                Value="#CC0000"/>
+                                                                                        <Setter TargetName="CellBorder"
+                                                                                                Property="BorderThickness"
+                                                                                                Value="0,0,1,1"/>
+                                                                                </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                        </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                        <Trigger Property="IsSelected"
+                                                                 Value="True">
                                                                 <Setter Property="Foreground"
                                                                         Value="#1A1A1A"/>
                                                         </Trigger>
@@ -400,27 +512,21 @@
                                         </Style>
                                 </Setter.Value>
                         </Setter>
-                        <Setter Property="CellStyle">
-                                <Setter.Value>
-                                        <Style TargetType="DataGridCell">
-                                                <Setter Property="Padding"
-                                                        Value="12,0"/>
-                                                <Setter Property="BorderThickness"
-                                                        Value="0"/>
-                                                <Setter Property="VerticalAlignment"
-                                                        Value="Center"/>
-                                                <Style.Triggers>
-                                                        <Trigger Property="IsSelected"
-                                                                 Value="True">
-                                                                <Setter Property="Background"
-                                                                        Value="Transparent"/>
-                                                                <Setter Property="BorderBrush"
-                                                                        Value="Transparent"/>
-                                                        </Trigger>
-                                                </Style.Triggers>
-                                        </Style>
-                                </Setter.Value>
-                        </Setter>
+                </Style>
+
+                <!-- ======================================================== -->
+                <!-- STYLE DATAGRIDTEXTCOLUMN ELEMENT — texte tronqué+tooltip -->
+                <!-- S'applique automatiquement aux TextBlock dans les         -->
+                <!-- DataGridTextColumn via ElementStyle                       -->
+                <!-- ======================================================== -->
+                <Style TargetType="TextBlock"
+                       x:Key="DataGridCellText">
+                        <Setter Property="TextTrimming"
+                                Value="CharacterEllipsis"/>
+                        <Setter Property="VerticalAlignment"
+                                Value="Center"/>
+                        <Setter Property="ToolTip"
+                                Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
                 </Style>
 
                 <!-- ======================================================== -->

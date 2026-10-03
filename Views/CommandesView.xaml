@@ -70,7 +70,8 @@
                               VirtualizingStackPanel.VirtualizationMode="Recycling"
                               ScrollViewer.CanContentScroll="True">
                     <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Photo" Width="46">
+                        <!-- Photo : fixe petite -->
+                        <DataGridTemplateColumn Header="Photo" Width="46" MinWidth="46">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Border CornerRadius="4" Background="#F2ECE8"
@@ -82,24 +83,68 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
+
+                        <!-- Client : prend tout l'espace disponible -->
                         <DataGridTextColumn Header="Client"
                                             Binding="{Binding Client.Nom}"
-                                            Width="*"/>
+                                            Width="*"
+                                            MinWidth="80">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock"
+                                       BasedOn="{StaticResource DataGridCellText}"/>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
+                        <!-- Pièces : court -->
                         <DataGridTextColumn Header="Pièces"
                                             Binding="{Binding Pieces.Count}"
-                                            Width="52"/>
+                                            Width="55"
+                                            MinWidth="50">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock"
+                                       BasedOn="{StaticResource DataGridCellText}"/>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
+                        <!-- Statut : largeur fixe lisible -->
                         <DataGridTextColumn Header="Statut"
                                             Binding="{Binding StatutGlobalAffiche}"
-                                            Width="90"/>
-                        <DataGridTextColumn Header="Total"
+                                            Width="95"
+                                            MinWidth="80">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock"
+                                       BasedOn="{StaticResource DataGridCellText}"/>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
+                        <!-- Total : largeur auto -->
+                        <DataGridTextColumn Header="Total (FCFA)"
                                             Binding="{Binding MontantTotalCalcule, StringFormat={}{0:N0}}"
-                                            Width="82"/>
+                                            Width="Auto"
+                                            MinWidth="75">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock"
+                                       BasedOn="{StaticResource DataGridCellText}">
+                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+
+                        <!-- RDV : court -->
                         <DataGridTextColumn Header="RDV"
                                             Binding="{Binding DateFin, StringFormat={}{0:dd/MM}}"
-                                            Width="62"/>
+                                            Width="60"
+                                            MinWidth="55">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock"
+                                       BasedOn="{StaticResource DataGridCellText}">
+                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
 
-                        <!-- ── WhatsApp ── -->
-                        <DataGridTemplateColumn Header="💬" Width="38">
+                        <!-- WhatsApp : icône fixe -->
+                        <DataGridTemplateColumn Header="💬" Width="42" MinWidth="42">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Button Content="💬"
@@ -115,7 +160,6 @@
                                             <Style TargetType="Button">
                                                 <Setter Property="Opacity" Value="0.45"/>
                                                 <Style.Triggers>
-                                                    <!-- Vert vif si commande Terminee -->
                                                     <DataTrigger Binding="{Binding StatutGlobalAffiche}" Value="Terminée">
                                                         <Setter Property="Opacity" Value="1"/>
                                                         <Setter Property="ToolTip" Value="✅ Commande prête — Notifier le client"/>
@@ -169,6 +213,8 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <!-- En-tête sombre -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Bandeau résumé pièces (NOUVEAU) -->
                     <RowDefinition Height="Auto"/>
                     <!-- Corps scrollable -->
                     <RowDefinition Height="*"/>
@@ -246,8 +292,138 @@
                     </Grid>
                 </Border>
 
+                <!-- ════════════════════════════════════════════════════
+                     BANDEAU RÉSUMÉ PIÈCES (Row 1)
+                     Visible dès qu'une commande est sélectionnée.
+                     Affiche : nb total de pièces · chips par statut · couturiers.
+                ════════════════════════════════════════════════════ -->
+                <Border x:Name="BandeauResume"
+                        Grid.Row="1"
+                        Background="#FAF5F2"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="18,10"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Nb total pièces -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock x:Name="TxtResumeTotalPieces"
+                                       Text="0"
+                                       FontSize="22" FontWeight="Black"
+                                       Foreground="#1A1A1A"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text=" pièce(s)"
+                                       FontSize="12" Foreground="#6B7280"
+                                       VerticalAlignment="Bottom" Margin="3,0,0,2"/>
+                        </StackPanel>
+
+                        <!-- Séparateur -->
+                        <Border Grid.Column="1" Width="1" Background="#D1C9C4"
+                                Margin="0,4,14,4"/>
+
+                        <!-- Chips statuts -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                    VerticalAlignment="Center" Margin="0,0,14,0">
+
+                            <!-- Chip Terminée -->
+                            <Border x:Name="ChipTerminee"
+                                    Background="#D1FAE5" CornerRadius="10"
+                                    Padding="8,3" Margin="0,0,6,0"
+                                    Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#22C55E"
+                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="TxtResumeTerminee"
+                                               FontSize="11" FontWeight="Bold"
+                                               Foreground="#065F46"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Chip En cours -->
+                            <Border x:Name="ChipEnCours"
+                                    Background="#FEF3C7" CornerRadius="10"
+                                    Padding="8,3" Margin="0,0,6,0"
+                                    Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#F59E0B"
+                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="TxtResumeEnCours"
+                                               FontSize="11" FontWeight="Bold"
+                                               Foreground="#92400E"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Chip À faire -->
+                            <Border x:Name="ChipAfaire"
+                                    Background="#E5E7EB" CornerRadius="10"
+                                    Padding="8,3" Margin="0,0,6,0"
+                                    Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#9CA3AF"
+                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="TxtResumeAfaire"
+                                               FontSize="11" FontWeight="Bold"
+                                               Foreground="#374151"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Chip Livrée -->
+                            <Border x:Name="ChipLivree"
+                                    Background="#DBEAFE" CornerRadius="10"
+                                    Padding="8,3"
+                                    Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#3B82F6"
+                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="TxtResumeLivree"
+                                               FontSize="11" FontWeight="Bold"
+                                               Foreground="#1E40AF"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Séparateur -->
+                        <Border Grid.Column="3" Width="1" Background="#D1C9C4"
+                                Margin="0,4,14,4"/>
+
+                        <!-- Couturiers impliqués -->
+                        <Border Grid.Column="4"
+                                Background="#F3F4F6"
+                                CornerRadius="6"
+                                Padding="10,4"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="👤 "
+                                           FontSize="12"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtResumeCouturiers"
+                                           FontSize="11"
+                                           Foreground="#374151"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="260"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
                 <!-- ── Corps scrollable ── -->
-                <ScrollViewer Grid.Row="1"
+                <ScrollViewer Grid.Row="2"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="20,16,20,8">
@@ -481,24 +657,49 @@
                                     </DataGrid.RowDetailsTemplate>
 
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Type"
+                                        <DataGridTextColumn Header="Type vêtement"
                                                             Binding="{Binding TypeVetement}"
-                                                            Width="*"/>
+                                                            Width="*"
+                                                            MinWidth="80">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock"
+                                                       BasedOn="{StaticResource DataGridCellText}"/>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
                                         <DataGridTextColumn Header="Couturier"
                                                             Binding="{Binding Couturier.Prenom}"
-                                                            Width="90"/>
+                                                            Width="Auto"
+                                                            MinWidth="75">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock"
+                                                       BasedOn="{StaticResource DataGridCellText}"/>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
                                         <DataGridTextColumn Header="Statut"
                                                             Binding="{Binding StatutAffiche}"
-                                                            Width="80"/>
+                                                            Width="Auto"
+                                                            MinWidth="70">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock"
+                                                       BasedOn="{StaticResource DataGridCellText}"/>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
                                         <DataGridTextColumn Header="Prix (FCFA)"
                                                             Binding="{Binding MontantCouture, StringFormat={}{0:N0}}"
-                                                            Width="90"/>
-                                        <DataGridTemplateColumn Header="Actions" Width="90">
+                                                            Width="Auto"
+                                                            MinWidth="80">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock"
+                                                       BasedOn="{StaticResource DataGridCellText}">
+                                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                        <DataGridTemplateColumn Header="Actions" Width="90" MinWidth="90">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Horizontal"
                                                                 HorizontalAlignment="Center">
-                                                        <!-- Dupliquer -->
                                                         <Button Content="📋"
                                                                 Width="26" Height="24"
                                                                 FontSize="12"
@@ -508,7 +709,6 @@
                                                                 Cursor="Hand"
                                                                 Margin="1"
                                                                 Click="BtnDupliquerPiece_Click"/>
-                                                        <!-- Éditer -->
                                                         <Button Content="✏️"
                                                                 Width="26" Height="24"
                                                                 FontSize="12"
@@ -518,7 +718,6 @@
                                                                 Cursor="Hand"
                                                                 Margin="1"
                                                                 Click="BtnEditerPiece_Click"/>
-                                                        <!-- Supprimer -->
                                                         <Button Content="🗑️"
                                                                 Width="26" Height="24"
                                                                 FontSize="12"
@@ -1085,7 +1284,7 @@
                 </ScrollViewer>
 
                 <!-- ── Pied : actions globales commande ── -->
-                <Border Grid.Row="2"
+                <Border Grid.Row="3"
                         Padding="20,12"
                         BorderBrush="{StaticResource BorderBrush}"
                         BorderThickness="0,1,0,0">

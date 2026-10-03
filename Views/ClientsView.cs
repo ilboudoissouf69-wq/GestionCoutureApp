@@ -232,10 +232,37 @@ namespace GestionCoutureApp.Views
                         MessageBox.Show("Client créé (doublon confirmé par l'opérateur).",
                             "Créé", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
+                    catch (DuplicatClientException dupEx)
+                    {
+                        // La création forcée a quand même déclenché une contrainte
+                        // UNIQUE côté SQLite (même téléphone, nom différent).
+                        // On propose la fiche du client portant ce téléphone.
+                        var existant2 = dupEx.ClientExistant;
+                        MessageBox.Show(
+                            $"Impossible de créer ce client : le numéro de téléphone " +
+                            $"({client.Telephone}) est déjà utilisé par " +
+                            $"{existant2.Prenom} {existant2.Nom} (#{existant2.IdClient}).\n\n" +
+                            "Corrigez le numéro ou sélectionnez la fiche existante.",
+                            "Téléphone déjà utilisé",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
                     catch (Exception innerEx)
                     {
-                        MessageBox.Show("Erreur lors de la création forcée : " + innerEx.Message,
-                            "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                        // Erreur inattendue (contrainte autre, base verrouillée, etc.)
+                        // On logue et on affiche un message sans exposer le SQL brut.
+                        var logService = App.Services
+                            .GetService<ILogService>();
+                        logService?.LogError(
+                            "Erreur lors de la création forcée d'un client",
+                            innerEx);
+
+                        MessageBox.Show(
+                            "Une erreur technique est survenue lors de la création.\n\n" +
+                            "Détail : " + (innerEx.InnerException?.Message ?? innerEx.Message),
+                            "Erreur",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
                     }
                 }
                 // Cancel → ne rien faire, rester sur le formulaire

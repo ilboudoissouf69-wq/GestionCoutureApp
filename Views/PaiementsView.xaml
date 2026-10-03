@@ -84,57 +84,105 @@
                                   VirtualizingStackPanel.VirtualizationMode="Recycling"
                                   ScrollViewer.CanContentScroll="True">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="N. Recu"
+                            <!-- N° Reçu : auto — s'adapte au contenu -->
+                            <DataGridTextColumn Header="N° Reçu"
                                     Binding="{Binding RecuNumero}"
-                                    Width="155"/>
+                                    Width="Auto"
+                                    MinWidth="110">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource DataGridCellText}"/>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Client : prend l'espace restant -->
                             <DataGridTextColumn Header="Client"
                                     Binding="{Binding Commande.Client.Nom}"
-                                    Width="*"/>
+                                    Width="*"
+                                    MinWidth="90">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource DataGridCellText}"/>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Montant : aligné à droite -->
                             <DataGridTextColumn Header="Montant (FCFA)"
                                     Binding="{Binding MontantPaye, StringFormat={}{0:N0}}"
-                                    Width="120"/>
+                                    Width="Auto"
+                                    MinWidth="100">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource DataGridCellText}">
+                                        <Setter Property="HorizontalAlignment" Value="Right"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Mode de paiement -->
                             <DataGridTextColumn Header="Mode"
                                     Binding="{Binding ModePaiement}"
-                                    Width="110"/>
-                            <DataGridTextColumn Header="Operateur"
+                                    Width="Auto"
+                                    MinWidth="85">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource DataGridCellText}"/>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Opérateur -->
+                            <DataGridTextColumn Header="Opérateur"
                                     Binding="{Binding NomOperateur}"
-                                    Width="130"/>
+                                    Width="Auto"
+                                    MinWidth="90">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource DataGridCellText}"/>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Date/Heure -->
                             <DataGridTextColumn Header="Date / Heure"
                                     Binding="{Binding DatePaiement, StringFormat={}{0:dd/MM/yyyy HH:mm}}"
-                                    Width="130"/>
-                            <DataGridTemplateColumn Header="Statut"
-                                    Width="90">
+                                    Width="Auto"
+                                    MinWidth="120">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock"
+                                           BasedOn="{StaticResource DataGridCellText}">
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Statut : badge coloré -->
+                            <DataGridTemplateColumn Header="Statut" Width="95" MinWidth="80">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Border CornerRadius="12"
+                                        <Border CornerRadius="10"
                                                 Padding="8,3"
                                                 HorizontalAlignment="Center"
-                                                Margin="4">
+                                                Margin="4,2"
+                                                ToolTip="{Binding StatutAffichage}">
                                             <Border.Style>
                                                 <Style TargetType="Border">
-                                                    <Setter Property="Background"
-                                                            Value="#E8F5E9"/>
+                                                    <Setter Property="Background" Value="#E8F5E9"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding EstAnnule}"
-                                                                Value="True">
-                                                            <Setter Property="Background"
-                                                                    Value="#FCEAEA"/>
+                                                        <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                            <Setter Property="Background" Value="#FCEAEA"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
                                             <TextBlock Text="{Binding StatutAffichage}"
                                                        FontSize="11"
-                                                    FontWeight="Bold">
+                                                       FontWeight="Bold">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground"
-                                                                Value="{StaticResource SuccessBrush}"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding EstAnnule}"
-                                                                    Value="True">
-                                                                <Setter Property="Foreground"
-                                                                        Value="#CC0000"/>
+                                                            <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                                <Setter Property="Foreground" Value="#CC0000"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>

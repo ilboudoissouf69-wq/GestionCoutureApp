@@ -100,29 +100,73 @@
                       Style="{StaticResource ModernGrid}"
                       AutoGenerateColumns="False"
                       SelectionMode="Single"
-                    IsReadOnly="True">
+                      IsReadOnly="True">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Commande"
                                         Binding="{Binding IdCommande, StringFormat='CMD-{0}'}"
-                                        Width="85"/>
+                                        Width="Auto"
+                                        MinWidth="80">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Client"
                                         Binding="{Binding Commande.Client.Nom}"
-                                        Width="*"/>
-                    <DataGridTextColumn Header="Piece"
+                                        Width="*"
+                                        MinWidth="90">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Pièce"
                                         Binding="{Binding PieceCommande.TypeVetement}"
-                                        Width="120"/>
-                    <DataGridTextColumn Header="Designation"
+                                        Width="*"
+                                        MinWidth="90">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Désignation"
                                         Binding="{Binding Designation}"
-                                        Width="*"/>
-                    <DataGridTextColumn Header="Qte"
+                                        Width="*"
+                                        MinWidth="100">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Qté"
                                         Binding="{Binding Quantite}"
-                                        Width="55"/>
+                                        Width="55"
+                                        MinWidth="50">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Prix unit."
                                         Binding="{Binding PrixUnitaireAffiche}"
-                                        Width="120"/>
-                    <DataGridTextColumn Header="Montant"
+                                        Width="Auto"
+                                        MinWidth="90">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Montant (FCFA)"
                                         Binding="{Binding MontantAffiche}"
-                                        Width="120"/>
+                                        Width="Auto"
+                                        MinWidth="100">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                 </DataGrid.Columns>
             </DataGrid>
         </Border>

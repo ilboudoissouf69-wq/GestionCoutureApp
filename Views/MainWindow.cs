@@ -42,6 +42,7 @@ namespace GestionCoutureApp.Views
                     BtnClients.Visibility = Visibility.Visible;
                     BtnCommandes.Visibility = Visibility.Visible;
                     BtnPaiements.Visibility = Visibility.Visible;
+                    BtnStatut.Visibility = Visibility.Visible;
                     BtnTypesVetements.Visibility = Visibility.Visible;
                     BtnEmployes.Visibility = Visibility.Visible;
                     BtnCommissions.Visibility = Visibility.Visible;
@@ -58,6 +59,7 @@ namespace GestionCoutureApp.Views
                     BtnClients.Visibility = Visibility.Visible;
                     BtnCommandes.Visibility = Visibility.Visible;
                     BtnPaiements.Visibility = Visibility.Visible;
+                    BtnStatut.Visibility = Visibility.Visible;
                     BtnRetours.Visibility = Visibility.Visible;
                     BtnTypesVetements.Visibility = Visibility.Collapsed;
                     BtnEmployes.Visibility = Visibility.Collapsed;
@@ -236,8 +238,21 @@ namespace GestionCoutureApp.Views
         }
 
 
-        private void BtnAlertes_Click(object sender, RoutedEventArgs e)
+        private void BtnStatut_Click(object sender, RoutedEventArgs e)
         {
+            if (!RoleAutorise("Boss", "Secretaire")) return;
+            try
+            {
+                ContentFrame.Navigate(new StatutView());
+                SetBoutonActif(BtnStatut);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnAlertes_Click(object sender, RoutedEventArgs e)        {
             if (!RoleAutorise("Boss", "Secretaire")) return;
             try
             {

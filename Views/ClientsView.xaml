@@ -55,11 +55,19 @@
                               VirtualizingStackPanel.VirtualizationMode="Recycling"
                               ScrollViewer.CanContentScroll="True">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Nom"    Binding="{Binding Nom}"    Width="*"/>
-                            <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="*"/>
+                            <DataGridTextColumn Header="Nom"    Binding="{Binding Nom}"    Width="*" MinWidth="80">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="*" MinWidth="80">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
 
                             <!-- Téléphone + bouton WhatsApp intégré -->
-                            <DataGridTemplateColumn Header="Téléphone" Width="170">
+                            <DataGridTemplateColumn Header="Téléphone" Width="160" MinWidth="130">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Grid>

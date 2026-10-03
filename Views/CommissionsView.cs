@@ -172,11 +172,19 @@ namespace GestionCoutureApp.Views
             decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);
             decimal totalPrimes      = _dernierApercu.Sum(a => a.PrimeQualite);
 
+            // ── CORRECTIF BUG 4 ──────────────────────────────────────────────
+            // TotalEncaisse est désormais l'encaissé COUTURE uniquement (hors matériaux).
+            // resteAtelierGlobal = encaissé couture - commissions - primes
+            // → représente la part couture qui reste à l'atelier après paiement
+            //   des couturiers. Les matériaux sont affichés séparément en KPI
+            //   "dont matériaux" pour information, SANS entrer dans ce calcul.
             // 5 cartes KPI
-            decimal totalEncaisseGlobal   = _dernierApercu.Sum(a => a.TotalEncaisse);
-            decimal totalMateriauxGlobal  = _dernierApercu.Sum(a => a.TotalMateriaux);
+            decimal totalEncaisseGlobal   = _dernierApercu.Sum(a => a.TotalEncaisse); // couture seule
+            decimal totalMateriauxGlobal  = _dernierApercu.Sum(a => a.TotalMateriaux); // info seulement
             decimal totalCoutureGlobal    = _dernierApercu.Sum(a => a.CaTotal);
             decimal resteAtelierGlobal    = totalEncaisseGlobal - totalCommissions - totalPrimes;
+            // Note : totalMateriauxGlobal N'EST PAS soustrait de resteAtelierGlobal.
+            // Les matériaux sont un flux séparé (achat refacturé client → dépense atelier).
 
             TxtCaEncaisseTotal.Text   = totalEncaisseGlobal.ToString("N0");
             TxtTotalMateriauxKpi.Text = totalMateriauxGlobal.ToString("N0");

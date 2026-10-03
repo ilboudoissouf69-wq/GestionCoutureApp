@@ -32,14 +32,22 @@ namespace GestionCoutureApp.Services
         public double TauxQualite    { get; set; } = 100.0;
         public decimal PrimeQualite  { get; set; }
 
-        // Matériaux — exclus de la commission, 100% atelier
+        // Matériaux — exclus de la commission, affichés séparément ("dont matériaux")
+        // NE rentrent JAMAIS dans le calcul de ResteAtelier ou resteAtelierGlobal.
         public decimal TotalMateriaux   { get; set; }
-        // CA encaissé TOTAL (couture + matériaux) = ce que le client a vraiment payé
+
+        // CA encaissé COUTURE uniquement (hors matériaux).
+        // CORRECTIF BUG 4 : avant ce correctif TotalEncaisse = caEncaisse + totalMateriaux,
+        // ce qui gonflait artificiellement le bénéfice atelier résiduel. Désormais
+        // TotalEncaisse == CaEncaisse (couture seule) et TotalMateriaux est un champ
+        // d'information distinct, jamais additionné ici.
         public decimal TotalEncaisse    { get; set; }
 
         // Totaux calculés
         public decimal TotalAvecPrime   => Commission + PrimeQualite;
-        public decimal ResteAtelier     => TotalEncaisse - Commission;  // matériaux + part couture atelier
+        // Bénéfice couture résiduel atelier = encaissé couture - commission couturier.
+        // Les matériaux sont exclus : ils ne font pas partie du bénéfice atelier.
+        public decimal ResteAtelier     => TotalEncaisse - Commission;
 
         // Propriétés d'affichage formatées pour la DataGrid
         public string CaTotalAffiche        => CaTotal.ToString("N0");

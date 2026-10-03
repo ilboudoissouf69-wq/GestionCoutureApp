@@ -216,6 +216,11 @@
                                 Content="  Paiements"
                                 Style="{StaticResource NavBtn}"
                                 Click="BtnPaiements_Click"/>
+                        <Button x:Name="BtnStatut"
+                                Content="  Statut"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnStatut_Click"/>
 
                         <Separator Style="{StaticResource NavSep}"/>
 

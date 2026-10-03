@@ -23,12 +23,17 @@ namespace GestionCoutureApp.Services
         /// comme un double-clic accidentel.</summary>
         private static readonly TimeSpan FenetreDoublon = TimeSpan.FromSeconds(60);
 
+        // Optionnel : null dans les tests unitaires qui ne testent pas l'audit.
+        private readonly IAuditService? _auditService;
+
         public CommandeService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
-            ILogger<CommandeService> logger)
+            ILogger<CommandeService> logger,
+            IAuditService? auditService = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
+            _auditService = auditService;
         }
 
         public List<Commande> ObtenirTous()
@@ -84,7 +89,8 @@ namespace GestionCoutureApp.Services
             var query = context.Commandes
                 .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
                 .Include(c => c.Client)
-                .Include(c => c.Pieces) // Seulement les pièces de base, sans mesures/matériaux
+                .Include(c => c.Pieces)        // Pièces avec couturier pour affichage tableau
+                    .ThenInclude(p => p.Couturier)
                 .OrderByDescending(c => c.DateDebut);
             
             var totalCount = await query.CountAsync();
@@ -116,7 +122,7 @@ namespace GestionCoutureApp.Services
         }
 
         public void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur)
+            int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null)
         {
             // ── Validation de l'opérateur ────────────────────────────────────
             if (idOperateur <= 0)
@@ -171,21 +177,16 @@ namespace GestionCoutureApp.Services
             commande.NomOperateurCreation = nomOperateur.Trim();
             commande.DateCreation         = DateTime.UtcNow;
 
-            context.Commandes.Add(commande);
-            context.SaveChanges(); // génère IdCommande
-
-            piece.IdCommande = commande.IdCommande;
             if (string.IsNullOrWhiteSpace(piece.Statut))
                 piece.Statut = "A faire";
-            context.PiecesCommande.Add(piece);
-            context.SaveChanges(); // génère IdPieceCommande
 
-            foreach (var mesure in mesures)
-            {
-                mesure.IdPieceCommande = piece.IdPieceCommande;
-                mesure.IdCommande      = commande.IdCommande;
-                context.Mesures.Add(mesure);
-            }
+            // Commande + pièce + mesures + matériaux en UN SEUL SaveChanges :
+            // EF Core l'exécute dans une transaction, donc une coupure de courant
+            // ne peut plus laisser une commande à moitié enregistrée.
+            commande.Pieces.Add(piece);
+            RattacherMesuresEtMateriaux(commande, piece, mesures, materiaux, idOperateur, nomOperateur);
+
+            context.Commandes.Add(commande);
             context.SaveChanges();
 
             // ── Enregistrement dans la fenêtre anti-doublon ──────────────────
@@ -200,6 +201,107 @@ namespace GestionCoutureApp.Services
                 "{Montant:N0} FCFA — par {Operateur} (Id={IdOperateur}) le {Date:dd/MM/yyyy HH:mm:ss}",
                 commande.IdCommande, commande.IdClient, piece.TypeVetement,
                 piece.MontantCouture, nomOperateur, idOperateur, now);
+        }
+
+        /// <summary>
+        /// Rattache mesures et matériaux à la pièce via les propriétés de navigation,
+        /// pour qu'ils soient enregistrés dans le même SaveChanges que la pièce.
+        /// </summary>
+        private static void RattacherMesuresEtMateriaux(Commande commande, PieceCommande piece,
+            List<Mesure> mesures, List<MaterielSupplement>? materiaux,
+            int idOperateur, string nomOperateur)
+        {
+            foreach (var mesure in mesures)
+            {
+                mesure.IdMesure = 0;
+                mesure.Commande = commande;
+                mesure.PieceCommande = piece;
+                piece.Mesures.Add(mesure);
+            }
+
+            if (materiaux == null) return;
+            foreach (var mat in materiaux)
+            {
+                if (idOperateur <= 0)
+                    throw new InvalidOperationException(
+                        "Impossible d'ajouter un matériau sans opérateur identifié.");
+
+                // Les matériaux viennent du buffer de l'écran : après un échec puis
+                // un nouvel essai, ils pointeraient encore vers la pièce/commande de
+                // la tentative ratée — on les rattache explicitement à la nouvelle.
+                mat.IdMateriel     = 0; // l'ID est généré par la base
+                mat.Commande       = commande;
+                mat.PieceCommande  = piece;
+                mat.IdOperateur  = idOperateur;
+                mat.NomOperateur = (nomOperateur ?? string.Empty).Trim();
+                piece.MaterielSupplements.Add(mat);
+            }
+        }
+
+        /// <summary>
+        /// Charge l'opérateur et vérifie qu'il a l'un des rôles autorisés.
+        /// </summary>
+        private static Employe ExigerRole(ApplicationDbContext context, int idOperateur,
+            params RoleEmploye[] roles)
+        {
+            var operateur = context.Employes.Find(idOperateur);
+            Helpers.AuthorizationHelper.RequireRoleEnum(operateur, roles);
+            return operateur!;
+        }
+
+        /// <summary>
+        /// Écrit dans le journal d'audit immuable (si le service est disponible).
+        /// Task.Run évite tout blocage du thread UI WPF pendant l'attente.
+        /// </summary>
+        private void Auditer(Employe operateur, string nomOperateur, string typeAction,
+            string entite, int idEntite, object? avant, object? apres, string? motif)
+        {
+            if (_auditService == null)
+            {
+                _logger.LogWarning("Audit non disponible — {Action} sur {Entite} #{Id} par {Operateur}",
+                    typeAction, entite, idEntite, nomOperateur);
+                return;
+            }
+
+            Task.Run(() => _auditService.EnregistrerActionAsync(
+                idOperateur: operateur.IdEmploye,
+                nomOperateur: nomOperateur,
+                roleOperateur: operateur.Role,
+                typeAction: typeAction,
+                entite: entite,
+                idEntite: idEntite,
+                valeursAvant: avant,
+                valeursApres: apres,
+                motif: motif)).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Livraison d'une pièce alors que la commande n'est pas soldée :
+        /// interdit, sauf pour le Boss avec un motif.
+        /// Retourne le reste à payer si le Boss a forcé (à tracer après SaveChanges
+        /// via <see cref="AuditerLivraisonNonSoldee"/>), null si la commande est soldée.
+        /// </summary>
+        private static decimal? VerifierLivraisonSoldee(Commande commande, Employe operateur, string? motif)
+        {
+            decimal reste = commande.ResteAPayer;
+            if (reste <= 0.01m) return null;
+
+            if (operateur.RoleEnum != RoleEmploye.Boss)
+                throw new LivraisonNonSoldeeException(reste, peutForcer: false);
+
+            if (string.IsNullOrWhiteSpace(motif))
+                throw new LivraisonNonSoldeeException(reste, peutForcer: true);
+
+            return reste;
+        }
+
+        private void AuditerLivraisonNonSoldee(Employe operateur, string nomOperateur,
+            int idCommande, decimal reste, string motif, string contexte)
+        {
+            Auditer(operateur, nomOperateur, "LIVRAISON_NON_SOLDEE", "Commande", idCommande,
+                avant: new { ResteAPayer = reste, Contexte = contexte },
+                apres: null,
+                motif: motif.Trim());
         }
 
         /// <summary>
@@ -474,6 +576,7 @@ namespace GestionCoutureApp.Services
                 .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
                 .Include(c => c.Client)
                 .Include(c => c.Pieces)
+                    .ThenInclude(p => p.Couturier)
                 .Where(c => c.Client != null && (
                          c.Client.Nom.Contains(motCle)
                          || c.Client.Prenom.Contains(motCle)
@@ -520,7 +623,8 @@ namespace GestionCoutureApp.Services
         }
 
         public void AjouterPiece(int idCommande, PieceCommande piece, List<Mesure> mesures,
-            bool roleBoss, string? motifException = null)
+            bool roleBoss, string? motifException = null,
+            List<MaterielSupplement>? materiaux = null, int idOperateur = 0, string nomOperateur = "")
         {
             using var context = _contextFactory.CreateDbContext();
             var commande = context.Commandes
@@ -557,15 +661,9 @@ namespace GestionCoutureApp.Services
             if (aPaiements)
                 piece.MotifAjoutApresEncaissement = motifException!.Trim();
 
+            // Pièce + mesures + matériaux en un seul SaveChanges (transaction).
+            RattacherMesuresEtMateriaux(commande, piece, mesures, materiaux, idOperateur, nomOperateur);
             context.PiecesCommande.Add(piece);
-            context.SaveChanges();
-
-            foreach (var mesure in mesures)
-            {
-                mesure.IdPieceCommande = piece.IdPieceCommande;
-                mesure.IdCommande = idCommande;
-                context.Mesures.Add(mesure);
-            }
             context.SaveChanges();
 
             // ✅ CORRECTIF AUDIT #1 : Notification du changement
@@ -577,15 +675,39 @@ namespace GestionCoutureApp.Services
             });
         }
 
-        public void ModifierPiece(PieceCommande piece, List<Mesure> mesures)
+        public void ModifierPiece(PieceCommande piece, List<Mesure> mesures,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // Contrôle des droits côté service (l'écran seul ne suffit pas)
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+
             var pieceExistante = context.PiecesCommande
                 .Include(p => p.Mesures)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces) // nécessaire pour totalAutresPieces
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.MaterielSupplements) // nécessaire pour ResteAPayer
                 .FirstOrDefault(p => p.IdPieceCommande == piece.IdPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
+
+            decimal ancienMontant = pieceExistante.MontantCouture;
+            int? ancienCouturier = pieceExistante.IdCouturier;
+            string ancienStatut = pieceExistante.Statut;
+            bool montantModifie = ancienMontant != piece.MontantCouture;
+
+            // Prix : seul le Boss peut modifier le prix d'une pièce déjà enregistrée.
+            // Empêche le scénario "client paie 10 000, on encaisse 7 000 et on
+            // baisse le prix à 7 000" — chaque changement est tracé dans l'audit.
+            if (montantModifie && operateur.RoleEnum != RoleEmploye.Boss)
+            {
+                throw new InvalidOperationException(
+                    "Seul le Boss peut modifier le prix d'une pièce déjà enregistrée.\n" +
+                    $"Prix actuel : {ancienMontant:N0} FCFA.");
+            }
 
             // Verrouillage commission
             if (pieceExistante.IdCommission.HasValue && pieceExistante.MontantCouture != piece.MontantCouture)
@@ -610,7 +732,8 @@ namespace GestionCoutureApp.Services
                     .AsEnumerable()
                     .Sum(p => p.MontantCouture);
 
-                if (totalAutresPieces + piece.MontantCouture < dejaEncaisse)
+                // Le client paie couture + matériaux : on compare au total facturé
+                if (totalAutresPieces + piece.MontantCouture + commande.TotalMateriaux < dejaEncaisse)
                 {
                     throw new InvalidOperationException(
                         $"Le montant de la pièce ({piece.MontantCouture:N0} FCFA) ferait descendre " +
@@ -626,6 +749,11 @@ namespace GestionCoutureApp.Services
             if (!string.IsNullOrWhiteSpace(piece.Statut))
                 pieceExistante.Statut = piece.Statut;
 
+            // Livraison : la commande doit être soldée (calculé avec le nouveau prix)
+            decimal? resteLivraisonForcee = null;
+            if (pieceExistante.Statut == "Livree" && ancienStatut != "Livree" && commande != null)
+                resteLivraisonForcee = VerifierLivraisonSoldee(commande, operateur, motifLivraisonNonSoldee);
+
             // Remplacement des mesures
             context.Mesures.RemoveRange(pieceExistante.Mesures);
             foreach (var mesure in mesures)
@@ -637,8 +765,24 @@ namespace GestionCoutureApp.Services
 
             context.SaveChanges();
 
+            // ── Journal d'audit : prix et couturier (impact argent / commissions) ──
+            if (montantModifie || ancienCouturier != piece.IdCouturier)
+            {
+                Auditer(operateur, nomOperateur, "PIECE_MODIFIEE", "PieceCommande",
+                    pieceExistante.IdPieceCommande,
+                    avant: new { MontantCouture = ancienMontant, IdCouturier = ancienCouturier },
+                    apres: new { piece.MontantCouture, piece.IdCouturier },
+                    motif: null);
+            }
+            if (resteLivraisonForcee.HasValue)
+            {
+                AuditerLivraisonNonSoldee(operateur, nomOperateur, pieceExistante.IdCommande,
+                    resteLivraisonForcee.Value, motifLivraisonNonSoldee!,
+                    $"Pièce #{pieceExistante.IdPieceCommande} ({pieceExistante.TypeVetement})");
+            }
+
             // ✅ CORRECTIF AUDIT #1 : Notification si montant modifié
-            if (pieceExistante.MontantCouture != piece.MontantCouture)
+            if (montantModifie)
             {
                 CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
                 {
@@ -649,9 +793,13 @@ namespace GestionCoutureApp.Services
             }
         }
 
-        public void SupprimerPiece(int idPieceCommande)
+        public void SupprimerPiece(int idPieceCommande, int idOperateur, string nomOperateur)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // Seul le Boss supprime une pièce — vérifié ici, pas seulement à l'écran
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss);
+
             var piece = context.PiecesCommande
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
@@ -691,9 +839,23 @@ namespace GestionCoutureApp.Services
             if (piece.MaterielSupplements.Any())
                 context.MaterielsSupplements.RemoveRange(piece.MaterielSupplements);
 
+            var snapshot = new
+            {
+                piece.IdPieceCommande,
+                piece.IdCommande,
+                piece.TypeVetement,
+                piece.MontantCouture,
+                piece.IdCouturier,
+                piece.Statut,
+                Materiaux = piece.MaterielSupplements.Sum(m => m.Montant)
+            };
+
             context.Mesures.RemoveRange(piece.Mesures);
             context.PiecesCommande.Remove(piece);
             context.SaveChanges();
+
+            Auditer(operateur, nomOperateur, "PIECE_SUPPRIMEE", "PieceCommande",
+                idPieceCommande, avant: snapshot, apres: null, motif: null);
 
             // ✅ CORRECTIF AUDIT #1 : Notification
             CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
@@ -755,14 +917,20 @@ namespace GestionCoutureApp.Services
             return nouvellePiece;
         }
 
-        public void ForcerStatutToutesPieces(int idCommande, string nouveauStatut)
+        public void ForcerStatutToutesPieces(int idCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null)
         {
             using var context = _contextFactory.CreateDbContext();
-            var pieces = context.PiecesCommande
-                .Where(p => p.IdCommande == idCommande)
-                .ToList();
+            var commande = context.Commandes
+                .Include(c => c.Pieces)
+                .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
+                .FirstOrDefault(c => c.IdCommande == idCommande);
+            var pieces = commande?.Pieces ?? new List<PieceCommande>();
 
             if (pieces.Count == 0) return;
+
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
 
             // Vérifier qu'aucune pièce n'est verrouillée par une commission
             // (on ne force pas le statut d'une pièce commissionnée)
@@ -774,11 +942,33 @@ namespace GestionCoutureApp.Services
                     "pas voir leur statut modifié par un forçage en cascade.");
             }
 
+            // Livraison : même règle que pour une pièce seule
+            decimal? resteLivraisonForcee = null;
+            if (nouveauStatut == "Livree" && pieces.Any(p => p.Statut != "Livree"))
+                resteLivraisonForcee = VerifierLivraisonSoldee(commande!, operateur, motifLivraisonNonSoldee);
+
             foreach (var piece in pieces)
-            {
                 piece.Statut = nouveauStatut;
-            }
+
             context.SaveChanges();
+
+            if (resteLivraisonForcee.HasValue)
+            {
+                AuditerLivraisonNonSoldee(operateur, nomOperateur, idCommande,
+                    resteLivraisonForcee.Value, motifLivraisonNonSoldee!,
+                    "Forçage du statut de toutes les pièces");
+            }
+
+            // ── Traçabilité : qui a forcé le statut et quand ────────────────
+            // idOperateur et nomOperateur sont obligatoires (0 / vide = appelant
+            // non identifié → on log quand même pour diagnostic).
+            _logger.LogInformation(
+                "ForcerStatutToutesPieces — Commande #{IdCommande} → statut « {Statut} » " +
+                "par {Operateur} (Id={IdOperateur}) le {Date:dd/MM/yyyy HH:mm:ss}.",
+                idCommande, nouveauStatut,
+                string.IsNullOrWhiteSpace(nomOperateur) ? "INCONNU" : nomOperateur,
+                idOperateur,
+                DateTime.Now);
         }
 
         public List<PieceCommande> ObtenirPiecesCommande(int idCommande)
@@ -801,8 +991,6 @@ namespace GestionCoutureApp.Services
                 .Where(p => p.Commande != null
                     && p.Commande.IdClient == idClient
                     && p.TypeVetement == typeVetement);
-            // Pas de filtre sur le statut : une pièce "En cours" ou "À faire"
-            // a déjà des mesures utiles à réutiliser.
 
             if (exclureIdCommande.HasValue)
                 query = query.Where(p => p.IdCommande != exclureIdCommande.Value);
@@ -811,6 +999,74 @@ namespace GestionCoutureApp.Services
                 .OrderByDescending(p => p.IdPieceCommande)
                 .Take(10)
                 .ToList();
+        }
+
+        // ===== StatutView — vue plate paginée de toutes les pièces =====
+
+        public async Task<PagedResult<PieceCommande>> ObtenirPagePiecesAsync(
+            string? statut, int page, int pageSize, string? recherche = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            DateTime maintenant = DateTime.Now;
+
+            // Base : pièces dont la commande parente n'est pas supprimée
+            var query = context.PiecesCommande
+                .Include(p => p.Couturier)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Client)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Paiements)
+                .Where(p => p.Commande != null && !p.Commande.EstSupprimee);
+
+            // Filtre par statut (y compris le filtre virtuel "Retard")
+            if (!string.IsNullOrEmpty(statut))
+            {
+                if (statut == "Retard")
+                {
+                    query = query.Where(p =>
+                        p.Commande!.DateFin < maintenant &&
+                        (p.Statut == "A faire" || p.Statut == "En cours"));
+                }
+                else
+                {
+                    query = query.Where(p => p.Statut == statut);
+                }
+            }
+
+            // Filtre recherche (nom client ou type vêtement)
+            if (!string.IsNullOrWhiteSpace(recherche))
+            {
+                query = query.Where(p =>
+                    (p.Commande!.Client != null &&
+                     (p.Commande.Client.Nom.Contains(recherche) ||
+                      p.Commande.Client.Prenom.Contains(recherche))) ||
+                    p.TypeVetement.Contains(recherche));
+            }
+
+            var totalCount = await query.CountAsync();
+
+            // Tri : retards en premier (DateFin dépassée + statut actif),
+            // puis par DateFin croissante (les RDV les plus proches en tête).
+            // EF Core ne supporte pas les expressions conditionnelles complexes
+            // dans OrderBy sur SQLite → on trie côté C# après pagination partielle.
+            // Pour des volumes importants, un OrderBy(DateFin) suivi d'un tri
+            // client est acceptable (les retards ont les DateFin les plus petites,
+            // ils remontent naturellement en tête avec un tri ASC).
+            var items = await query
+                .OrderBy(p => p.Commande!.DateFin)
+                .ThenBy(p => p.Statut)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PagedResult<PieceCommande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
         }
     }
 }

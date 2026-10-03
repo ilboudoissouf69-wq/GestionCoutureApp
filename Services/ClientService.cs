@@ -113,7 +113,56 @@ namespace GestionCoutureApp.Services
             }
 
             context.Clients.Add(client);
-            context.SaveChanges();
+
+            // ── Garde contre violation de contrainte UNIQUE côté SQLite ──────
+            // Scénario non couvert par la détection applicative ci-dessus :
+            // deux clients ayant le MÊME numéro de téléphone mais des noms
+            // différents (ex. un homophone, une faute de frappe dans le nom).
+            // Dans ce cas la détection par NomPrenom normalisé ne trouve aucun
+            // doublon, mais SQLite lève une erreur UNIQUE constraint si la
+            // colonne Telephone est indexée UNIQUE dans la migration.
+            // Sans ce catch, l'exception remonte jusqu'à l'UI sous la forme
+            // d'une SqliteException brute avec un message SQL illisible.
+            try
+            {
+                context.SaveChanges();
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                when (EstViolationUniqueTelephone(dbEx))
+            {
+                // Trouver le client existant portant ce numéro pour fournir
+                // un message complet (et permettre à ClientsView de proposer
+                // la fiche existante, comme pour un doublon applicatif).
+                var clientExistant = context.Clients
+                    .AsEnumerable()
+                    .FirstOrDefault(c =>
+                        !string.IsNullOrWhiteSpace(c.Telephone) &&
+                        !string.IsNullOrWhiteSpace(client.Telephone) &&
+                        c.Telephone.Trim() == client.Telephone.Trim() &&
+                        c.IdClient != client.IdClient);
+
+                if (clientExistant != null)
+                {
+                    _logger.LogWarning(
+                        "Violation contrainte UNIQUE Telephone — {Tel} déjà utilisé par " +
+                        "#{IdExistant} {PrenomEx} {NomEx}.",
+                        client.Telephone, clientExistant.IdClient,
+                        clientExistant.Prenom, clientExistant.Nom);
+
+                    throw new DuplicatClientException(clientExistant);
+                }
+
+                // Pas de fiche trouvée (cas très rare : contrainte sur un autre champ)
+                // — on relève quand même une exception lisible.
+                _logger.LogWarning(
+                    "Violation contrainte UNIQUE sans fiche retrouvable — {Msg}",
+                    dbEx.InnerException?.Message ?? dbEx.Message);
+
+                throw new InvalidOperationException(
+                    "Ce numéro de téléphone est déjà utilisé par un autre client. " +
+                    "Vérifiez la liste des clients et évitez les doublons.", dbEx);
+            }
+
             _logger.LogInformation(
                 "Client ajouté — #{Id} {Prenom} {Nom} / {Tel}",
                 client.IdClient, client.Prenom, client.Nom, client.Telephone);
@@ -233,6 +282,26 @@ namespace GestionCoutureApp.Services
                 })
                 .OrderBy(g => g.CleNormalise)
                 .ToList();
+        }
+
+        // ----------------------------------------------------------------
+        // Détection violation contrainte UNIQUE SQLite
+        // ----------------------------------------------------------------
+        /// <summary>
+        /// Retourne true si l'exception EF Core est causée par une violation de
+        /// contrainte UNIQUE sur la colonne Telephone (SQLite error code 19 /
+        /// message "UNIQUE constraint failed: Clients.Telephone").
+        /// </summary>
+        private static bool EstViolationUniqueTelephone(
+            Microsoft.EntityFrameworkCore.DbUpdateException ex)
+        {
+            var inner = ex.InnerException;
+            if (inner == null) return false;
+
+            // Microsoft.Data.Sqlite.SqliteException
+            string msg = inner.Message ?? "";
+            return msg.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase)
+                && msg.Contains("Telephone", StringComparison.OrdinalIgnoreCase);
         }
 
         // ----------------------------------------------------------------

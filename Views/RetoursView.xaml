@@ -331,25 +331,29 @@
                     <!-- Date -->
                     <DataGridTextColumn Header="Date"
                                         Binding="{Binding DateSignalementAffichee}"
-                                        Width="75">
+                                        Width="Auto"
+                                        MinWidth="70">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="FontSize" Value="11"/>
                                 <Setter Property="VerticalAlignment" Value="Center"/>
                                 <Setter Property="Margin" Value="8,0"/>
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
                     <!-- Client -->
-                    <DataGridTemplateColumn Header="Client" Width="115">
+                    <DataGridTemplateColumn Header="Client" Width="*" MinWidth="110">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="8,2" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding ClientAffiche}"
                                                FontSize="11" FontWeight="SemiBold"
                                                Foreground="#111827"
-                                               TextTrimming="CharacterEllipsis"/>
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding ClientAffiche}"/>
                                     <TextBlock Text="{Binding Commande.Client.Telephone}"
                                                FontSize="9" Foreground="#9CA3AF"/>
                                 </StackPanel>
@@ -358,7 +362,7 @@
                     </DataGridTemplateColumn>
 
                     <!-- Commande/Pièce -->
-                    <DataGridTemplateColumn Header="CMD/Pièce" Width="100">
+                    <DataGridTemplateColumn Header="CMD/Pièce" Width="Auto" MinWidth="90">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="8,2" VerticalAlignment="Center">
@@ -379,7 +383,7 @@
                     </DataGridTemplateColumn>
 
                     <!-- Couturier -->
-                    <DataGridTemplateColumn Header="Couturier" Width="95">
+                    <DataGridTemplateColumn Header="Couturier" Width="Auto" MinWidth="85">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Margin="8,0" VerticalAlignment="Center"
@@ -412,24 +416,26 @@
                     </DataGridTemplateColumn>
 
                     <!-- RDV -->
-                    <DataGridTextColumn Header="RDV" Width="85"
+                    <DataGridTextColumn Header="RDV" Width="Auto" MinWidth="75"
                                         Binding="{Binding DateRdvAffichee}">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="FontSize" Value="10"/>
                                 <Setter Property="VerticalAlignment" Value="Center"/>
                                 <Setter Property="Margin" Value="8,0"/>
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
                     <!-- Statut -->
-                    <DataGridTemplateColumn Header="Statut" Width="100">
+                    <DataGridTemplateColumn Header="Statut" Width="90" MinWidth="80">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Border CornerRadius="4" Padding="6,3"
                                         Margin="4,0" HorizontalAlignment="Center"
-                                        VerticalAlignment="Center">
+                                        VerticalAlignment="Center"
+                                        ToolTip="{Binding StatutAffiche}">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Background" Value="#6B7280"/>

@@ -48,13 +48,33 @@
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Nom du type"
                                 Binding="{Binding Nom}"
-                                Width="*"/>
+                                Width="*"
+                                MinWidth="100">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn Header="Prix de base (FCFA)"
                                 Binding="{Binding PrixBase}"
-                                Width="160"/>
+                                Width="Auto"
+                                MinWidth="130">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn Header="Nb mesures"
                                 Binding="{Binding NbMesures}"
-                                Width="110"/>
+                                Width="Auto"
+                                MinWidth="90">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>

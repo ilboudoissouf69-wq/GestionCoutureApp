@@ -28,8 +28,12 @@ namespace GestionCoutureApp.Services
         /// Levée si une commande quasi-identique (même client + type + montant) a été
         /// créée par le même opérateur dans les 60 dernières secondes.
         /// </exception>
+        /// <para>
+        /// Commande, pièce, mesures et <paramref name="materiaux"/> sont enregistrés
+        /// en une seule transaction : tout ou rien.
+        /// </para>
         void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur);
+            int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null);
 
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures);
 
@@ -57,18 +61,27 @@ namespace GestionCoutureApp.Services
         /// (sauf si roleBoss=true, avec motif obligatoire).
         /// </summary>
         void AjouterPiece(int idCommande, PieceCommande piece, List<Mesure> mesures,
-            bool roleBoss, string? motifException = null);
+            bool roleBoss, string? motifException = null,
+            List<MaterielSupplement>? materiaux = null, int idOperateur = 0, string nomOperateur = "");
 
         /// <summary>
         /// Modifie une pièce existante identifiée par son IdPieceCommande.
+        /// <para>
+        /// Boss ou Secrétaire uniquement. Seul le Boss peut changer le prix
+        /// (tracé dans le journal d'audit). Passer en "Livree" une commande non
+        /// soldée lève <see cref="LivraisonNonSoldeeException"/> — sauf Boss avec
+        /// <paramref name="motifLivraisonNonSoldee"/>.
+        /// </para>
         /// </summary>
-        void ModifierPiece(PieceCommande piece, List<Mesure> mesures);
+        void ModifierPiece(PieceCommande piece, List<Mesure> mesures,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null);
 
         /// <summary>
         /// Supprime une pièce d'une commande.
+        /// Boss uniquement (UnauthorizedAccessException sinon), tracé dans l'audit.
         /// Lève InvalidOperationException si un paiement existe sur la commande.
         /// </summary>
-        void SupprimerPiece(int idPieceCommande);
+        void SupprimerPiece(int idPieceCommande, int idOperateur, string nomOperateur);
 
         /// <summary>
         /// Duplique une pièce existante (sans les mesures — la secrétaire
@@ -78,8 +91,17 @@ namespace GestionCoutureApp.Services
 
         /// <summary>
         /// Force le statut de toutes les pièces d'une commande.
+        /// <para>
+        /// Accessible aux rôles <b>Boss</b> et <b>Secrétaire</b> (action sans enjeu
+        /// financier). Le couple <paramref name="idOperateur"/>/<paramref name="nomOperateur"/>
+        /// est tracé dans les logs pour conserver un historique de qui change les statuts.
+        /// </para>
         /// </summary>
-        void ForcerStatutToutesPieces(int idCommande, string nouveauStatut);
+        /// <para>
+        /// "Livree" sur une commande non soldée : même règle que <see cref="ModifierPiece"/>.
+        /// </para>
+        void ForcerStatutToutesPieces(int idCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null);
 
         /// <summary>
         /// Vérifie si une commande accepte encore l'ajout de pièces
@@ -97,5 +119,24 @@ namespace GestionCoutureApp.Services
         /// (pour la réutilisation des mesures).
         /// </summary>
         List<PieceCommande> ObtenirPiecesAnterieuresClient(int idClient, string typeVetement, int? exclureIdCommande = null);
+
+        // ===== StatutView — Vue plate de toutes les pièces =====
+
+        /// <summary>
+        /// Renvoie une page paginée de pièces avec leurs données de contexte
+        /// (commande, client, couturier). Filtre optionnel par statut.
+        /// <para>
+        /// <paramref name="statut"/> null = toutes les pièces (onglet "Tous").
+        /// Valeurs acceptées : "A faire", "En cours", "Terminee", "Livree", "Retard".
+        /// "Retard" est un filtre virtuel calculé : pièces dont <c>Commande.DateFin</c>
+        /// est passée et dont le statut est "A faire" ou "En cours".
+        /// </para>
+        /// <para>
+        /// Le tri par défaut place les retards en premier (DateFin croissante pour les
+        /// retards, puis DateFin croissante pour les autres).
+        /// </para>
+        /// </summary>
+        Task<PagedResult<PieceCommande>> ObtenirPagePiecesAsync(
+            string? statut, int page, int pageSize, string? recherche = null);
     }
 }

@@ -116,8 +116,37 @@ namespace GestionCoutureApp.Services
                     .SelectMany(p => p.MaterielSupplements ?? new List<MaterielSupplement>())
                     .Sum(m => m.Quantite * m.PrixUnitaire);
 
-                // Encaissé total réel (couture + matériaux) = ce que le client a payé
-                decimal totalEncaisse = caEncaisse + totalMateriaux;
+                // ── CORRECTIF BUG 4 ──────────────────────────────────────────────
+                // TotalEncaisse représente l'encaissé COUTURE uniquement (caEncaisse).
+                // Il NE DOIT PAS inclure totalMateriaux : les matériaux sont un flux
+                // de trésorerie distinct (achat tissu/boutons refacturé au client) et
+                // ne font jamais partie de la base de calcul des commissions, ni du
+                // bénéfice atelier résiduel après paiement du couturier.
+                //
+                // Avant ce correctif :
+                //   TotalEncaisse = caEncaisse + totalMateriaux
+                //   ResteAtelier  = TotalEncaisse - Commission
+                //                 = caEncaisse + totalMateriaux - Commission
+                //   → le bénéfice atelier était ARTIFICIELLEMENT GONFLÉ des matériaux,
+                //     donnant l'impression que l'atelier "gagnait" la valeur des
+                //     matériaux qu'il avait pourtant achetés.
+                //
+                // Après correctif :
+                //   TotalEncaisse = caEncaisse  (couture seule)
+                //   ResteAtelier  = caEncaisse - Commission  (bénéfice couture atelier)
+                //   TotalMateriaux reste affiché séparément en colonne "dont matériaux"
+                //   pour information, sans jamais entrer dans resteAtelierGlobal.
+                //
+                // REMARQUE flux achat matériaux :
+                //   Il n'existe pas encore de flux automatique créant une Dépense
+                //   correspondant à l'achat du matériau au moment où le
+                //   MaterielSupplement est ajouté à une pièce. Ce workflow
+                //   (MaterielSupplement → Dépense automatique) est une amélioration
+                //   à valider avec l'utilisateur avant implémentation, car il dépend
+                //   du moment réel d'achat (avant ou après la commande) et du mode
+                //   de remboursement (avance couturier, achat atelier, etc.).
+                //   Documenté ici comme TODO — ne pas implémenter sans validation.
+                decimal totalEncaisse = caEncaisse; // COUTURE uniquement
 
                 resultat.Add(new ApercuCommission
                 {

@@ -48,16 +48,40 @@
                                         <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Nom complet"
                                                                     Binding="{Binding NomComplet}"
-                                                                    Width="*"/>
+                                                                    Width="*"
+                                                                    MinWidth="110">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                </DataGridTextColumn>
                                                 <DataGridTextColumn Header="Identifiant"
                                                                     Binding="{Binding Identifiant}"
-                                                                    Width="130"/>
-                                                <DataGridTextColumn Header="Role"
+                                                                    Width="Auto"
+                                                                    MinWidth="100">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTextColumn Header="Rôle"
                                                                     Binding="{Binding Role}"
-                                                                    Width="110"/>
+                                                                    Width="Auto"
+                                                                    MinWidth="90">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                </DataGridTextColumn>
                                                 <DataGridTextColumn Header="Statut"
                                                                     Binding="{Binding Statut}"
-                                                                    Width="100"/>
+                                                                    Width="Auto"
+                                                                    MinWidth="80">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                </DataGridTextColumn>
                                         </DataGrid.Columns>
                                 </DataGrid>
                         </Border>

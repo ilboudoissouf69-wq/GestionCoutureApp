@@ -20,6 +20,11 @@ namespace GestionCoutureApp.Helpers
         /// - Chiffres 0-9
         /// - Un seul point décimal (.)
         /// - Pas de signe négatif (-)
+        ///
+        /// CORRECTIF BUG 5 : si l'utilisateur tape "." en premier caractère,
+        /// on diffère l'insertion de "0." via Dispatcher.BeginInvoke pour éviter
+        /// toute réentrance avec le binding WPF ou une ValidationRule active.
+        /// On ne modifie JAMAIS textBox.Text directement depuis PreviewTextInput.
         /// </remarks>
         public static void TextBox_PreviewTextInputDecimal(object sender, TextCompositionEventArgs e)
         {
@@ -49,12 +54,23 @@ namespace GestionCoutureApp.Helpers
                     return;
                 }
 
-                // Si c'est le premier caractère, ajouter un 0 devant
+                // CORRECTIF BUG 5 : si "." est le premier caractère saisi,
+                // bloquer la frappe native et programmer "0." via BeginInvoke.
+                // Modifier textBox.Text directement depuis PreviewTextInput relance
+                // le pipeline WPF sur l'événement en cours → réentrance possible
+                // avec les ValidationRules et les bindings, pouvant provoquer un
+                // crash ou une boucle silencieuse. BeginInvoke différe l'écriture
+                // APRÈS la fin du traitement de l'événement courant.
                 if (string.IsNullOrEmpty(textBox.Text))
                 {
-                    textBox.Text = "0.";
-                    textBox.SelectionStart = textBox.Text.Length;
-                    e.Handled = true;
+                    e.Handled = true; // bloquer la frappe native "."
+                    textBox.Dispatcher.BeginInvoke(
+                        System.Windows.Threading.DispatcherPriority.Input,
+                        new Action(() =>
+                        {
+                            textBox.Text = "0.";
+                            textBox.SelectionStart = textBox.Text.Length;
+                        }));
                     return;
                 }
             }

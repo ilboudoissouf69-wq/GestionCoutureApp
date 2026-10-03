@@ -46,6 +46,37 @@ namespace GestionCoutureApp.Views
                 : (0, string.Empty);
         }
 
+        /// <summary>
+        /// Exécute une action qui peut passer une pièce en "Livree". Si la commande
+        /// n'est pas soldée et que l'utilisateur est Boss, propose de forcer avec
+        /// un motif puis relance l'action. Pour les autres rôles, l'exception
+        /// remonte à l'appelant (message "livraison impossible").
+        /// Retourne false si l'utilisateur a abandonné.
+        /// </summary>
+        private bool AvecControleLivraison(Action<string?> action)
+        {
+            try
+            {
+                action(null);
+                return true;
+            }
+            catch (LivraisonNonSoldeeException ex) when (ex.PeutForcer)
+            {
+                var rep = MessageBox.Show(
+                    ex.Message + "\n\nAutoriser quand même la livraison ?",
+                    "Livraison non soldée",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (rep != MessageBoxResult.Yes) return false;
+
+                string? motif = DemanderMotif("Motif de la livraison non soldée");
+                if (string.IsNullOrWhiteSpace(motif)) return false;
+
+                action(motif);
+                return true;
+            }
+        }
+
         // Pièces chargées pour la commande sélectionnée
         private List<PieceCommande> _piecesCommande = new();
 
@@ -118,9 +149,18 @@ namespace GestionCoutureApp.Views
             }
 
             // ===== BOSS : voir forcer statut + supprimer pièce =====
+            // BtnForcerStatut est visible pour Boss ET Secrétaire (action de suivi
+            // opérationnel sans enjeu financier — voir Bug 2).
+            // La visibilité est conditionnée à la présence de plusieurs pièces,
+            // évaluée à la sélection d'une commande (GridCommandes_SelectionChanged).
+            if (_roleUtilisateur == "Boss" || _roleUtilisateur == "Secretaire")
+            {
+                // visible seulement quand une commande multi-pièces est sélectionnée
+                // → géré dans GridCommandes_SelectionChanged
+            }
+
             if (_roleUtilisateur == "Boss")
             {
-                BtnForcerStatut.Visibility = Visibility.Visible;
                 BtnSupprimerPiece.Visibility = Visibility.Visible;
             }
 
@@ -221,6 +261,32 @@ namespace GestionCoutureApp.Views
                 // ✅ OPTIMISATION : Utiliser la version légère pour l'affichage tableau
                 var result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
                 GridCommandes.ItemsSource = result.Items;
+                
+                // ── Restaurer la sélection après rechargement ──────────────────
+                // Quand on réassigne ItemsSource, WPF crée de nouveaux objets et
+                // perd la sélection courante (l'ancien objet n'est plus dans la
+                // nouvelle liste). On retrouve l'item par IdCommande et on le
+                // resélectionne pour que le panneau de droite reste cohérent.
+                if (_commandeSelectionneeId > 0)
+                {
+                    var itemAReselectioner = result.Items
+                        .FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
+                    if (itemAReselectioner != null)
+                    {
+                        // _chargementEnCours bloque GridCommandes_SelectionChanged
+                        // pour éviter un rechargement en cascade du panneau de droite
+                        // (les champs ont déjà été mis à jour par RafraichirFormulairePiece).
+                        _chargementEnCours = true;
+                        try
+                        {
+                            GridCommandes.SelectedItem = itemAReselectioner;
+                        }
+                        finally
+                        {
+                            _chargementEnCours = false;
+                        }
+                    }
+                }
                 
                 // Mettre à jour les boutons de pagination
                 BtnPagePrecedente.IsEnabled = result.HasPrevious;
@@ -481,12 +547,18 @@ namespace GestionCoutureApp.Views
                         CmbDescription.Text = premiere.DescriptionPrecision ?? "";
                     }
 
-                    for (int i = 0; i < CmbStatut.Items.Count; i++)
-                    {
-                        var item = (ComboBoxItem)CmbStatut.Items[i];
-                        if (item.Content.ToString() == premiere.Statut)
-                        { CmbStatut.SelectedIndex = i; break; }
-                    }
+                // Statut
+                for (int i = 0; i < CmbStatut.Items.Count; i++)
+                {
+                    var item = (ComboBoxItem)CmbStatut.Items[i];
+                    if (item.Content.ToString() == premiere.Statut)
+                    { CmbStatut.SelectedIndex = i; break; }
+                }
+                // Fallback : si le statut en base ne correspond à aucun item
+                // (ex. valeur legacy ou typo), on l'affiche quand même en texte
+                // pour que l'opérateur voie la valeur réelle et puisse la corriger.
+                if (CmbStatut.SelectedItem == null && !string.IsNullOrWhiteSpace(premiere.Statut))
+                    CmbStatut.Text = premiere.Statut;
 
                     // Mesures
                     var mesures = _commandeService.ObtenirMesuresPiece(premiere.IdPieceCommande);
@@ -539,8 +611,11 @@ namespace GestionCoutureApp.Views
                         CmbAjustement.SelectedIndex = (idx >= 0 && idx < CmbAjustement.Items.Count) ? idx : 0;
                     }
 
-                    // Bouton forcer statut
-                    BtnForcerStatut.Visibility = (_piecesCommande.Count > 1 && _roleUtilisateur == "Boss")
+                    // Bouton forcer statut : accessible Boss ET Secrétaire
+                    // (pas d'enjeu financier), visible uniquement si ≥ 2 pièces.
+                    BtnForcerStatut.Visibility =
+                        (_piecesCommande.Count > 1 &&
+                         (_roleUtilisateur == "Boss" || _roleUtilisateur == "Secretaire"))
                         ? Visibility.Visible : Visibility.Collapsed;
                 }
 
@@ -564,6 +639,86 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Gestion de la liste des pièces
         // ==================================================================
+
+        /// <summary>
+        /// Rafraîchit les champs d'en-tête de la commande affichés à l'écran
+        /// (HeureDebut, HeureFin, DateFin, client) à partir d'un objet
+        /// <see cref="Commande"/> fraîchement rechargé depuis la base.
+        /// <para>
+        /// Correctif Bug 3 : appelé après <c>ModifierPiece()</c> pour éviter
+        /// que les champs d'en-tête restent figés sur les valeurs pré-modification.
+        /// </para>
+        /// </summary>
+        private void RafraichirEnTeteCommande(Commande commande)
+        {
+            // Désactiver le flag de chargement le temps de remplir les champs
+            // pour ne pas déclencher de recalculs en cascade.
+            bool ancienFlag = _chargementEnCours;
+            _chargementEnCours = true;
+            try
+            {
+                // Client
+                if (CmbClient.SelectedValue == null ||
+                    (int)CmbClient.SelectedValue != commande.IdClient)
+                    CmbClient.SelectedValue = commande.IdClient;
+
+                // Horaires
+                TxtHeureDebut.Text = commande.HeureDebut.ToString(@"hh\:mm");
+                TxtHeureFin.Text   = commande.HeureFin?.ToString(@"hh\:mm") ?? string.Empty;
+
+                // Date de livraison
+                DateFin.SelectedDate = commande.DateFin;
+            }
+            finally
+            {
+                _chargementEnCours = ancienFlag;
+            }
+        }
+
+        /// <summary>
+        /// Rafraîchit le formulaire pièce (côté droit) depuis une pièce fraîchement
+        /// rechargée depuis la base, après une modification.
+        /// <para>
+        /// Corrige le bug où CmbCouturier et CmbStatut restaient sur les anciennes
+        /// valeurs après sauvegarde, donnant l'impression que rien n'avait changé.
+        /// </para>
+        /// </summary>
+        private void RafraichirFormulairePiece(PieceCommande pieceFraiche)
+        {
+            bool ancienFlag = _chargementEnCours;
+            _chargementEnCours = true;
+            try
+            {
+                // Couturier
+                if (pieceFraiche.IdCouturier.HasValue)
+                    CmbCouturier.SelectedValue = pieceFraiche.IdCouturier.Value;
+                else
+                    CmbCouturier.SelectedIndex = -1;
+
+                // Statut — cherche l'item correspondant dans le ComboBox
+                bool statutTrouve = false;
+                for (int i = 0; i < CmbStatut.Items.Count; i++)
+                {
+                    if (CmbStatut.Items[i] is ComboBoxItem item &&
+                        item.Content?.ToString() == pieceFraiche.Statut)
+                    {
+                        CmbStatut.SelectedIndex = i;
+                        statutTrouve = true;
+                        break;
+                    }
+                }
+                if (!statutTrouve)
+                    CmbStatut.Text = pieceFraiche.Statut;
+
+                // Montant (au cas où le service l'aurait ajusté)
+                TxtMontant.Text = pieceFraiche.MontantCouture.ToString();
+            }
+            finally
+            {
+                _chargementEnCours = ancienFlag;
+            }
+        }
+
         private void RafraichirListePieces()
         {
             ListePieces.ItemsSource = null;
@@ -572,6 +727,83 @@ namespace GestionCoutureApp.Views
             // Mettre à jour le total
             decimal total = _piecesCommande.Sum(p => p.MontantCouture);
             TxtTotalPieces.Text = total.ToString("N0") + " FCFA";
+
+            // Rafraîchir le bandeau résumé
+            RafraichirBandeauResume();
+        }
+
+        /// <summary>
+        /// Met à jour le bandeau résumé (nb pièces, chips statut, couturiers)
+        /// en fonction de <c>_piecesCommande</c> courante.
+        /// Appelé après tout changement de la liste des pièces (sélection,
+        /// ajout, modification, suppression).
+        /// </summary>
+        private void RafraichirBandeauResume()
+        {
+            if (_piecesCommande == null || _piecesCommande.Count == 0)
+            {
+                BandeauResume.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            BandeauResume.Visibility = Visibility.Visible;
+
+            // Compteurs par statut
+            int nbTotal     = _piecesCommande.Count;
+            int nbTerminee  = _piecesCommande.Count(p => p.Statut == "Terminee");
+            int nbEnCours   = _piecesCommande.Count(p => p.Statut == "En cours");
+            int nbAfaire    = _piecesCommande.Count(p => p.Statut == "A faire");
+            int nbLivree    = _piecesCommande.Count(p => p.Statut == "Livree");
+
+            TxtResumeTotalPieces.Text = nbTotal.ToString();
+
+            // Chip Terminée
+            if (nbTerminee > 0)
+            {
+                TxtResumeTerminee.Text    = $"{nbTerminee} terminée{(nbTerminee > 1 ? "s" : "")}";
+                ChipTerminee.Visibility   = Visibility.Visible;
+            }
+            else ChipTerminee.Visibility  = Visibility.Collapsed;
+
+            // Chip En cours
+            if (nbEnCours > 0)
+            {
+                TxtResumeEnCours.Text     = $"{nbEnCours} en cours";
+                ChipEnCours.Visibility    = Visibility.Visible;
+            }
+            else ChipEnCours.Visibility   = Visibility.Collapsed;
+
+            // Chip À faire
+            if (nbAfaire > 0)
+            {
+                TxtResumeAfaire.Text      = $"{nbAfaire} à faire";
+                ChipAfaire.Visibility     = Visibility.Visible;
+            }
+            else ChipAfaire.Visibility    = Visibility.Collapsed;
+
+            // Chip Livrée
+            if (nbLivree > 0)
+            {
+                TxtResumeLivree.Text      = $"{nbLivree} livrée{(nbLivree > 1 ? "s" : "")}";
+                ChipLivree.Visibility     = Visibility.Visible;
+            }
+            else ChipLivree.Visibility    = Visibility.Collapsed;
+
+            // Couturiers impliqués (noms distincts, non vides)
+            var couturiers = _piecesCommande
+                .Where(p => p.Couturier != null)
+                .Select(p => p.Couturier!.Prenom?.Trim())
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+
+            if (couturiers.Count == 0)
+                TxtResumeCouturiers.Text = "Aucun couturier assigné";
+            else if (couturiers.Count == 1)
+                TxtResumeCouturiers.Text = $"1 couturier : {couturiers[0]}";
+            else
+                TxtResumeCouturiers.Text = $"{couturiers.Count} couturiers : {string.Join(" · ", couturiers)}";
         }
 
         private void AfficherFormulairePiece(bool modeCreation)
@@ -619,6 +851,14 @@ namespace GestionCoutureApp.Views
             {
                 BtnAjouterMateriau.Visibility = Visibility.Visible;
             }
+
+            // Secrétaire : le prix d'une pièce déjà enregistrée est verrouillé
+            // (seul le Boss peut le changer — contrôlé aussi par le service).
+            bool prixVerrouille = !modeCreation && _roleUtilisateur == "Secretaire";
+            TxtMontant.IsReadOnly = prixVerrouille;
+            CmbAjustement.IsEnabled = !prixVerrouille;
+            CmbTypeVetement.IsEnabled = !prixVerrouille;
+            TxtMontant.ToolTip = prixVerrouille ? "Seul le Boss peut modifier le prix d'une pièce enregistrée." : null;
 
             BtnSauvegarderPiece.Visibility = Visibility.Visible;
             PanelActionsPiece.Visibility = modeCreation ? Visibility.Collapsed : Visibility.Visible;
@@ -710,6 +950,9 @@ namespace GestionCoutureApp.Views
                     if (item.Content.ToString() == piece.Statut)
                     { CmbStatut.SelectedIndex = i; break; }
                 }
+                // Fallback : si le statut en base ne correspond à aucun item
+                if (CmbStatut.SelectedItem == null && !string.IsNullOrWhiteSpace(piece.Statut))
+                    CmbStatut.Text = piece.Statut;
 
                 // Mesures
                 var mesuresExistantes = _commandeService.ObtenirMesuresPiece(piece.IdPieceCommande);
@@ -768,7 +1011,7 @@ namespace GestionCoutureApp.Views
 
                 // Boutons d'action
                 BtnDupliquerPiece.Visibility = Visibility.Visible;
-                BtnSupprimerPiece.Visibility = (_roleUtilisateur == "Boss" || _roleUtilisateur != "Secretaire")
+                BtnSupprimerPiece.Visibility = _roleUtilisateur == "Boss"
                     ? Visibility.Visible : Visibility.Collapsed;
             }
             finally
@@ -950,7 +1193,7 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Sauvegarder une pièce (ajout ou modification)
         // ==================================================================
-        private void BtnSauvegarderPiece_Click(object sender, RoutedEventArgs e)
+        private async void BtnSauvegarderPiece_Click(object sender, RoutedEventArgs e)
         {
             if (CmbTypeVetement.SelectedValue == null)
             {
@@ -1004,7 +1247,9 @@ namespace GestionCoutureApp.Views
                     ? dc.Texte : CmbDescription.Text,
                 IdCouturier = CmbCouturier.SelectedValue as int?,
                 MontantCouture = montant,
-                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
+                Statut = (CmbStatut.SelectedItem as ComboBoxItem)?.Content?.ToString()
+                         ?? CmbStatut.Text?.Trim()
+                         ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
@@ -1058,7 +1303,26 @@ namespace GestionCoutureApp.Views
                 {
                     // Modification d'une pièce existante
                     piece.IdPieceCommande = _pieceSelectionneeId.Value;
-                    _commandeService.ModifierPiece(piece, mesures);
+                    var (idOpModif, nomOpModif) = OperateurConnecte();
+                    if (!AvecControleLivraison(motif =>
+                            _commandeService.ModifierPiece(piece, mesures, idOpModif, nomOpModif, motif)))
+                        return;
+
+                    // ── CORRECTIF BUG 3 : recharger l'objet Commande complet ──
+                    var commandeActualisee = _commandeService.ObtenirParId(_commandeSelectionneeId);
+                    if (commandeActualisee != null)
+                        RafraichirEnTeteCommande(commandeActualisee);
+
+                    // ── CORRECTIF : recharger le formulaire pièce depuis la base ──
+                    // Sans ça, CmbCouturier et CmbStatut restent sur les valeurs
+                    // saisies avant la sauvegarde et l'opérateur croit que rien
+                    // n'a changé alors que la base est bien à jour.
+                    var pieceFraiche = _commandeService
+                        .ObtenirPiecesCommande(_commandeSelectionneeId)
+                        .FirstOrDefault(p => p.IdPieceCommande == _pieceSelectionneeId.Value);
+                    if (pieceFraiche != null)
+                        RafraichirFormulairePiece(pieceFraiche);
+
                     MessageBox.Show("Piece modifiee avec succes !", "Succes",
                         MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -1068,32 +1332,16 @@ namespace GestionCoutureApp.Views
                     // (BtnAjouterPiece_Click) est maintenant réellement transmis ici.
                     // S'il n'y a pas eu d'exception (cas normal, pas d'acompte encaissé),
                     // _motifExceptionAjoutPiece est null et AjouterPiece l'ignore.
+                    // Pièce + mesures + matériaux du buffer temporaire enregistrés
+                    // en une seule transaction par le service.
+                    var (opId, opNom) = OperateurConnecte();
                     _commandeService.AjouterPiece(
                         _commandeSelectionneeId, piece, mesures,
                         _roleUtilisateur == "Boss",
-                        _motifExceptionAjoutPiece);
+                        _motifExceptionAjoutPiece,
+                        _materiauxTemporaires.ToList(), opId, opNom);
                     _motifExceptionAjoutPiece = null;
-
-                    // Persister les matériaux du buffer temporaire (saisis avant la sauvegarde)
-                    if (_materiauxTemporaires.Count > 0)
-                    {
-                        // La pièce vient d'être créée — on doit retrouver son ID
-                        var piecesRechar = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
-                        var nouvellepiece = piecesRechar.LastOrDefault(p => p.TypeVetement == piece.TypeVetement);
-                        if (nouvellepiece != null)
-                        {
-                            var (opId, opNom) = OperateurConnecte();
-                            foreach (var mat in _materiauxTemporaires)
-                            {
-                                // Remettre IdMateriel à 0 pour que EF Core génère l'ID en base
-                                mat.IdMateriel = 0;
-                                mat.IdCommande = _commandeSelectionneeId;
-                                mat.IdPieceCommande = nouvellepiece.IdPieceCommande;
-                                _materielService.Ajouter(mat, opId, opNom);
-                            }
-                        }
-                        _materiauxTemporaires.Clear();
-                    }
+                    _materiauxTemporaires.Clear();
 
                     MessageBox.Show("Piece ajoutee avec succes !", "Succes",
                         MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1104,10 +1352,12 @@ namespace GestionCoutureApp.Views
                     return;
                 }
 
-                // Recharger les pièces et rafraîchir (avec matériaux pour RowDetailsTemplate)
+                // Recharger les pièces et rafraîchir la liste interne des pièces
                 _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                 RafraichirListePieces();
-                _ = ChargerCommandes();
+
+                // Recharger le tableau principal avec restauration de sélection
+                await ChargerCommandes();
                 // Ne pas masquer le formulaire après modification — rester en mode édition
                 // pour que l'utilisateur puisse enchaîner les changements
                 if (!_pieceSelectionneeId.HasValue)
@@ -1116,6 +1366,11 @@ namespace GestionCoutureApp.Views
             catch (InvalidOperationException ex)
             {
                 MessageBox.Show(ex.Message, "Operation impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show(ex.Message, "Accès refusé",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -1396,7 +1651,8 @@ namespace GestionCoutureApp.Views
             {
                 try
                 {
-                    _commandeService.SupprimerPiece(_pieceSelectionneeId.Value);
+                    var (opId, opNom) = OperateurConnecte();
+                    _commandeService.SupprimerPiece(_pieceSelectionneeId.Value, opId, opNom);
 
                     _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                     RafraichirListePieces();
@@ -1410,6 +1666,11 @@ namespace GestionCoutureApp.Views
                 catch (InvalidOperationException ex)
                 {
                     MessageBox.Show(ex.Message, "Suppression impossible",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    MessageBox.Show(ex.Message, "Accès refusé",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
@@ -1503,7 +1764,11 @@ namespace GestionCoutureApp.Views
                 string statut = cmb.SelectedItem?.ToString() ?? "";
                 try
                 {
-                    _commandeService.ForcerStatutToutesPieces(_commandeSelectionneeId, statut);
+                    var (opId, opNom) = OperateurConnecte();
+                    if (!AvecControleLivraison(motif =>
+                            _commandeService.ForcerStatutToutesPieces(
+                                _commandeSelectionneeId, statut, opId, opNom, motif)))
+                        return;
                     dialog.DialogResult = true;
                     dialog.Close();
 
@@ -1515,7 +1780,17 @@ namespace GestionCoutureApp.Views
                     MessageBox.Show("Statut de toutes les pieces mis a jour.",
                         "Succes", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
+                catch (LivraisonNonSoldeeException ex)
+                {
+                    // Message long : la zone d'erreur du dialogue est trop petite
+                    MessageBox.Show(ex.Message, "Livraison impossible",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
                 catch (InvalidOperationException ex)
+                {
+                    message.Text = ex.Message;
+                }
+                catch (UnauthorizedAccessException ex)
                 {
                     message.Text = ex.Message;
                 }
@@ -1677,7 +1952,9 @@ namespace GestionCoutureApp.Views
                 DescriptionPrecision = description,
                 IdCouturier = CmbCouturier.SelectedValue as int?,
                 MontantCouture = montant,
-                Statut = ((ComboBoxItem)CmbStatut.SelectedItem).Content?.ToString() ?? "A faire",
+                Statut = (CmbStatut.SelectedItem as ComboBoxItem)?.Content?.ToString()
+                         ?? CmbStatut.Text?.Trim()
+                         ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
             };
 
@@ -1695,27 +1972,10 @@ namespace GestionCoutureApp.Views
                     ? $"{operateur.Prenom} {operateur.Nom}".Trim()
                     : string.Empty;
 
-                _commandeService.Ajouter(commande, piece, mesures, idOp, nomOp);
-
-                // Persister les matériaux du buffer temporaire
-                if (_materiauxTemporaires.Count > 0)
-                {
-                    var piecesCreees = _commandeService.ObtenirPiecesCommande(commande.IdCommande);
-                    var premierePiece = piecesCreees.FirstOrDefault();
-                    if (premierePiece != null)
-                    {
-                        var (opId, opNom) = OperateurConnecte();
-                        foreach (var mat in _materiauxTemporaires)
-                        {
-                            // Remettre IdMateriel à 0 pour que EF Core génère l'ID en base
-                            mat.IdMateriel = 0;
-                            mat.IdCommande = commande.IdCommande;
-                            mat.IdPieceCommande = premierePiece.IdPieceCommande;
-                            _materielService.Ajouter(mat, opId, opNom);
-                        }
-                    }
-                    _materiauxTemporaires.Clear();
-                }
+                // Commande + pièce + mesures + matériaux : une seule transaction
+                _commandeService.Ajouter(commande, piece, mesures, idOp, nomOp,
+                    _materiauxTemporaires.ToList());
+                _materiauxTemporaires.Clear();
 
                 _ = ChargerCommandes();
 
@@ -2094,7 +2354,7 @@ namespace GestionCoutureApp.Views
             stack.Children.Add(row);
         }
 
-        private void BtnModifier_Click(object sender, RoutedEventArgs e)
+        private async void BtnModifier_Click(object sender, RoutedEventArgs e)
         {
             if (_commandeSelectionneeId == 0)
             {
@@ -2103,8 +2363,10 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // Modifier uniquement les infos au niveau commande (dates, client)
-            // Les pièces se modifient individuellement via BtnSauvegarderPiece
+            // Infos au niveau commande (dates, client) + pièce affichée dans le
+            // formulaire (couturier, statut, montant, mesures). Avant, seule la
+            // commande était enregistrée : le couturier et le statut modifiés
+            // étaient ignorés alors que le message annonçait un succès.
             if (CmbClient.SelectedValue == null)
             {
                 MessageBox.Show("Selectionnez un client.", "Champs manquants",
@@ -2123,29 +2385,122 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // Pièce affichée dans le formulaire (null si aucune pièce en édition)
+            PieceCommande? pieceModifiee = null;
+            if (_pieceSelectionneeId.HasValue && CmbTypeVetement.Visibility == Visibility.Visible)
+            {
+                pieceModifiee = LirePieceDuFormulaire();
+                if (pieceModifiee == null) return; // erreur de saisie déjà affichée
+                pieceModifiee.IdPieceCommande = _pieceSelectionneeId.Value;
+            }
+
             var r = MessageBox.Show(
-                "Modifier les informations de la commande ?\n" +
-                "(Client, dates). Les pieces se modifient individuellement.",
+                pieceModifiee != null
+                    ? "Modifier la commande (client, dates) et la pièce affichée\n" +
+                      "(couturier, statut, montant, mesures) ?"
+                    : "Modifier les informations de la commande ?\n(Client, dates)",
                 "Confirmation",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (r != MessageBoxResult.Yes) return;
 
-            using var context = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext();
-            var existante = context.Commandes.FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
-            if (existante == null) return;
+            try
+            {
+                // Pièce d'abord : si une règle métier la refuse (commission,
+                // montant encaissé...), rien n'est enregistré.
+                if (pieceModifiee != null)
+                {
+                    var (idOp, nomOp) = OperateurConnecte();
+                    var mesuresModif = CollecterMesures();
+                    if (!AvecControleLivraison(motif =>
+                            _commandeService.ModifierPiece(pieceModifiee, mesuresModif, idOp, nomOp, motif)))
+                        return;
+                }
 
-            existante.IdClient = (int)CmbClient.SelectedValue;
-            existante.DateFin = DateFin.SelectedDate ?? existante.DateFin;
-            existante.HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? existante.HeureDebut;
-            existante.HeureFin = ParseHeure(TxtHeureFin.Text);
+                using (var context = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext())
+                {
+                    var existante = context.Commandes.FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
+                    if (existante == null) return;
 
-            context.SaveChanges();
+                    existante.IdClient = (int)CmbClient.SelectedValue;
+                    existante.DateFin = DateFin.SelectedDate ?? existante.DateFin;
+                    existante.HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? existante.HeureDebut;
+                    existante.HeureFin = ParseHeure(TxtHeureFin.Text);
 
-            _ = ChargerCommandes();
+                    context.SaveChanges();
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Modification impossible",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show(ex.Message, "Accès refusé",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (pieceModifiee != null)
+            {
+                _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
+                RafraichirListePieces();
+                var pieceFraiche = _piecesCommande
+                    .FirstOrDefault(p => p.IdPieceCommande == pieceModifiee.IdPieceCommande);
+                if (pieceFraiche != null)
+                    RafraichirFormulairePiece(pieceFraiche);
+            }
+
+            await ChargerCommandes();
             MessageBox.Show("Commande modifiee avec succes !", "Succes",
                 MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// Construit une pièce à partir des champs du formulaire (type, couturier,
+        /// montant, statut, description, photo). Affiche un message et retourne
+        /// null si la saisie est invalide.
+        /// </summary>
+        private PieceCommande? LirePieceDuFormulaire()
+        {
+            if (CmbTypeVetement.SelectedValue == null ||
+                !int.TryParse(CmbTypeVetement.SelectedValue.ToString(), out int idTypeVetement))
+            {
+                MessageBox.Show("Selectionnez un type de vetement.",
+                    "Champ manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+
+            var typeVetement = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idTypeVetement);
+            if (typeVetement == null)
+            {
+                MessageBox.Show("Type de vêtement introuvable.", "Erreur",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return null;
+            }
+
+            if (!decimal.TryParse(TxtMontant.Text, out decimal montant) || montant <= 0)
+            {
+                MessageBox.Show("Le montant doit être positif.",
+                    "Montant invalide", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+
+            return new PieceCommande
+            {
+                TypeVetement = typeVetement.Nom,
+                DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc
+                    ? dc.Texte : CmbDescription.Text,
+                IdCouturier = CmbCouturier.SelectedValue as int?,
+                MontantCouture = montant,
+                Statut = (CmbStatut.SelectedItem as ComboBoxItem)?.Content?.ToString()
+                         ?? CmbStatut.Text?.Trim()
+                         ?? "A faire",
+                CheminPhoto = _cheminPhotoTemporaire
+            };
         }
 
         private async void BtnSupprimer_Click(object sender, RoutedEventArgs e)
@@ -2643,6 +2998,9 @@ namespace GestionCoutureApp.Views
 
             // Masquer les boutons WhatsApp quand aucune commande n'est sélectionnée
             MettreAJourBoutonsWhatsApp(null);
+
+            // Masquer le bandeau résumé (aucune commande sélectionnée)
+            BandeauResume.Visibility = Visibility.Collapsed;
         }
         // ==================================================================
         private string? DemanderMotif(string titre)
