@@ -1979,6 +1979,29 @@ namespace GestionCoutureApp.Views
 
                 _ = ChargerCommandes();
 
+                // ── Proposer la fiche atelier immédiatement après création ──
+                // La commande vient d'être créée avec ses mesures — c'est le
+                // meilleur moment pour imprimer le ticket interne.
+                var imprimerFiche = MessageBox.Show(
+                    "Commande créée avec succès !\n\n" +
+                    "Voulez-vous imprimer la fiche atelier ?\n" +
+                    "(ticket à agrafer sur le colis)",
+                    "Fiche atelier",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (imprimerFiche == MessageBoxResult.Yes)
+                {
+                    // Recharger la commande avec Pieces + Mesures + Couturier
+                    var commandeComplete = _commandeService.ObtenirParId(commande.IdCommande);
+                    if (commandeComplete != null)
+                    {
+                        var fiche = FicheAtelierWindow.Creer(commandeComplete);
+                        fiche.Owner = Window.GetWindow(this);
+                        fiche.ShowDialog();
+                    }
+                }
+
                 var autrePiece = MessageBox.Show(
                     "Commande creee avec succes !\n\nLe client a-t-il d'autres vetements a ajouter a cette meme commande ?",
                     "Piece supplementaire ?",
@@ -2688,6 +2711,9 @@ namespace GestionCoutureApp.Views
                     : "Envoyer rappel de RDV au client";
             }
 
+            // Bouton fiche atelier — visible dès qu'une commande est sélectionnée
+            BtnFicheAtelier.Visibility = aCommande ? Visibility.Visible : Visibility.Collapsed;
+
             // Boutons dans l'en-tête (Prête + RDV)
             BtnWhatsAppPrete.Visibility = estTerminee ? Visibility.Visible : Visibility.Collapsed;
             BtnWhatsAppRdv.Visibility   = aCommande   ? Visibility.Visible : Visibility.Collapsed;
@@ -2755,6 +2781,38 @@ namespace GestionCoutureApp.Views
             {
                 MessageBox.Show("Impossible d'ouvrir WhatsApp :\n" + ex.Message,
                     "Erreur WhatsApp", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // ── Bouton "🏷 Fiche atelier" dans le pied ───────────────────────
+        private void BtnFicheAtelier_Click(object sender, RoutedEventArgs e)
+        {
+            if (_commandeSelectionneeId == 0)
+            {
+                MessageBox.Show("Sélectionnez d'abord une commande.",
+                    "Aucune commande", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                // Recharger la commande avec Pieces + Mesures + Couturier
+                var commandeComplete = _commandeService.ObtenirParId(_commandeSelectionneeId);
+                if (commandeComplete == null)
+                {
+                    MessageBox.Show("Commande introuvable.",
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var fiche = FicheAtelierWindow.Creer(commandeComplete);
+                fiche.Owner = Window.GetWindow(this);
+                fiche.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de l'ouverture de la fiche atelier :\n" + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

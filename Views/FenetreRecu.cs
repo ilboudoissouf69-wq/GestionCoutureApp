@@ -227,19 +227,6 @@ namespace GestionCoutureApp.Views
                 Ligne(p, Pad("   Desc.", 17) + " : " + premierePiece!.DescriptionPrecision, 10);
             Espace(p, 6);
 
-            // ===== MESURES =====
-            if (_mesures.Any())
-            {
-                Ligne(p, "MESURES PRISES", 11, TextAlignment.Left, Noir, FontWeights.Bold);
-                foreach (var m in _mesures)
-                {
-                    int pts = Math.Max(3, 28 - m.NomMesure.Length - m.Valeur.Length);
-                    Ligne(p, "   " + m.NomMesure + " " + new string('.', pts) +
-                             " " + m.Valeur + " cm", 10);
-                }
-                Espace(p, 6);
-            }
-
             // ===== DETAILS PAR PIÈCE =====
             if (_commande.Pieces.Count > 0)
             {
