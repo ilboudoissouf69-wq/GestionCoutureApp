@@ -4,12 +4,14 @@ using System.Windows.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Services;
 
 namespace GestionCoutureApp.Views
 {
     public partial class DashboardView : Page
     {
         private readonly ApplicationDbContext _context;
+        private readonly ICommandeService _commandeService;
 
         public DashboardView()
         {
@@ -17,6 +19,7 @@ namespace GestionCoutureApp.Views
 
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
+            _commandeService = App.Services.GetRequiredService<ICommandeService>();
             Unloaded += (s, e) => _context.Dispose();
 
             Loaded += DashboardView_Loaded;
@@ -71,6 +74,11 @@ namespace GestionCoutureApp.Views
                 c.DateFin != default(DateTime) &&
                 c.DateFin.Date < aujourdhui);
             TxtRetards.Text = retards.ToString();
+
+            // TÂCHE 5 — Badge "À attribuer" (pièces actives sans couturier)
+            int aAttribuer = _commandeService.CompterPiecesAAttribuer();
+            if (FindName("TxtAAttribuer") is System.Windows.Controls.TextBlock txtAA)
+                txtAA.Text = aAttribuer.ToString();
         }
 
         // ------------------------------------------------------------------

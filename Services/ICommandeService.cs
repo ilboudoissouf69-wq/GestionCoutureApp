@@ -177,5 +177,18 @@ namespace GestionCoutureApp.Services
         /// </summary>
         void ChangerStatutPiece(int idPieceCommande, string nouveauStatut,
             int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null);
+
+        // TÂCHE 5 — File "À attribuer"
+        /// <summary>
+        /// Nombre de pièces actives (A faire ou En cours) sans couturier assigné.
+        /// Utilisé pour le badge Dashboard et le compteur de menu.
+        /// </summary>
+        int CompterPiecesAAttribuer();
+
+        /// <summary>
+        /// Retourne la page de commandes ayant au moins une pièce sans couturier
+        /// (statut A faire ou En cours). Utilisé par la file "À attribuer".
+        /// </summary>
+        Task<PagedResult<Commande>> ObtenirCommandesAAttribuerAsync(int page, int pageSize);
     }
 }

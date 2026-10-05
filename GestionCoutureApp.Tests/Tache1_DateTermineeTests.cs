@@ -226,8 +226,9 @@ namespace GestionCoutureApp.Tests
 
             Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Not.Null, "Précondition : DateTerminee renseignée");
 
-            // Boss remet en arrière
-            _commandeService.ChangerStatutPiece(idPiece, "En cours", IdBoss, "Mamadou DIALLO");
+            // Boss remet en arrière avec motif obligatoire (TÂCHE 5 flux strict)
+            _commandeService.ChangerStatutPiece(idPiece, "En cours", IdBoss, "Mamadou DIALLO",
+                motifLivraisonNonSoldee: "Retouche nécessaire");
 
             var piece = PieceEnBase(idPiece);
             Assert.That(piece.DateTerminee,        Is.Null, "Retour en arrière doit remettre DateTerminee à null");

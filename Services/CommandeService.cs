@@ -277,7 +277,47 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// TÂCHE 1 — Met à jour DateTerminee et IdOperateurTerminee d'une pièce
+        /// TÂCHE 5 — Vérifie que la transition de statut respecte le flux strict.
+        /// Flux normal  : A faire → En cours → Terminee → Livree
+        /// Retour arrière : uniquement Boss + motif obligatoire.
+        /// </summary>
+        private static void VerifierFluxStatut(
+            string ancien, string nouveau, Employe operateur, string? motif)
+        {
+            // Ordre numérique des statuts
+            static int Rang(string s) => s switch
+            {
+                "A faire"  => 0,
+                "En cours" => 1,
+                "Terminee" => 2,
+                "Livree"   => 3,
+                _          => -1
+            };
+
+            int r1 = Rang(ancien);
+            int r2 = Rang(nouveau);
+
+            // Avance dans le flux → toujours OK (validation non soldée gérée ailleurs)
+            if (r2 > r1) return;
+
+            // Retour en arrière : Boss obligatoire + motif
+            if (r2 < r1)
+            {
+                if (operateur.RoleEnum != RoleEmploye.Boss)
+                    throw new InvalidOperationException(
+                        $"Seul le Boss peut rétrograder le statut d'une pièce " +
+                        $"(\"{ancien}\" → \"{nouveau}\"). " +
+                        "Contactez le Boss pour effectuer cette opération.");
+
+                if (string.IsNullOrWhiteSpace(motif))
+                    throw new InvalidOperationException(
+                        $"Un motif est obligatoire pour rétrograder le statut " +
+                        $"(\"{ancien}\" → \"{nouveau}\").");
+            }
+        }
+
+        /// <summary>
+        /// TÂCHE 5 — Met à jour DateTerminee et IdOperateurTerminee d'une pièce
         /// lors de chaque changement de statut, quel que soit le chemin d'appel.
         ///
         /// Règles :
@@ -1116,6 +1156,9 @@ namespace GestionCoutureApp.Services
             foreach (var piece in pieces)
             {
                 string ancienStatut = piece.Statut;
+                // Tâche 5 : flux strict — Boss peut forcer en arrière avec motif
+                // (motifLivraisonNonSoldee sert aussi de motif de rétrogradation)
+                VerifierFluxStatut(ancienStatut, nouveauStatut, operateur, motifLivraisonNonSoldee);
                 AppliquerDateTerminee(piece, ancienStatut, nouveauStatut, idOperateur);
                 piece.Statut = nouveauStatut;
             }
@@ -1278,6 +1321,10 @@ namespace GestionCoutureApp.Services
             string ancienStatut = piece.Statut;
             if (ancienStatut == nouveauStatut) return; // rien à faire
 
+            // ── TÂCHE 5 : Flux strict En attente → En cours → Terminee → Livree ─
+            // Retour en arrière réservé au Boss avec motif obligatoire.
+            VerifierFluxStatut(ancienStatut, nouveauStatut, operateur, motifLivraisonNonSoldee);
+
             // Garde livraison : commande soldée ou Boss avec motif
             decimal? resteLivraisonForcee = null;
             if (nouveauStatut == "Livree" && ancienStatut != "Livree" && piece.Commande != null)
@@ -1306,7 +1353,7 @@ namespace GestionCoutureApp.Services
             CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
             {
                 IdCommande = piece.IdCommande,
-                TypeChangement = "StatutModifie",
+                TypeChangement = nouveauStatut == "Terminee" ? "PieceTerminee" : "StatutModifie",
                 Details = $"Pièce #{idPieceCommande} : {ancienStatut} → {nouveauStatut}"
             });
 
@@ -1315,6 +1362,38 @@ namespace GestionCoutureApp.Services
                 "par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
                 idPieceCommande, piece.TypeVetement, ancienStatut, nouveauStatut,
                 nomOperateur, idOperateur, DateTime.Now);
+        }
+
+        // ── TÂCHE 5 : File "À attribuer" ──────────────────────────────────
+
+        public int CompterPiecesAAttribuer()
+        {
+            using var context = _contextFactory.CreateDbContext();
+            return context.PiecesCommande
+                .Where(p => (p.Statut == "A faire" || p.Statut == "En cours")
+                         && !p.IdCouturier.HasValue
+                         && p.Commande != null && !p.Commande.EstSupprimee)
+                .Count();
+        }
+
+        public async Task<PagedResult<Commande>> ObtenirCommandesAAttribuerAsync(int page, int pageSize)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            var query = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .Include(c => c.Paiements)
+                .Where(c => !c.EstSupprimee
+                         && c.Pieces.Any(p =>
+                             (p.Statut == "A faire" || p.Statut == "En cours")
+                             && !p.IdCouturier.HasValue))
+                .OrderBy(c => c.DateFin);   // RDV les plus proches en premier
+
+            int total = await query.CountAsync();
+            var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+            return new PagedResult<Commande> { Items = items, TotalCount = total, Page = page, PageSize = pageSize };
         }
 
         // ===== StatutView — vue plate paginée de toutes les pièces =====

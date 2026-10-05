@@ -47,7 +47,44 @@ namespace GestionCoutureApp.Views
             {
                 SetFiltreActif(BtnFiltreAll);
                 await ChargerCommandes();
+
+                // TÂCHE 5 : abonnement CommandeChanged pour rafraîchissement immédiat
+                // et proposition WhatsApp au passage à Terminee
+                _commandeService.CommandeChanged += OnCommandeChanged;
             };
+
+            Unloaded += (s, e) =>
+            {
+                _commandeService.CommandeChanged -= OnCommandeChanged;
+            };
+        }
+
+        private async void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
+        {
+            // Rafraîchir la liste
+            await Dispatcher.InvokeAsync(async () => await ChargerCommandes());
+
+            // TÂCHE 5 : proposer WhatsApp si une pièce vient de passer à Terminee
+            if (e.TypeChangement == "PieceTerminee")
+            {
+                var commande = _commandeService.ObtenirParId(e.IdCommande);
+                if (commande?.Client != null && !string.IsNullOrWhiteSpace(commande.Client.Telephone))
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        var rep = MessageBox.Show(
+                            $"La pièce est terminée !\n\n" +
+                            $"Client : {commande.Client.Prenom} {commande.Client.Nom}\n" +
+                            $"Envoyer un message WhatsApp pour prévenir ?",
+                            "Pièce terminée — notification client",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+
+                        if (rep == MessageBoxResult.Yes)
+                            _ = _whatsApp.NotifierCommandePreteAsync(commande);
+                    });
+                }
+            }
         }
 
         // ── Helper opérateur connecté ──────────────────────────────────────
