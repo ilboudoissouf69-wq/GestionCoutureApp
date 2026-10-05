@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
 {
@@ -200,31 +201,22 @@ namespace GestionCoutureApp.Views
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 6);
 
-            // ===== CLIENT / LIVRAISON / COUTURIER =====
+            // ===== CLIENT / LIVRAISON =====
+            // Note : le couturier est une donnée interne — il n'apparaît PAS
+            // sur le reçu client (voir règles atelier).
             string nomClient = ((_commande.Client?.Prenom ?? "") + " " +
                                    (_commande.Client?.Nom ?? "")).Trim();
-            // CORRECTIF (Étape 1b-i) : Commande.Couturier/TypeVetement/
-            // DescriptionPrecision ne sont plus jamais renseignés par
-            // CommandeService (dépréciés, voir Commande.cs) — le reçu aurait
-            // silencieusement affiché "Non assigne" et un type de vêtement
-            // vide sur CHAQUE reçu imprimé, y compris pour des commandes où
-            // un couturier est bel et bien assigné (via sa pièce).
-            var premierePiece = _commande.Pieces.FirstOrDefault();
-            string nomCouturier = premierePiece?.Couturier != null
-                ? (premierePiece.Couturier.Prenom + " " + premierePiece.Couturier.Nom).Trim()
-                : "Non assigne";
 
             Ligne(p, Pad("CLIENT", 17) + " : " + nomClient, 10);
             Ligne(p, Pad("LIVRAISON PREVUE", 17) + " : " +
                        _commande.DateFin.ToString("dd/MM/yyyy"), 10);
-            Ligne(p, Pad("COUTURIER", 17) + " : " + nomCouturier, 10);
             Espace(p, 6);
 
             // ===== DETAILS DU VETEMENT =====
-            Ligne(p, "DETAILS DU VETEMENT", 11, TextAlignment.Left, Noir, FontWeights.Bold);
+            // Note : la description et les mesures sont des données internes
+            // qui n'apparaissent pas sur le reçu client.
+            Ligne(p, "DETAIL COMMANDE", 11, TextAlignment.Left, Noir, FontWeights.Bold);
             Ligne(p, Pad("   Type", 17) + " : " + _commande.TypeVetementAffiche, 10);
-            if (!string.IsNullOrWhiteSpace(premierePiece?.DescriptionPrecision))
-                Ligne(p, Pad("   Desc.", 17) + " : " + premierePiece!.DescriptionPrecision, 10);
             Espace(p, 6);
 
             // ===== DETAILS PAR PIÈCE =====
@@ -234,11 +226,8 @@ namespace GestionCoutureApp.Views
                 decimal totalCouture = 0m;
                 foreach (var piece in _commande.Pieces)
                 {
-                    string couturier = piece.Couturier != null
-                        ? piece.Couturier.Prenom + " " + piece.Couturier.Nom
-                        : "Non assigne";
                     LigneMontant(p, "   " + piece.TypeVetement, Fcfa(piece.MontantCouture), 10, Noir);
-                    Ligne(p, "   Couturier : " + couturier, 9, TextAlignment.Left, Gris);
+                    // Note : le couturier n'apparaît pas sur le reçu client
                     totalCouture += piece.MontantCouture;
                 }
                 if (_commande.Pieces.Count > 1)
@@ -328,6 +317,30 @@ namespace GestionCoutureApp.Views
                 Ligne(p, "Votre commande peut etre retiree", 9, TextAlignment.Center, Gris);
                 Ligne(p, "sur presentation de ce recu.", 9, TextAlignment.Center, Gris);
             }
+
+            // ── Mention de conservation (paramétrable via Parametre.JOURS_CONSERVATION) ──
+            int joursConservation = 30; // valeur par défaut
+            try
+            {
+                var parametresService = App.Services.GetService<IParametresService>();
+                if (parametresService != null)
+                {
+                    var valeur = parametresService.ObtenirValeur("JOURS_CONSERVATION")
+                        .GetAwaiter().GetResult();
+                    if (int.TryParse(valeur, out int jours) && jours > 0)
+                        joursConservation = jours;
+                }
+            }
+            catch { /* silencieux : on garde la valeur par défaut */ }
+
+            Espace(p, 8);
+            Ligne(p, new string('-', 32), 8, TextAlignment.Center, Gris);
+            Espace(p, 4);
+            Ligne(p,
+                $"Les articles non retires sous {joursConservation} jours",
+                8, TextAlignment.Center, Gris);
+            Ligne(p, "ne sont plus sous la responsabilite de l'atelier.",
+                8, TextAlignment.Center, Gris);
             Espace(p, 14);
         }
 
