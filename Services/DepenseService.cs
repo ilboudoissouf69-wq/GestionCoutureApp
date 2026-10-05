@@ -132,17 +132,35 @@ namespace GestionCoutureApp.Services
                 .Sum(c => c.MontantCommission + c.PrimeQualite);
 
             // Matériaux facturés clients (sur les commandes de la période)
-            // ✅ CORRECTIF AUDIT #3 : Les matériaux représentent un COÛT pour l'atelier
-            // (tissu/boutons achetés et refacturés au client). Ils sont déduits dans
-            // StatsFinancieres.MargeBrute = CA - Commissions - Matériaux.
-            // Si l'atelier applique une marge sur les matériaux (ex: acheté 5k, vendu 7k),
-            // il faudrait stocker le coût d'achat réel dans MaterielSupplement.CoutAchat.
+            // TÂCHE 2 : les matériaux sont un flux de trésorerie informatif.
+            // Ils circulent (atelier avance → client rembourse dans le paiement)
+            // mais ne sont PAS déduits du bénéfice atelier.
+            // TotalMateriaux est renseigné pour affichage séparé uniquement.
             decimal totalMateriaux = context.MaterielsSupplements
                 .Include(m => m.Commande)
                 .Where(m => m.Commande != null &&
                             m.Commande.DateFin.Date >= debut.Date &&
                             m.Commande.DateFin.Date <= fin.Date)
                 .AsEnumerable()
+                .Sum(m => m.Quantite * m.PrixUnitaire);
+
+            // Matériaux non remboursés : matériaux sur commandes non soldées ou abandonnées
+            // (la commande a des matériaux mais le client n'a pas encore tout payé)
+            decimal materiauxNonRembourses = context.MaterielsSupplements
+                .Include(m => m.Commande)
+                    .ThenInclude(c => c!.Paiements)
+                .Include(m => m.Commande)
+                    .ThenInclude(c => c!.Pieces)
+                .Where(m => m.Commande != null && !m.Commande.EstSupprimee)
+                .AsEnumerable()
+                .Where(m =>
+                {
+                    var cmd = m.Commande!;
+                    decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture)
+                                     + cmd.MaterielSupplements.Sum(x => x.Quantite * x.PrixUnitaire);
+                    decimal paye = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                    return paye < totalCmd - 0.01m;
+                })
                 .Sum(m => m.Quantite * m.PrixUnitaire);
 
             // Dépenses validées
@@ -171,7 +189,8 @@ namespace GestionCoutureApp.Services
                 TotalCommissions = totalCommissions,
                 TotalMateriaux   = totalMateriaux,
                 TotalDepenses    = totalDepenses,
-                SalaireSecretaire = salaireSecretaire
+                SalaireSecretaire = salaireSecretaire,
+                MateriauxNonRembourses = materiauxNonRembourses
             };
         }
     }

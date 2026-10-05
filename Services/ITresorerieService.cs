@@ -109,6 +109,13 @@ namespace GestionCoutureApp.Services
         /// Reste à encaisser (commandes livrées non soldées)
         /// </summary>
         public decimal ResteAEncaisser { get; set; }
+
+        /// <summary>
+        /// TÂCHE 2 — Matériaux avancés non encore remboursés par les clients.
+        /// Flux de trésorerie sortant non encore compensé par un paiement complet.
+        /// Informatif uniquement — n'entre pas dans le calcul du bénéfice.
+        /// </summary>
+        public decimal MateriauxNonRembourses { get; set; }
     }
 }
 

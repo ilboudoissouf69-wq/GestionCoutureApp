@@ -187,8 +187,24 @@ namespace GestionCoutureApp.Services
 
             int nombreCommandesLivrees = commandesPeriode.Count;
 
-            // 7. Bilan net
+            // 7. Bilan net — formule unifiée (identique à StatsFinancieres.BeneficeNet)
+            // TÂCHE 2 : les matériaux ne sont jamais déduits ici.
+            // CA encaissé contient déjà couture + matériaux.
+            // Les matériaux s'annulent (atelier avance → client rembourse).
+            // Seules les dépenses réelles (loyer, élec, salaires, etc.) sont déduites.
             decimal bilanNet = ca - depenses - totalCommissions - totalPrimes;
+
+            // 8. Matériaux non remboursés (commandes avec matériaux et solde non nul)
+            decimal materiauxNonRembourses = 0m;
+            foreach (var cmd in commandesPeriode)
+            {
+                decimal totalMat = cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                if (totalMat <= 0m) continue;
+                decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture) + totalMat;
+                decimal paye = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                if (paye < totalCmd - 0.01m)
+                    materiauxNonRembourses += totalMat;
+            }
 
             _logger.LogInformation(
                 "Bilan calculé — CA: {CA:N0}, Dépenses: {Dep:N0}, Commissions: {Com:N0}, " +
@@ -208,7 +224,8 @@ namespace GestionCoutureApp.Services
                 BilanNet = bilanNet,
                 NombrePaiements = nombrePaiements,
                 NombreCommandesLivrees = nombreCommandesLivrees,
-                ResteAEncaisser = resteAEncaisser
+                ResteAEncaisser = resteAEncaisser,
+                MateriauxNonRembourses = materiauxNonRembourses
             };
         }
 

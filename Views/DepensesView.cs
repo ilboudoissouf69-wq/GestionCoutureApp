@@ -102,7 +102,8 @@ namespace GestionCoutureApp.Views
                 TxtCaEncaisse.Text  = stats.CaEncaisse.ToString("N0");
                 TxtCharges.Text     = stats.ChargesExploitation.ToString("N0");
                 TxtChargesDetail.Text = $"FCFA (dép. {stats.TotalDepenses:N0} + sal. {stats.SalaireSecretaire:N0})";
-                TxtMargeBrute.Text  = stats.MargeBrute.ToString("N0");
+                // TÂCHE 2 : Bénéfice = CA encaissé − commissions − charges (sans les matériaux)
+                TxtMargeBrute.Text  = stats.BeneficeNet.ToString("N0");
                 TxtBeneficeNet.Text = stats.BeneficeNet.ToString("N0");
 
                 // Couleur Bénéfice Net
@@ -374,11 +375,12 @@ namespace GestionCoutureApp.Views
                 var stats = _depenseService.ObtenirStats(_debutPeriode, _finPeriode);
                 sb.AppendLine($";;CA Encaissé;{stats.CaEncaisse:N0};;");
                 sb.AppendLine($";;Commissions;{stats.TotalCommissions:N0};;");
-                sb.AppendLine($";;Matériaux;{stats.TotalMateriaux:N0};;");
+                sb.AppendLine($";;Matériaux (informatif);{stats.TotalMateriaux:N0};;");
                 sb.AppendLine($";;Dépenses;{stats.TotalDepenses:N0};;");
                 sb.AppendLine($";;Salaire Secrétaire;{stats.SalaireSecretaire:N0};;");
-                sb.AppendLine($";;MARGE BRUTE;{stats.MargeBrute:N0};;");
                 sb.AppendLine($";;BÉNÉFICE NET;{stats.BeneficeNet:N0};;");
+                if (stats.MateriauxNonRembourses > 0)
+                    sb.AppendLine($";;⚠ Matériaux non remboursés;{stats.MateriauxNonRembourses:N0};;");
 
                 File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8);
 
