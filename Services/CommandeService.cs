@@ -955,45 +955,53 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // Seul le Boss supprime une pièce — vérifié ici, pas seulement à l'écran
-            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss);
+            // TÂCHE 4 : La Secrétaire peut supprimer une pièce vierge (statut "A faire",
+            // aucun paiement sur la commande, aucune commission). Le Boss peut toujours.
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
 
             var piece = context.PiecesCommande
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
                 .Include(p => p.Mesures)
-                .Include(p => p.MaterielSupplements) // ✅ FIX FK : charger les matériaux liés
+                .Include(p => p.MaterielSupplements)
                 .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
 
             if (piece.IdCommission.HasValue)
-            {
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette pièce : elle est rattachée à une commission.");
-            }
 
             var commande = piece.Commande;
-            if (commande != null && commande.Paiements.Any(p => !p.EstAnnule))
+            bool aPaiement = commande != null && commande.Paiements.Any(p => !p.EstAnnule);
+
+            // Secrétaire : conditions strictes (pièce vierge uniquement)
+            if (operateur.RoleEnum == RoleEmploye.Secretaire)
             {
-                throw new InvalidOperationException(
-                    "Impossible de supprimer cette pièce : des paiements ont été encaissés sur cette commande.");
+                if (aPaiement)
+                    throw new InvalidOperationException(
+                        "La Secrétaire ne peut supprimer une pièce que si aucun paiement " +
+                        "n'a été encaissé sur la commande. Contactez le Boss.");
+
+                if (piece.Statut != "A faire")
+                    throw new InvalidOperationException(
+                        "La Secrétaire ne peut supprimer que les pièces encore au statut " +
+                        "\"À faire\" (vierges). Cette pièce est déjà en cours ou terminée. " +
+                        "Contactez le Boss.");
+            }
+            else
+            {
+                // Boss : bloqué uniquement si paiements
+                if (aPaiement)
+                    throw new InvalidOperationException(
+                        "Impossible de supprimer cette pièce : des paiements ont été encaissés sur cette commande.");
             }
 
-            // Vérifier qu'il reste au moins une pièce si la commande en a plusieurs
-            int nbPieces = context.PiecesCommande
-                .Count(p => p.IdCommande == piece.IdCommande);
+            int nbPieces = context.PiecesCommande.Count(p => p.IdCommande == piece.IdCommande);
             if (nbPieces <= 1)
-            {
                 throw new InvalidOperationException(
                     "Impossible de supprimer la dernière pièce d'une commande. " +
                     "Supprimez la commande entière si nécessaire.");
-            }
 
-            // ✅ FIX FK : supprimer les matériaux d'abord — la relation
-            // PieceCommande→MaterielSupplements est OnDelete(Restrict) (pas Cascade,
-            // car MaterielSupplement a déjà une FK Commande en Cascade et EF Core
-            // refuse deux chemins de cascade sur la même table). Sans ce RemoveRange,
-            // SQLite lève "FOREIGN KEY constraint failed".
             if (piece.MaterielSupplements.Any())
                 context.MaterielsSupplements.RemoveRange(piece.MaterielSupplements);
 

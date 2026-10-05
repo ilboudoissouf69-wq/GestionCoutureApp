@@ -192,13 +192,31 @@ namespace GestionCoutureApp.Tests
         // ── Suppression de pièce ──────────────────────────────────────────
 
         [Test]
-        public void Secretaire_NePeut_Pas_Supprimer_Une_Piece()
+        public void Secretaire_NePeut_Pas_Supprimer_Une_Piece_En_Cours()
         {
+            // TÂCHE 4 : la Secrétaire peut supprimer une pièce vierge, pas une En cours
+            var (idCommande, _) = CreerCommande(10000m);
+            int idPiece2 = AjouterSecondePiece(idCommande);
+            // Passer en cours → plus vierge
+            _commandeService.ChangerStatutPiece(idPiece2, "En cours", IdBoss, "Mamadou DIALLO");
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.SupprimerPiece(idPiece2, IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("À faire").Or.Contain("vierge").Or.Contain("Boss"));
+        }
+
+        [Test]
+        public void Secretaire_Peut_Supprimer_Piece_Vierge()
+        {
+            // TÂCHE 4 : pièce A faire sans paiement → Secrétaire peut supprimer
             var (idCommande, _) = CreerCommande(10000m);
             int idPiece2 = AjouterSecondePiece(idCommande);
 
-            Assert.Throws<UnauthorizedAccessException>(() =>
+            Assert.DoesNotThrow(() =>
                 _commandeService.SupprimerPiece(idPiece2, IdSecretaire, "Marie FALL"));
+
+            using var ctx = _factory.CreateDbContext();
+            Assert.That(ctx.PiecesCommande.Any(p => p.IdPieceCommande == idPiece2), Is.False);
         }
 
         [Test]

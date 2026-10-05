@@ -141,7 +141,8 @@ namespace GestionCoutureApp.Views
             // BtnModifier VISIBLE pour la Secrétaire (droits vérifiés côté service)
             // BtnSupprimer maintenant visible — le service rejettera si conditions non remplies
             BtnSupprimer.Visibility = Visibility.Visible;
-            BtnSupprimerPiece.Visibility = Visibility.Collapsed;
+            // TÂCHE 4 : BtnSupprimerPiece visible pour la Secrétaire (pièce vierge uniquement)
+            BtnSupprimerPiece.Visibility = Visibility.Visible;
         }
 
             // ===== COUTURIER : cacher créer/supprimer commande + supprimer pièce =====
@@ -1732,11 +1733,20 @@ namespace GestionCoutureApp.Views
         }
 
         // ==================================================================
-        // Dupliquer une pièce
+        // Dupliquer une pièce — TÂCHE 4 : confirmation obligatoire
         // ==================================================================
         private void BtnDupliquerPiece_Click(object sender, RoutedEventArgs e)
         {
             if (!_pieceSelectionneeId.HasValue) return;
+
+            // Confirmation avant duplication (évite les doublons accidentels)
+            var r = MessageBox.Show(
+                "Dupliquer cette pièce ?\n\nUne copie identique sera ajoutée à la commande.",
+                "Confirmation de duplication",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (r != MessageBoxResult.Yes) return;
 
             try
             {
@@ -1747,7 +1757,7 @@ namespace GestionCoutureApp.Views
                 RafraichirListePieces();
                 _ = ChargerCommandes();
 
-                MessageBox.Show("Piece dupliquee avec succes !", "Succes",
+                MessageBox.Show("Pièce dupliquée avec succès !", "Succès",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (InvalidOperationException ex)
