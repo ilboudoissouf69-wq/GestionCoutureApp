@@ -280,6 +280,9 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private async Task ChargerCommandes()
         {
+            // Guard : ne rien faire si les services ne sont pas encore initialisés
+            if (_commandeService == null) return;
+
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
@@ -404,6 +407,9 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private async void CmbFiltreStatut_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // Guard : le constructeur n'est pas encore terminé si _commandeService est null
+            if (_commandeService == null) return;
+
             if (CmbFiltreStatut.SelectedItem is ComboBoxItem item)
             {
                 _filtreStatut = item.Tag?.ToString();
@@ -415,6 +421,9 @@ namespace GestionCoutureApp.Views
 
         private async void CmbFiltreCouturier_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // Guard : le constructeur n'est pas encore terminé si _commandeService est null
+            if (_commandeService == null) return;
+
             if (CmbFiltreCouturier.SelectedItem is Employe emp && emp.IdEmploye > 0)
                 _filtreCouturierId = emp.IdEmploye;
             else
@@ -448,6 +457,7 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                if (_commandeService == null) return;
                 var result = await _commandeService.ObtenirPageCommandesStatutAsync(
                     "Retard", 1, 999, null);
                 int nb = result.TotalCount;
