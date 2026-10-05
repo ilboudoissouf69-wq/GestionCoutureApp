@@ -131,13 +131,13 @@ namespace GestionCoutureApp.Views
             var authService = App.Services.GetRequiredService<IAuthService>();
             _roleUtilisateur = authService.UtilisateurConnecte?.Role ?? "";
 
-            // ===== SECRETAIRE : cacher modifier et supprimer =====
-            if (_roleUtilisateur == "Secretaire")
-            {
-                BtnModifier.Visibility = Visibility.Collapsed;
-                BtnSupprimer.Visibility = Visibility.Collapsed;
-                BtnSupprimerPiece.Visibility = Visibility.Collapsed;
-            }
+        // ===== SECRETAIRE : cacher uniquement supprimer (pas modifier) =====
+        if (_roleUtilisateur == "Secretaire")
+        {
+            // BtnModifier VISIBLE pour la Secrétaire (droits vérifiés côté service)
+            BtnSupprimer.Visibility = Visibility.Collapsed;
+            BtnSupprimerPiece.Visibility = Visibility.Collapsed;
+        }
 
             // ===== COUTURIER : cacher créer/supprimer commande + supprimer pièce =====
             if (_roleUtilisateur == "Couturier")
@@ -859,6 +859,9 @@ namespace GestionCoutureApp.Views
             CmbAjustement.IsEnabled = !prixVerrouille;
             CmbTypeVetement.IsEnabled = !prixVerrouille;
             TxtMontant.ToolTip = prixVerrouille ? "Seul le Boss peut modifier le prix d'une pièce enregistrée." : null;
+
+            // Secrétaire : le client ne peut pas être changé (vérifié aussi côté service)
+            CmbClient.IsEnabled = _roleUtilisateur != "Secretaire" || modeCreation;
 
             BtnSauvegarderPiece.Visibility = Visibility.Visible;
             PanelActionsPiece.Visibility = modeCreation ? Visibility.Collapsed : Visibility.Visible;
@@ -2441,19 +2444,25 @@ namespace GestionCoutureApp.Views
                         return;
                 }
 
-                using (var context = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext())
+                // Mise à jour niveau commande via le service (ExigerRole, guards Secrétaire)
+                var commandePourModif = new Commande
                 {
-                    var existante = context.Commandes.FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
-                    if (existante == null) return;
-
-                    existante.IdClient = (int)CmbClient.SelectedValue;
-                    existante.DateFin = DateFin.SelectedDate ?? existante.DateFin;
-                    existante.HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? existante.HeureDebut;
-                    existante.HeureFin = ParseHeure(TxtHeureFin.Text);
-
-                    context.SaveChanges();
-                }
-            }
+                    IdCommande = _commandeSelectionneeId,
+                    IdClient   = (int)(CmbClient.SelectedValue ?? 0),
+                    DateFin    = DateFin.SelectedDate ?? DateTime.Today,
+                    HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero,
+                    HeureFin   = ParseHeure(TxtHeureFin.Text)
+                };
+                var piecePourModif = pieceModifiee ?? new PieceCommande
+                {
+                    TypeVetement       = string.Empty,
+                    MontantCouture     = 0,
+                    Statut             = string.Empty
+                };
+                var (idOpM, nomOpM) = OperateurConnecte();
+                _commandeService.Modifier(commandePourModif, piecePourModif,
+                    pieceModifiee != null ? CollecterMesures() : new List<Mesure>(),
+                    idOpM, nomOpM);            }
             catch (InvalidOperationException ex)
             {
                 MessageBox.Show(ex.Message, "Modification impossible",

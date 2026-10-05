@@ -326,9 +326,14 @@ namespace GestionCoutureApp.Services
             }
         }
 
-        public void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures)
+        public void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
+            int idOperateur, string nomOperateur)
         {
             using var context = _contextFactory.CreateDbContext();
+
+            // ── Contrôle des droits : Boss et Secrétaire uniquement ──────────
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+
             var existante = context.Commandes
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
@@ -336,30 +341,43 @@ namespace GestionCoutureApp.Services
 
             if (existante == null) return;
 
-            // Mise à jour de la pièce existante
+            // ── Garde champs Boss-only pour la Secrétaire ────────────────────
+            if (operateur.RoleEnum == RoleEmploye.Secretaire)
+            {
+                // Client : interdit
+                if (existante.IdClient != commande.IdClient)
+                    throw new InvalidOperationException(
+                        "La Secrétaire ne peut pas modifier le client d'une commande.");
+
+                // Pièce : type de vêtement et montant interdits
+                var pieceExistantePourGarde = existante.Pieces.FirstOrDefault();
+                if (pieceExistantePourGarde != null)
+                {
+                    if (pieceExistantePourGarde.TypeVetement != piece.TypeVetement)
+                        throw new InvalidOperationException(
+                            "La Secrétaire ne peut pas modifier le type de vêtement d'une pièce. " +
+                            "Cette action est réservée au Boss.");
+
+                    if (pieceExistantePourGarde.MontantCouture != piece.MontantCouture)
+                        throw new InvalidOperationException(
+                            "La Secrétaire ne peut pas modifier le prix d'une pièce. " +
+                            "Cette action est réservée au Boss.");
+                }
+            }
+
+            // ── Mise à jour de la pièce existante ───────────────────────────
             var pieceExistante = existante.Pieces.FirstOrDefault();
 
             if (pieceExistante != null)
             {
-                // Verrouillage commission
+                // Verrouillage commission — ni Boss ni Secrétaire ne peut changer le montant
                 if (pieceExistante.IdCommission.HasValue && pieceExistante.MontantCouture != piece.MontantCouture)
                 {
                     throw new InvalidOperationException(
                         "Impossible de modifier le montant de cette pièce : elle est rattachée à " +
-                        "une commission déjà calculée et enregistrée. Annulez d'abord cette commission " +
-                        "(avec motif) si le montant doit vraiment être corrigé.");
+                        "une commission déjà calculée. Annulez d'abord cette commission.");
                 }
 
-                // CORRECTIF (audit) : BUG — cette garde ne comparait que le montant de
-                // LA PREMIÈRE pièce à l'encaissé total de la commande. Si la commande a
-                // déjà plusieurs pièces (AjouterPiece est utilisable dès aujourd'hui,
-                // voir CommandesView.BtnAjouterPiece_Click), cette méthode Modifier() ne
-                // touche que Pieces.FirstOrDefault() et pouvait donc soit bloquer à tort
-                // une modification valide, soit — plus grave — laisser passer une baisse
-                // qui fait descendre le TOTAL de la commande sous l'encaissé, parce que
-                // les autres pièces n'étaient jamais comptées. ModifierPiece() calculait
-                // déjà ça correctement (totalAutresPieces) ; on applique la même logique
-                // ici pour que les deux chemins de modification soient cohérents.
                 decimal dejaEncaisse = existante.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
                 decimal totalAutresPieces = existante.Pieces
                     .Where(p => p.IdPieceCommande != pieceExistante.IdPieceCommande)
@@ -372,13 +390,19 @@ namespace GestionCoutureApp.Services
                         $"ne peut pas être inférieur au montant déjà encaissé ({dejaEncaisse:N0} FCFA).");
                 }
 
-                pieceExistante.TypeVetement = piece.TypeVetement;
+                // La Secrétaire peut modifier : couturier, statut, description, mesures
+                // Le Boss peut modifier tout cela + type de vêtement + montant
+                if (operateur.RoleEnum == RoleEmploye.Boss)
+                {
+                    pieceExistante.TypeVetement = piece.TypeVetement;
+                    pieceExistante.MontantCouture = piece.MontantCouture;
+                }
                 pieceExistante.IdCouturier = piece.IdCouturier;
-                pieceExistante.MontantCouture = piece.MontantCouture;
                 pieceExistante.DescriptionPrecision = piece.DescriptionPrecision;
                 pieceExistante.CheminPhoto = piece.CheminPhoto;
                 if (!string.IsNullOrWhiteSpace(piece.Statut))
                     pieceExistante.Statut = piece.Statut;
+
                 context.Mesures.RemoveRange(pieceExistante.Mesures);
                 foreach (var mesure in mesures)
                 {
@@ -386,28 +410,54 @@ namespace GestionCoutureApp.Services
                     mesure.IdCommande = existante.IdCommande;
                     context.Mesures.Add(mesure);
                 }
+
+                // ── Audit pour la Secrétaire ─────────────────────────────────
+                if (operateur.RoleEnum == RoleEmploye.Secretaire)
+                {
+                    Auditer(operateur, nomOperateur, "COMMANDE_MODIFIEE_SECRETAIRE", "Commande",
+                        existante.IdCommande,
+                        avant: new {
+                            DateFin = existante.DateFin,
+                            HeureDebut = existante.HeureDebut,
+                            IdCouturier = pieceExistante.IdCouturier,
+                            Statut = pieceExistante.Statut
+                        },
+                        apres: new {
+                            commande.DateFin,
+                            commande.HeureDebut,
+                            piece.IdCouturier,
+                            piece.Statut
+                        },
+                        motif: "Modification par Secrétaire");
+                }
             }
             else
             {
                 piece.IdCommande = existante.IdCommande;
-                if (string.IsNullOrWhiteSpace(piece.Statut))
-                    piece.Statut = "A faire";
+                piece.Statut = "A faire";
                 context.PiecesCommande.Add(piece);
-                context.SaveChanges();
 
                 foreach (var mesure in mesures)
                 {
-                    mesure.IdPieceCommande = piece.IdPieceCommande;
                     mesure.IdCommande = existante.IdCommande;
                     context.Mesures.Add(mesure);
                 }
             }
 
-            existante.DateFin = commande.DateFin;
+            // Mise à jour champs commande
+            // La Secrétaire ne peut pas changer le client
+            if (operateur.RoleEnum == RoleEmploye.Boss)
+                existante.IdClient = commande.IdClient;
+
+            existante.DateFin   = commande.DateFin;
             existante.HeureDebut = commande.HeureDebut;
-            existante.HeureFin = commande.HeureFin;
+            existante.HeureFin  = commande.HeureFin;
 
             context.SaveChanges();
+
+            _logger.LogInformation(
+                "Modifier — Commande #{IdCommande} par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
+                existante.IdCommande, nomOperateur, idOperateur, DateTime.Now);
         }
 
         /// <summary>

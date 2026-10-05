@@ -380,6 +380,141 @@ namespace GestionCoutureApp.Tests
             Assert.That(enBase.MontantTotalAvecMateriaux, Is.EqualTo(10600m));
         }
 
+        // ── CommandeService.Modifier — droits Secrétaire ─────────────────
+
+        [Test]
+        public void Modifier_Secretaire_NePeutPas_Changer_Client()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+
+            // Fabriquer une commande avec un autre client
+            var commandeModif = new Commande
+            {
+                IdCommande = idCommande,
+                IdClient   = IdClient + 99,  // client différent
+                DateFin    = DateTime.Now.AddDays(10),
+                HeureDebut = TimeSpan.Zero
+            };
+            var pieceModif = new PieceCommande
+            {
+                IdPieceCommande  = piece.IdPieceCommande,
+                TypeVetement     = piece.TypeVetement,
+                MontantCouture   = piece.MontantCouture,
+                Statut           = piece.Statut
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+                    IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("client").IgnoreCase);
+        }
+
+        [Test]
+        public void Modifier_Secretaire_NePeutPas_Changer_Prix()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+
+            var commandeModif = new Commande
+            {
+                IdCommande = idCommande,
+                IdClient   = IdClient,
+                DateFin    = DateTime.Now.AddDays(10),
+                HeureDebut = TimeSpan.Zero
+            };
+            var pieceModif = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = piece.TypeVetement,
+                MontantCouture  = 7500m,   // prix modifié — interdit Secrétaire
+                Statut          = piece.Statut
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+                    IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("prix").IgnoreCase.Or.Contain("montant").IgnoreCase);
+            // Prix inchangé en base
+            Assert.That(PieceEnBase(piece.IdPieceCommande).MontantCouture, Is.EqualTo(10000m));
+        }
+
+        [Test]
+        public void Modifier_Secretaire_NePeutPas_Changer_TypeVetement()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+
+            var commandeModif = new Commande
+            {
+                IdCommande = idCommande, IdClient = IdClient,
+                DateFin = DateTime.Now.AddDays(10), HeureDebut = TimeSpan.Zero
+            };
+            var pieceModif = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = "Boubou",   // changement — interdit
+                MontantCouture  = piece.MontantCouture,
+                Statut          = piece.Statut
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+                    IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("type").IgnoreCase.Or.Contain("vêtement").IgnoreCase);
+        }
+
+        [Test]
+        public void Modifier_Secretaire_Peut_Changer_DateLivraison_Et_Couturier()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+            var nouvelleDate = DateTime.Now.AddDays(14);
+
+            var commandeModif = new Commande
+            {
+                IdCommande = idCommande, IdClient = IdClient,
+                DateFin    = nouvelleDate,
+                HeureDebut = TimeSpan.FromHours(9)
+            };
+            var pieceModif = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = piece.TypeVetement,
+                MontantCouture  = piece.MontantCouture,
+                IdCouturier     = IdCouturier,
+                Statut          = "En cours"
+            };
+
+            Assert.DoesNotThrow(() =>
+                _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+                    IdSecretaire, "Marie FALL"));
+
+            // Vérifier en base
+            using var ctx = _factory.CreateDbContext();
+            var cmd = ctx.Commandes.First(c => c.IdCommande == idCommande);
+            Assert.That(cmd.DateFin.Date, Is.EqualTo(nouvelleDate.Date));
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("En cours"));
+        }
+
+        [Test]
+        public void Modifier_Couturier_Acces_Refuse()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+            var commandeModif = new Commande
+            {
+                IdCommande = idCommande, IdClient = IdClient,
+                DateFin = DateTime.Now.AddDays(10), HeureDebut = TimeSpan.Zero
+            };
+            var pieceModif = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = piece.TypeVetement,
+                MontantCouture  = piece.MontantCouture,
+                Statut          = piece.Statut
+            };
+
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+                    IdCouturier, "Issa CISSE"));
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────
 
         private (int idCommande, PieceCommande piece) CreerCommande(decimal montant)

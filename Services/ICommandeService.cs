@@ -35,7 +35,18 @@ namespace GestionCoutureApp.Services
         void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
             int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null);
 
-        void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures);
+        /// <summary>
+        /// Modifie les informations de niveau commande (dates, heures) et optionnellement
+        /// la pièce associée. Boss ou Secrétaire uniquement.<br/>
+        /// La Secrétaire ne peut modifier que : date livraison, heures, description, couturier, statut.
+        /// Elle NE PEUT PAS modifier : montant/prix, type de vêtement, client.
+        /// Le service lève <see cref="InvalidOperationException"/> si elle tente de modifier
+        /// un champ réservé au Boss, même en contournant l'écran.
+        /// </summary>
+        /// <param name="idOperateur">Id de l'opérateur (Boss ou Secrétaire).</param>
+        /// <param name="nomOperateur">Nom pour l'audit.</param>
+        void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
+            int idOperateur, string nomOperateur);
 
         // ✅ CORRECTIF AUDIT : Suppression logique avec autorisation Boss et traçabilité
         Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null);
