@@ -138,5 +138,33 @@ namespace GestionCoutureApp.Services
         /// </summary>
         Task<PagedResult<PieceCommande>> ObtenirPagePiecesAsync(
             string? statut, int page, int pageSize, string? recherche = null);
+
+        // ===== StatutView V2 — Vue par commande =====
+
+        /// <summary>
+        /// Renvoie une page paginée de commandes pour l'écran Statut, avec toutes
+        /// les navigations nécessaires (Pieces+Couturier, Client, Paiements,
+        /// MaterielSupplements). Évite le N+1. Filtre optionnel par statut global
+        /// de la commande (calculé depuis ses pièces).
+        /// <para>
+        /// Valeurs de filtre : null = toutes, "A faire", "En cours", "Terminee",
+        /// "Livree", "Retard" (commandes dont DateFin est dépassée et dont au moins
+        /// une pièce est "A faire" ou "En cours").
+        /// </para>
+        /// </summary>
+        Task<PagedResult<Commande>> ObtenirPageCommandesStatutAsync(
+            string? statut, int page, int pageSize, string? recherche = null);
+
+        /// <summary>
+        /// Change le statut d'une seule pièce sans toucher aux mesures ni au prix.
+        /// <para>
+        /// Boss et Secrétaire uniquement. Le couturier est bloqué côté service.
+        /// Lève <see cref="LivraisonNonSoldeeException"/> si la commande n'est pas
+        /// soldée et que le nouveau statut est "Livree" (sauf Boss avec motif).
+        /// Les pièces verrouillées par une commission ne peuvent pas changer de statut.
+        /// </para>
+        /// </summary>
+        void ChangerStatutPiece(int idPieceCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null);
     }
 }

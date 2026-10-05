@@ -177,8 +177,9 @@ namespace GestionCoutureApp.Services
             commande.NomOperateurCreation = nomOperateur.Trim();
             commande.DateCreation         = DateTime.UtcNow;
 
-            if (string.IsNullOrWhiteSpace(piece.Statut))
-                piece.Statut = "A faire";
+            // Le statut est TOUJOURS forcé à "A faire" à la création —
+            // peu importe ce que l'écran ou l'appelant a pu mettre.
+            piece.Statut = "A faire";
 
             // Commande + pièce + mesures + matériaux en UN SEUL SaveChanges :
             // EF Core l'exécute dans une transaction, donc une coupure de courant
@@ -649,9 +650,9 @@ namespace GestionCoutureApp.Services
                 }
             }
 
+            // Le statut est TOUJOURS forcé à "A faire" à l'ajout de pièce.
             piece.IdCommande = idCommande;
-            if (string.IsNullOrWhiteSpace(piece.Statut))
-                piece.Statut = "A faire";
+            piece.Statut = "A faire";
 
             // CORRECTIF (audit) : conserver le motif avec la pièce, pas seulement
             // le vérifier au passage. Sans ça, rien ne prouve après coup pourquoi
@@ -999,6 +1000,146 @@ namespace GestionCoutureApp.Services
                 .OrderByDescending(p => p.IdPieceCommande)
                 .Take(10)
                 .ToList();
+        }
+
+        // ===== StatutView V2 — vue paginée par COMMANDE =====
+
+        public async Task<PagedResult<Commande>> ObtenirPageCommandesStatutAsync(
+            string? statut, int page, int pageSize, string? recherche = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            DateTime maintenant = DateTime.Now;
+
+            // Chargement complet en une seule requête pour éviter le N+1.
+            // On inclut Paiements et MaterielSupplements pour que les propriétés
+            // calculées (ResteAPayer, MontantTotalAvecMateriaux) soient correctes.
+            var query = context.Commandes
+                .Where(c => !c.EstSupprimee)
+                .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
+                .Include(c => c.Pieces)
+                    .ThenInclude(p => p.Couturier)
+                .AsQueryable();
+
+            // Filtre par statut (filtre virtuel "Retard" = DateFin dépassée + pièce active)
+            if (!string.IsNullOrEmpty(statut))
+            {
+                if (statut == "Retard")
+                {
+                    query = query.Where(c =>
+                        c.DateFin < maintenant &&
+                        c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
+                }
+                else
+                {
+                    // Le statut global est calculé : on filtre de façon approchée
+                    // (toutes les pièces au statut demandé OU au moins une pièce
+                    //  pour les statuts partiels). Puis on affine en mémoire.
+                    query = query.Where(c => c.Pieces.Any(p => p.Statut == statut));
+                }
+            }
+
+            // Filtre recherche (nom/prénom client ou type de vêtement d'une pièce)
+            if (!string.IsNullOrWhiteSpace(recherche))
+            {
+                query = query.Where(c =>
+                    (c.Client != null &&
+                     (c.Client.Nom.Contains(recherche) || c.Client.Prenom.Contains(recherche))) ||
+                    c.Pieces.Any(p => p.TypeVetement.Contains(recherche)));
+            }
+
+            var totalCount = await query.CountAsync();
+
+            // Tri : retards en tête (DateFin la plus ancienne), puis DateFin croissante
+            var items = await query
+                .OrderBy(c => c.DateFin)
+                .ThenByDescending(c => c.DateDebut)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            // Affinage en mémoire si filtre statut exact (le filtre EF était approché)
+            if (!string.IsNullOrEmpty(statut) && statut != "Retard")
+            {
+                items = items.Where(c => c.StatutGlobal == statut ||
+                    c.StatutGlobal.Replace(" partiellement", "") == statut).ToList();
+            }
+
+            return new PagedResult<Commande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        /// <summary>
+        /// Change le statut d'une seule pièce sans toucher aux mesures ni au prix.
+        /// Méthode légère dédiée à StatutView.
+        /// </summary>
+        public void ChangerStatutPiece(int idPieceCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            // Contrôle des droits : Boss et Secrétaire uniquement
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+
+            var piece = context.PiecesCommande
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Paiements)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.MaterielSupplements)
+                .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
+                ?? throw new InvalidOperationException("Pièce introuvable.");
+
+            // Les pièces rattachées à une commission ne changent pas de statut en cascade
+            if (piece.IdCommission.HasValue)
+                throw new InvalidOperationException(
+                    "Cette pièce est rattachée à une commission déjà calculée. " +
+                    "Son statut ne peut pas être modifié directement. " +
+                    "Annulez d'abord la commission si nécessaire.");
+
+            string ancienStatut = piece.Statut;
+            if (ancienStatut == nouveauStatut) return; // rien à faire
+
+            // Garde livraison : commande soldée ou Boss avec motif
+            decimal? resteLivraisonForcee = null;
+            if (nouveauStatut == "Livree" && ancienStatut != "Livree" && piece.Commande != null)
+                resteLivraisonForcee = VerifierLivraisonSoldee(piece.Commande, operateur, motifLivraisonNonSoldee);
+
+            piece.Statut = nouveauStatut;
+            context.SaveChanges();
+
+            // Audit : traçabilité statut (qui, quand, ancien → nouveau)
+            Auditer(operateur, nomOperateur, "STATUT_PIECE_MODIFIE", "PieceCommande",
+                idPieceCommande,
+                avant: new { Statut = ancienStatut },
+                apres: new { Statut = nouveauStatut },
+                motif: null);
+
+            if (resteLivraisonForcee.HasValue)
+                AuditerLivraisonNonSoldee(operateur, nomOperateur, piece.IdCommande,
+                    resteLivraisonForcee.Value, motifLivraisonNonSoldee!,
+                    $"Changement statut pièce #{idPieceCommande} ({piece.TypeVetement})");
+
+            // Notifier les autres écrans
+            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            {
+                IdCommande = piece.IdCommande,
+                TypeChangement = "StatutModifie",
+                Details = $"Pièce #{idPieceCommande} : {ancienStatut} → {nouveauStatut}"
+            });
+
+            _logger.LogInformation(
+                "ChangerStatutPiece — Pièce #{IdPiece} ({Type}) : « {Ancien} » → « {Nouveau} » " +
+                "par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
+                idPieceCommande, piece.TypeVetement, ancienStatut, nouveauStatut,
+                nomOperateur, idOperateur, DateTime.Now);
         }
 
         // ===== StatutView — vue plate paginée de toutes les pièces =====

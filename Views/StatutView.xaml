@@ -5,8 +5,9 @@
       Background="{StaticResource BackgroundBrush}">
 
     <!-- ================================================================
-         STATUT VIEW — une ligne par pièce de commande
-         Accessible Boss + Secrétaire. Filtres par statut + recherche.
+         STATUT VIEW V2 — une ligne par COMMANDE, dépliable par pièce.
+         Boss / Secrétaire : lecture + modification statut.
+         Couturier : consultation uniquement.
     ================================================================ -->
     <Grid Margin="28,24,28,28">
         <Grid.RowDefinitions>
@@ -19,10 +20,10 @@
 
         <!-- ── Titre ── -->
         <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="Statut des pièces"
+            <TextBlock Text="Suivi des commandes"
                        FontSize="24" FontWeight="Bold"
                        Foreground="{StaticResource PrimaryBrush}"/>
-            <Border Height="3" Width="48" CornerRadius="2"
+            <Border Height="3" Width="60" CornerRadius="2"
                     Background="#CC0000" HorizontalAlignment="Left"
                     Margin="0,8,0,0"/>
         </StackPanel>
@@ -43,13 +44,13 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Filtres onglet-style -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <WrapPanel Grid.Column="0" Orientation="Horizontal">
 
                     <Button x:Name="BtnFiltreRetard"
                             Content="🔴  En retard"
                             Height="34" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,0"
+                            Margin="0,0,6,4"
                             Cursor="Hand"
                             Click="BtnFiltre_Click"
                             Tag="Retard">
@@ -84,7 +85,7 @@
                             Content="⬜  À faire"
                             Height="34" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,0"
+                            Margin="0,0,6,4"
                             Cursor="Hand"
                             Click="BtnFiltre_Click"
                             Tag="A faire">
@@ -119,7 +120,7 @@
                             Content="🟡  En cours"
                             Height="34" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,0"
+                            Margin="0,0,6,4"
                             Cursor="Hand"
                             Click="BtnFiltre_Click"
                             Tag="En cours">
@@ -154,7 +155,7 @@
                             Content="🟢  Terminée"
                             Height="34" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,0"
+                            Margin="0,0,6,4"
                             Cursor="Hand"
                             Click="BtnFiltre_Click"
                             Tag="Terminee">
@@ -185,11 +186,11 @@
                         </Button.Style>
                     </Button>
 
-                    <Button x:Name="BtnFiltrelivree"
+                    <Button x:Name="BtnFiltreLivree"
                             Content="🔵  Livrée"
                             Height="34" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,0"
+                            Margin="0,0,6,4"
                             Cursor="Hand"
                             Click="BtnFiltre_Click"
                             Tag="Livree">
@@ -224,6 +225,7 @@
                             Content="  Tous"
                             Height="34" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
+                            Margin="0,0,6,4"
                             Cursor="Hand"
                             Click="BtnFiltre_Click"
                             Tag="">
@@ -251,7 +253,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                </StackPanel>
+                </WrapPanel>
 
                 <!-- Recherche -->
                 <TextBox Grid.Column="2"
@@ -277,93 +279,99 @@
             </StackPanel>
         </Border>
 
-        <!-- ── Tableau principal ── -->
-        <Border Grid.Row="3"
-                Style="{StaticResource Card}"
-                Padding="0">
-            <DataGrid x:Name="GridPieces"
+        <!-- ── Tableau principal — une ligne par COMMANDE, dépliable ── -->
+        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+            <DataGrid x:Name="GridCommandes"
                       Style="{StaticResource ModernGrid}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
                       CanUserAddRows="False"
                       CanUserDeleteRows="False"
                       SelectionMode="Single"
+                      RowDetailsVisibilityMode="VisibleWhenSelected"
                       VirtualizingStackPanel.IsVirtualizing="True"
                       VirtualizingStackPanel.VirtualizationMode="Recycling"
                       ScrollViewer.CanContentScroll="True">
+
+                <!-- ── Colonnes de la ligne commande ── -->
                 <DataGrid.Columns>
+
+                    <!-- N° commande -->
+                    <DataGridTextColumn Header="N°"
+                                        Binding="{Binding IdCommande}"
+                                        Width="48" MinWidth="40">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
 
                     <!-- Client -->
                     <DataGridTextColumn Header="Client"
-                                        Binding="{Binding Commande.Client.Nom}"
-                                        Width="*"
-                                        MinWidth="100">
+                                        Binding="{Binding Client.Nom}"
+                                        Width="*" MinWidth="100">
                         <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock"
-                                   BasedOn="{StaticResource DataGridCellText}"/>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <!-- Type vêtement -->
-                    <DataGridTextColumn Header="Vêtement"
-                                        Binding="{Binding TypeVetement}"
-                                        Width="*"
-                                        MinWidth="90">
+                    <!-- Vêtements résumés -->
+                    <DataGridTextColumn Header="Vêtement(s)"
+                                        Binding="{Binding TypeVetementAffiche}"
+                                        Width="*" MinWidth="100">
                         <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock"
-                                   BasedOn="{StaticResource DataGridCellText}"/>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <!-- Couturier -->
-                    <DataGridTextColumn Header="Couturier"
-                                        Binding="{Binding Couturier.Prenom}"
-                                        Width="Auto"
-                                        MinWidth="80">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock"
-                                   BasedOn="{StaticResource DataGridCellText}"/>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <!-- Statut (avec badge coloré) -->
-                    <DataGridTemplateColumn Header="Statut" Width="110" MinWidth="100">
+                    <!-- Statut global (badge coloré) -->
+                    <DataGridTemplateColumn Header="Statut" Width="140" MinWidth="120">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Border x:Name="StatutBorder"
-                                        CornerRadius="10"
-                                        Padding="8,3"
-                                        HorizontalAlignment="Left"
-                                        Margin="4,2">
+                                <Border CornerRadius="10" Padding="8,3"
+                                        HorizontalAlignment="Left" Margin="4,2">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Background" Value="#E5E7EB"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Statut}" Value="En cours">
+                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="En cours">
                                                     <Setter Property="Background" Value="#FEF3C7"/>
                                                 </DataTrigger>
-                                                <DataTrigger Binding="{Binding Statut}" Value="Terminee">
+                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee">
                                                     <Setter Property="Background" Value="#D1FAE5"/>
                                                 </DataTrigger>
-                                                <DataTrigger Binding="{Binding Statut}" Value="Livree">
+                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree">
+                                                    <Setter Property="Background" Value="#DBEAFE"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee partiellement">
+                                                    <Setter Property="Background" Value="#D1FAE5"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree partiellement">
                                                     <Setter Property="Background" Value="#DBEAFE"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
-                                    <TextBlock Text="{Binding StatutAffiche}"
+                                    <TextBlock Text="{Binding StatutGlobalAffiche}"
                                                FontSize="11" FontWeight="Bold">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Foreground" Value="#374151"/>
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Statut}" Value="En cours">
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="En cours">
                                                         <Setter Property="Foreground" Value="#92400E"/>
                                                     </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Statut}" Value="Terminee">
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee">
                                                         <Setter Property="Foreground" Value="#065F46"/>
                                                     </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Statut}" Value="Livree">
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree">
+                                                        <Setter Property="Foreground" Value="#1E40AF"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee partiellement">
+                                                        <Setter Property="Foreground" Value="#065F46"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree partiellement">
                                                         <Setter Property="Foreground" Value="#1E40AF"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
@@ -375,24 +383,26 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- Date RDV (DateFin de la commande) -->
+                    <!-- Date RDV — rouge si en retard -->
                     <DataGridTemplateColumn Header="RDV" Width="90" MinWidth="80">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock FontSize="12"
+                                <TextBlock Text="{Binding DateFin, StringFormat={}{0:dd/MM/yy}}"
+                                           FontSize="12" FontWeight="SemiBold"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Center"
-                                           Margin="4,0">
-                                    <TextBlock.Text>
-                                        <Binding Path="Commande.DateFin" StringFormat="{}{0:dd/MM/yy}"/>
-                                    </TextBlock.Text>
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                                            <Setter Property="FontWeight" Value="Normal"/>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                           Margin="4,0"
+                                           x:Name="TxtDate"/>
+                                <DataTemplate.Triggers>
+                                    <!-- Rouge si DateFin dépassée ET commande pas terminée/livrée -->
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding EstEnRetard}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter TargetName="TxtDate" Property="Foreground" Value="#DC2626"/>
+                                        <Setter TargetName="TxtDate" Property="FontWeight" Value="Bold"/>
+                                    </MultiDataTrigger>
+                                </DataTemplate.Triggers>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -401,16 +411,16 @@
                     <DataGridTemplateColumn Header="Reste dû (FCFA)" Width="110" MinWidth="100">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Commande.ResteAPayer, StringFormat={}{0:N0}}"
+                                <TextBlock Text="{Binding ResteAPayer, StringFormat={}{0:N0}}"
                                            FontSize="12" FontWeight="SemiBold"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"
                                            Margin="4,0">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                            <Setter Property="Foreground" Value="#DC2626"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Commande.ResteAPayer}" Value="0">
+                                                <DataTrigger Binding="{Binding ResteAPayer}" Value="0">
                                                     <Setter Property="Foreground" Value="#22C55E"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -421,42 +431,205 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- Bouton WhatsApp -->
-                    <DataGridTemplateColumn Header="💬" Width="48" MinWidth="48">
+                    <!-- Couturier(s) -->
+                    <DataGridTextColumn Header="Couturier(s)"
+                                        Binding="{Binding CouturiersAffiche}"
+                                        Width="*" MinWidth="80">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <!-- Boutons : Passer à… + WhatsApp -->
+                    <DataGridTemplateColumn Header="Actions" Width="160" MinWidth="150">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <Button Content="💬"
-                                        Width="30" Height="28"
-                                        FontSize="14"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Cursor="Hand"
-                                        HorizontalAlignment="Center"
-                                        ToolTip="Contacter le client sur WhatsApp"
-                                        Click="BtnWhatsApp_Click">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Opacity" Value="0.45"/>
-                                            <Style.Triggers>
-                                                <!-- Commande prête : pleine opacité verte -->
-                                                <DataTrigger Binding="{Binding Statut}" Value="Terminee">
-                                                    <Setter Property="Opacity" Value="1"/>
-                                                    <Setter Property="ToolTip" Value="✅ Commande prête — Notifier le client"/>
-                                                </DataTrigger>
-                                                <!-- Livré : visible mais distingt -->
-                                                <DataTrigger Binding="{Binding Statut}" Value="Livree">
-                                                    <Setter Property="Opacity" Value="0.75"/>
-                                                    <Setter Property="ToolTip" Value="Contacter le client (livrée)"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                <StackPanel Orientation="Horizontal">
+
+                                    <!-- Menu déroulant "Passer à…" — Boss et Secrétaire seulement -->
+                                    <!-- La visibilité est gérée en code-behind via la propriété
+                                         BtnForcerVisibility injectée par le code -->
+                                    <Button x:Name="BtnPasserA"
+                                            Content="Passer à…"
+                                            Height="28" Padding="8,0"
+                                            FontSize="11"
+                                            Cursor="Hand"
+                                            Margin="0,0,4,0"
+                                            Click="BtnPasserA_Click"
+                                            Tag="{Binding IdCommande}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#1E40AF"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter Property="BorderThickness" Value="0"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                                    CornerRadius="5"
+                                                                    Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#1D4ED8"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                    <!-- Bouton WhatsApp -->
+                                    <Button Content="💬"
+                                            Width="30" Height="28"
+                                            FontSize="14"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            HorizontalAlignment="Center"
+                                            ToolTip="Contacter le client sur WhatsApp"
+                                            Click="BtnWhatsApp_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Opacity" Value="0.55"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee">
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                        <Setter Property="ToolTip" Value="✅ Commande prête — Notifier le client"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree">
+                                                        <Setter Property="Opacity" Value="0.75"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                 </DataGrid.Columns>
+
+                <!-- ── Détail dépliable : pièces de la commande ── -->
+                <DataGrid.RowDetailsTemplate>
+                    <DataTemplate>
+                        <Border Background="#F8FAFC"
+                                BorderBrush="#E2E8F0"
+                                BorderThickness="0,1,0,1"
+                                Padding="24,12,24,12">
+                            <StackPanel>
+                                <TextBlock Text="Pièces de la commande :"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="#374151"
+                                           Margin="0,0,0,8"/>
+
+                                <!-- Liste des pièces -->
+                                <ItemsControl x:Name="ListePieces"
+                                              ItemsSource="{Binding Pieces}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="White"
+                                                    CornerRadius="6"
+                                                    BorderBrush="#E5E7EB"
+                                                    BorderThickness="1"
+                                                    Padding="12,8"
+                                                    Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- Infos pièce -->
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock FontSize="12" FontWeight="SemiBold"
+                                                                   Foreground="#111827">
+                                                            <Run Text="Pièce #"/>
+                                                            <Run Text="{Binding IdPieceCommande}"/>
+                                                            <Run Text=" — "/>
+                                                            <Run Text="{Binding TypeVetement}"/>
+                                                        </TextBlock>
+                                                        <TextBlock FontSize="11" Foreground="#6B7280" Margin="0,2,0,0">
+                                                            <Run Text="Couturier : "/>
+                                                            <Run Text="{Binding Couturier.Prenom, TargetNullValue='—'}"/>
+                                                            <Run Text=" "/>
+                                                            <Run Text="{Binding Couturier.Nom, TargetNullValue=''}"/>
+                                                        </TextBlock>
+                                                    </StackPanel>
+
+                                                    <!-- Badge statut pièce -->
+                                                    <Border Grid.Column="1"
+                                                            CornerRadius="8" Padding="8,3"
+                                                            VerticalAlignment="Center"
+                                                            Margin="8,0">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#E5E7EB"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Statut}" Value="En cours">
+                                                                        <Setter Property="Background" Value="#FEF3C7"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Statut}" Value="Terminee">
+                                                                        <Setter Property="Background" Value="#D1FAE5"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Statut}" Value="Livree">
+                                                                        <Setter Property="Background" Value="#DBEAFE"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding StatutAffiche}"
+                                                                   FontSize="11" FontWeight="Bold">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="#374151"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Statut}" Value="En cours">
+                                                                            <Setter Property="Foreground" Value="#92400E"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Statut}" Value="Terminee">
+                                                                            <Setter Property="Foreground" Value="#065F46"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Statut}" Value="Livree">
+                                                                            <Setter Property="Foreground" Value="#1E40AF"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Border>
+
+                                                    <!-- ComboBox changement statut pièce
+                                                         (visible Boss/Secrétaire, géré code-behind) -->
+                                                    <ComboBox Grid.Column="2"
+                                                              x:Name="CmbStatutPiece"
+                                                              Width="130" Height="28"
+                                                              FontSize="11"
+                                                              SelectedValue="{Binding Statut, Mode=OneWay}"
+                                                              SelectionChanged="CmbStatutPiece_SelectionChanged"
+                                                              Tag="{Binding IdPieceCommande}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,0,0">
+                                                        <ComboBoxItem Content="À faire" Tag="A faire"/>
+                                                        <ComboBoxItem Content="En cours" Tag="En cours"/>
+                                                        <ComboBoxItem Content="Terminée" Tag="Terminee"/>
+                                                        <ComboBoxItem Content="Livrée" Tag="Livree"/>
+                                                    </ComboBox>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </DataGrid.RowDetailsTemplate>
+
             </DataGrid>
         </Border>
 
@@ -465,8 +638,7 @@
                 Background="#FAF5F2"
                 Padding="16,12"
                 BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,1,0,0"
-                Margin="0,0,0,0">
+                BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>

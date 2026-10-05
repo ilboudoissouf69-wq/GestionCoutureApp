@@ -684,6 +684,15 @@ namespace GestionCoutureApp.Tests
                 ModePaiement = "Espèces"
             }, idOperateur: IdBoss, nomOperateur: "Mamadou DIALLO");
 
+            // La création force "A faire" : on met à jour le statut en base
+            // pour simuler une commande terminée (test d'intégration commission).
+            using (var ctxStatut = _factory.CreateDbContext())
+            {
+                var p = ctxStatut.PiecesCommande.First(px => px.IdCommande == commande.IdCommande);
+                p.Statut = "Terminee";
+                ctxStatut.SaveChanges();
+            }
+
             using var ctx2 = _factory.CreateDbContext();
             int idPiece = ctx2.PiecesCommande
                 .First(p => p.IdCommande == commande.IdCommande)

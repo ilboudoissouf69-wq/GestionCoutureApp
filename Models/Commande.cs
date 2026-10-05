@@ -204,6 +204,34 @@ namespace GestionCoutureApp.Models
             }
         }
 
+        /// <summary>Couturier(s) de la commande pour affichage dans StatutView.</summary>
+        [NotMapped]
+        public string CouturiersAffiche
+        {
+            get
+            {
+                if (Pieces.Count == 0) return "—";
+                var noms = Pieces
+                    .Where(p => p.Couturier != null)
+                    .Select(p => p.Couturier!.Prenom)
+                    .Distinct()
+                    .ToList();
+                return noms.Count == 0 ? "—" : string.Join(", ", noms);
+            }
+        }
+
+        /// <summary>
+        /// Vrai si la date de livraison est dépassée et que la commande n'est
+        /// pas encore terminée ni livrée (retard opérationnel).
+        /// </summary>
+        [NotMapped]
+        public bool EstEnRetard =>
+            DateFin < DateTime.Now &&
+            StatutGlobal != "Terminee" &&
+            StatutGlobal != "Livree" &&
+            StatutGlobal != "Terminee partiellement" &&
+            StatutGlobal != "Livree partiellement";
+
         [NotMapped]
         public string StatutGlobalAffiche => StatutGlobal switch
         {

@@ -374,6 +374,16 @@ namespace GestionCoutureApp.Tests
                 };
 
                 _commandeService.Ajouter(commande, piece, new System.Collections.Generic.List<Mesure>(), idOperateur: 1, nomOperateur: "Mamadou DIALLO");
+
+                // La création force "A faire" — on met le statut "Livree" en base
+                // pour simuler des commandes déjà livrées (test trésorerie).
+                using (var ctxS = _contextFactory.CreateDbContext())
+                {
+                    var p = ctxS.PiecesCommande.First(px => px.IdCommande == commande.IdCommande);
+                    p.Statut = "Livree";
+                    ctxS.SaveChanges();
+                }
+
                 totalFacture += 20000;
 
                 // Seulement 3 commandes sur 5 sont payées (écart de 40%)

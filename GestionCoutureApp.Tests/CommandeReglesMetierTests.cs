@@ -176,6 +176,181 @@ namespace GestionCoutureApp.Tests
             Assert.That(ctx.PiecesCommande.Any(p => p.IdPieceCommande == idPiece2), Is.False);
         }
 
+        // ── ChangerStatutPiece ────────────────────────────────────────────
+
+        [Test]
+        public void ChangerStatutPiece_Boss_Peut_Changer_Statut()
+        {
+            var (_, piece) = CreerCommande(10000m);
+
+            _commandeService.ChangerStatutPiece(
+                piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("En cours"));
+        }
+
+        [Test]
+        public void ChangerStatutPiece_Secretaire_Peut_Changer_Statut()
+        {
+            var (_, piece) = CreerCommande(10000m);
+
+            _commandeService.ChangerStatutPiece(
+                piece.IdPieceCommande, "En cours", IdSecretaire, "Marie FALL");
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("En cours"));
+        }
+
+        [Test]
+        public void ChangerStatutPiece_Couturier_Acces_Refuse()
+        {
+            var (_, piece) = CreerCommande(10000m);
+            // Passer la pièce en "En cours" via Boss pour avoir un statut de départ non-A faire
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
+
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                _commandeService.ChangerStatutPiece(
+                    piece.IdPieceCommande, "Terminee", IdCouturier, "Issa CISSE"));
+
+            // Le statut doit être inchangé (toujours "En cours")
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("En cours"));
+        }
+
+        [Test]
+        public void ChangerStatutPiece_Livree_NonSoldee_Refuse_Secretaire()
+        {
+            var (_, piece) = CreerCommande(10000m);
+            // Commande non soldée (aucun paiement) — on met En cours pour avoir un état cohérent
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
+
+            var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
+                _commandeService.ChangerStatutPiece(
+                    piece.IdPieceCommande, "Livree", IdSecretaire, "Marie FALL"));
+
+            Assert.That(ex!.PeutForcer, Is.False);
+            // Statut inchangé
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.Not.EqualTo("Livree"));
+        }
+
+        [Test]
+        public void ChangerStatutPiece_Livree_NonSoldee_Boss_Peut_Forcer_Avec_Motif()
+        {
+            var (_, piece) = CreerCommande(10000m);
+
+            // Sans motif → lève PeutForcer = true
+            var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
+                _commandeService.ChangerStatutPiece(
+                    piece.IdPieceCommande, "Livree", IdBoss, "Mamadou DIALLO"));
+            Assert.That(ex!.PeutForcer, Is.True);
+
+            // Avec motif → réussit
+            _commandeService.ChangerStatutPiece(
+                piece.IdPieceCommande, "Livree", IdBoss, "Mamadou DIALLO",
+                motifLivraisonNonSoldee: "Client paie demain, accord verbal");
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("Livree"));
+        }
+
+        [Test]
+        public void ChangerStatutPiece_PieceCommissionnee_Bloquee()
+        {
+            // Créer une commande et verrouiller la pièce avec une commission fictive
+            var commande = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
+            var piece = new PieceCommande
+            {
+                TypeVetement = "Chemise", MontantCouture = 12000m,
+                IdCouturier = IdCouturier, Statut = "A faire"
+            };
+            _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
+
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var commission = new Commission
+                {
+                    IdEmploye = IdCouturier, NomEmployeSnapshot = "Issa CISSE",
+                    DateDebutPeriode = DateTime.Today.AddMonths(-1), DateFinPeriode = DateTime.Today,
+                    BaseCalcul = "Total", Pourcentage = 10m,
+                    BaseMontant = 12000m, MontantCommission = 1200m,
+                    NbCommandes = 1, DateCalcul = DateTime.Now,
+                    IdOperateur = IdBoss, NomOperateur = "Mamadou DIALLO", EstAnnulee = false
+                };
+                ctx.Commissions.Add(commission);
+                ctx.SaveChanges();
+
+                var pieceEnBase = ctx.PiecesCommande.First(p => p.IdCommande == commande.IdCommande);
+                pieceEnBase.IdCommission = commission.IdCommission;
+                ctx.SaveChanges();
+            }
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ChangerStatutPiece(
+                    piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO"));
+            Assert.That(ex!.Message, Does.Contain("commission"));
+        }
+
+        // ── Statut forcé à "A faire" à la création ────────────────────────
+
+        [Test]
+        public void Creation_Force_Statut_A_Faire()
+        {
+            var commande = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
+            // On tente de créer avec un statut différent
+            var piece = new PieceCommande
+            {
+                TypeVetement = "Veste", MontantCouture = 15000m,
+                IdCouturier = IdCouturier,
+                Statut = "En cours"   // essai de contournement
+            };
+
+            _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("A faire"),
+                "La création doit toujours forcer le statut à 'A faire'.");
+        }
+
+        [Test]
+        public void AjouterPiece_Force_Statut_A_Faire()
+        {
+            var (idCommande, _) = CreerCommande(10000m);
+
+            var nouvellePiece = new PieceCommande
+            {
+                TypeVetement = "Pantalon", MontantCouture = 8000m,
+                Statut = "Terminee"   // essai de contournement
+            };
+            _commandeService.AjouterPiece(idCommande, nouvellePiece, new List<Mesure>(), roleBoss: true);
+
+            Assert.That(PieceEnBase(nouvellePiece.IdPieceCommande).Statut, Is.EqualTo("A faire"),
+                "AjouterPiece doit toujours forcer le statut à 'A faire'.");
+        }
+
+        // ── ForcerStatutToutesPieces — refus livraison non soldée ─────────
+
+        [Test]
+        public void ForcerStatutToutesPieces_Livree_Soldee_Autorise()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+            Payer(idCommande, 10000m);
+
+            Assert.DoesNotThrow(() =>
+                _commandeService.ForcerStatutToutesPieces(
+                    idCommande, "Livree", IdBoss, "Mamadou DIALLO"));
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("Livree"));
+        }
+
+        [Test]
+        public void ForcerStatutToutesPieces_Livree_NonSoldee_Boss_Avec_Motif_Autorise()
+        {
+            var (idCommande, piece) = CreerCommande(10000m);
+            // Aucun paiement
+
+            _commandeService.ForcerStatutToutesPieces(
+                idCommande, "Livree", IdBoss, "Mamadou DIALLO",
+                motifLivraisonNonSoldee: "Client vient payer en main propre");
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("Livree"));
+        }
+
         // ── Création en une seule fois ────────────────────────────────────
 
         [Test]
