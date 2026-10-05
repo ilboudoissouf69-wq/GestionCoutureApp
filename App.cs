@@ -870,6 +870,73 @@ namespace GestionCoutureApp
 
                 log.LogInfo("[MIGRATION MANUELLE] ConsolidationFinale appliquée.");
             }
+
+            // ── TÂCHE 1 : DateTerminee / IdOperateurTerminee sur PiecesCommande ──
+            // Appliquée séparément (hors ConsolidationFinale) pour rester idempotent.
+            AppliquerSi("20261005000001_DateTermineePieceCommande", c =>
+            {
+                // 1. Ajouter les colonnes
+                AjouterCol(c, "PiecesCommande", "DateTerminee",        "TEXT NULL");
+                AjouterCol(c, "PiecesCommande", "IdOperateurTerminee", "INTEGER NULL");
+
+                CreerIndex(c,
+                    "CREATE INDEX IF NOT EXISTS \"IX_PiecesCommande_DateTerminee\" " +
+                    "ON \"PiecesCommande\" (\"DateTerminee\")");
+
+                // 2. Rattrapage : pour les pièces déjà Terminee/Livree sans DateTerminee.
+                //
+                // Décision documentée (à valider avec le propriétaire) :
+                //   Source préférée : journal d'audit, entrée TypeAction='STATUT_PIECE_MODIFIE'
+                //   avec ValeursApres contenant "Terminee" ou "Livree" pour cette pièce.
+                //   Fallback : Commande.DateFin (date de RDV du jour de terminaison).
+                //   Raison : avant cette migration, aucune date de terminaison réelle n'existait.
+                //   La date de RDV est une approximation conservative : elle peut être antérieure
+                //   à la date réelle. Elle ne sera jamais postérieure au travail réel car les
+                //   couturiers terminent en général avant ou le jour du RDV.
+                //   Impact : les pièces historiques pourraient être commissionnées dans une
+                //   période légèrement différente de la réalité, mais c'est inévitable sans
+                //   donnée réelle. Le propriétaire est informé de ce point.
+                //
+                //   Note : le journal d'audit stocke DateHeureUtc en TEXT ISO-8601.
+                //   SQLite peut comparer des dates TEXT en ISO-8601 directement.
+                try
+                {
+                    using var upd = c.CreateCommand();
+                    upd.CommandText = @"
+                        UPDATE ""PiecesCommande""
+                        SET ""DateTerminee"" = COALESCE(
+                            -- Priorité 1 : date du journal d'audit (la plus précise)
+                            (
+                                SELECT j.""DateHeureUtc""
+                                FROM ""JournalAudit"" j
+                                WHERE j.""Entite"" = 'PieceCommande'
+                                  AND j.""IdEntite"" = ""PiecesCommande"".""IdPieceCommande""
+                                  AND j.""TypeAction"" = 'STATUT_PIECE_MODIFIE'
+                                  AND (
+                                    j.""ValeursApres"" LIKE '%Terminee%'
+                                    OR j.""ValeursApres"" LIKE '%Livree%'
+                                  )
+                                ORDER BY j.""DateHeureUtc"" ASC
+                                LIMIT 1
+                            ),
+                            -- Priorité 2 : DateFin de la commande parente (approximation)
+                            (
+                                SELECT c.""DateFin""
+                                FROM ""Commandes"" c
+                                WHERE c.""IdCommande"" = ""PiecesCommande"".""IdCommande""
+                            )
+                        )
+                        WHERE (""Statut"" = 'Terminee' OR ""Statut"" = 'Livree')
+                          AND ""DateTerminee"" IS NULL;
+                    ";
+                    int nb = upd.ExecuteNonQuery();
+                    log.LogInfo($"[MIGRATION T1] {nb} pièce(s) Terminee/Livree rétro-renseignées avec DateTerminee.");
+                }
+                catch (Exception ex)
+                {
+                    log.LogError($"[MIGRATION T1] Erreur rattrapage DateTerminee : {ex.Message}", ex);
+                }
+            });
         }
 
         /// <summary>

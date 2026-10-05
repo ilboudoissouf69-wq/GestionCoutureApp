@@ -80,6 +80,16 @@ namespace GestionCoutureApp.Models
         [ForeignKey("IdCommission")]
         public Commission? Commission { get; set; }
 
+        // ── TÂCHE 1 : traçabilité "pièce terminée" ───────────────────────
+        // Renseigné automatiquement lors du premier passage à "Terminee"
+        // (quel que soit le chemin : ChangerStatutPiece, ModifierPiece,
+        // ForcerStatutToutesPieces, Modifier).
+        // Remis à null si la pièce repasse à un statut antérieur (reprise).
+        // C'est cette date — et NON Commande.DateFin — qui sert de filtre
+        // dans CommissionService.CalculerApercu() et EnregistrerCommissions().
+        public DateTime? DateTerminee { get; set; }
+        public int? IdOperateurTerminee { get; set; }
+
         [NotMapped]
         public string StatutAffiche => Statut switch
         {

@@ -42,10 +42,14 @@ namespace GestionCoutureApp.Services
                     .ThenInclude(c => c!.Pieces)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.MaterielSupplements)
+                // TÂCHE 1 : on filtre sur DateTerminee (UTC) dans la période,
+                // et NON plus sur Commande.DateFin (date de RDV).
+                // Une pièce sans DateTerminee (pas encore terminée) est exclue.
                 .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
+                            p.DateTerminee.HasValue &&
+                            p.DateTerminee.Value.Date >= dateDebut.Date &&
+                            p.DateTerminee.Value.Date <= dateFin.Date &&
                             p.Commande != null &&
-                            p.Commande.DateFin.Date >= dateDebut.Date &&
-                            p.Commande.DateFin.Date <= dateFin.Date &&
                             p.IdCouturier.HasValue &&
                             p.IdCommission == null);
 
@@ -57,11 +61,11 @@ namespace GestionCoutureApp.Services
             // ✅ CORRECTIF AUDIT #4 : Charger les retours pour exclure les pièces défectueuses
             // Les pièces avec un retour non résolu (Signalé ou En reprise) ne doivent pas
             // être commissionnées tant que le problème n'est pas corrigé.
+            // TÂCHE 1 : on n'applique plus de filtre de date sur les retours — toute pièce
+            // avec un retour non résolu actif est exclue, quelle que soit la date du retour.
             var retoursNonResolus = context.Retours
                 .Where(r => !r.EstAnnule &&
-                            (r.Statut == "Signale" || r.Statut == "En reprise") &&
-                            r.DateSignalement.Date >= dateDebut.Date &&
-                            r.DateSignalement.Date <= dateFin.Date)
+                            (r.Statut == "Signale" || r.Statut == "En reprise"))
                 .Select(r => r.IdPieceCommande)
                 .ToHashSet();
 

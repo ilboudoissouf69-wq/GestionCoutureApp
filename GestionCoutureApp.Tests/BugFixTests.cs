@@ -686,10 +686,13 @@ namespace GestionCoutureApp.Tests
 
             // La création force "A faire" : on met à jour le statut en base
             // pour simuler une commande terminée (test d'intégration commission).
+            // TÂCHE 1 : on renseigne aussi DateTerminee car CalculerApercu filtre dessus.
             using (var ctxStatut = _factory.CreateDbContext())
             {
                 var p = ctxStatut.PiecesCommande.First(px => px.IdCommande == commande.IdCommande);
                 p.Statut = "Terminee";
+                p.DateTerminee = DateTime.UtcNow.AddDays(-5);  // cohérent avec la période du test
+                p.IdOperateurTerminee = IdBoss;
                 ctxStatut.SaveChanges();
             }
 

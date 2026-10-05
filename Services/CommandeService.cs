@@ -277,6 +277,41 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
+        /// TÂCHE 1 — Met à jour DateTerminee et IdOperateurTerminee d'une pièce
+        /// lors de chaque changement de statut, quel que soit le chemin d'appel.
+        ///
+        /// Règles :
+        ///   - Passage vers "Terminee" ou "Livree" : renseigne DateTerminee (UTC)
+        ///     et IdOperateurTerminee si DateTerminee est encore null. Une pièce
+        ///     déjà commissionnée (IdCommission != null) ne doit jamais revenir en
+        ///     arrière (cette garde est faite en amont, dans ChangerStatutPiece /
+        ///     ForcerStatutToutesPieces) — ici on ne fait que horodater.
+        ///   - Retour en arrière (reprise) : remet DateTerminee à null et
+        ///     IdOperateurTerminee à null.
+        /// </summary>
+        private static void AppliquerDateTerminee(PieceCommande piece,
+            string ancienStatut, string nouveauStatut, int idOperateur)
+        {
+            bool passe_en_terminee = (nouveauStatut == "Terminee" || nouveauStatut == "Livree")
+                                   && ancienStatut != "Terminee" && ancienStatut != "Livree";
+            bool reprise = (nouveauStatut == "A faire" || nouveauStatut == "En cours")
+                         && (ancienStatut == "Terminee" || ancienStatut == "Livree");
+
+            if (passe_en_terminee && piece.DateTerminee == null)
+            {
+                piece.DateTerminee = DateTime.UtcNow;
+                piece.IdOperateurTerminee = idOperateur > 0 ? idOperateur : null;
+            }
+            else if (reprise)
+            {
+                piece.DateTerminee = null;
+                piece.IdOperateurTerminee = null;
+            }
+            // Si déjà Terminee → Livree, on conserve la DateTerminee existante
+            // (la pièce n'a pas été "refaite").
+        }
+
+        /// <summary>
         /// Livraison d'une pièce alors que la commande n'est pas soldée :
         /// interdit, sauf pour le Boss avec un motif.
         /// Retourne le reste à payer si le Boss a forcé (à tracer après SaveChanges
@@ -401,7 +436,11 @@ namespace GestionCoutureApp.Services
                 pieceExistante.DescriptionPrecision = piece.DescriptionPrecision;
                 pieceExistante.CheminPhoto = piece.CheminPhoto;
                 if (!string.IsNullOrWhiteSpace(piece.Statut))
+                {
+                    string ancienStatutPiece = pieceExistante.Statut;
+                    AppliquerDateTerminee(pieceExistante, ancienStatutPiece, piece.Statut, idOperateur);
                     pieceExistante.Statut = piece.Statut;
+                }
 
                 context.Mesures.RemoveRange(pieceExistante.Mesures);
                 foreach (var mesure in mesures)
@@ -798,7 +837,10 @@ namespace GestionCoutureApp.Services
             pieceExistante.DescriptionPrecision = piece.DescriptionPrecision;
             pieceExistante.CheminPhoto = piece.CheminPhoto;
             if (!string.IsNullOrWhiteSpace(piece.Statut))
+            {
+                AppliquerDateTerminee(pieceExistante, ancienStatut, piece.Statut, idOperateur);
                 pieceExistante.Statut = piece.Statut;
+            }
 
             // Livraison : la commande doit être soldée (calculé avec le nouveau prix)
             decimal? resteLivraisonForcee = null;
@@ -999,7 +1041,11 @@ namespace GestionCoutureApp.Services
                 resteLivraisonForcee = VerifierLivraisonSoldee(commande!, operateur, motifLivraisonNonSoldee);
 
             foreach (var piece in pieces)
+            {
+                string ancienStatut = piece.Statut;
+                AppliquerDateTerminee(piece, ancienStatut, nouveauStatut, idOperateur);
                 piece.Statut = nouveauStatut;
+            }
 
             context.SaveChanges();
 
@@ -1165,13 +1211,17 @@ namespace GestionCoutureApp.Services
                 resteLivraisonForcee = VerifierLivraisonSoldee(piece.Commande, operateur, motifLivraisonNonSoldee);
 
             piece.Statut = nouveauStatut;
+
+            // ── TÂCHE 1 : mise à jour DateTerminee ───────────────────────────
+            AppliquerDateTerminee(piece, ancienStatut, nouveauStatut, idOperateur);
+
             context.SaveChanges();
 
             // Audit : traçabilité statut (qui, quand, ancien → nouveau)
             Auditer(operateur, nomOperateur, "STATUT_PIECE_MODIFIE", "PieceCommande",
                 idPieceCommande,
                 avant: new { Statut = ancienStatut },
-                apres: new { Statut = nouveauStatut },
+                apres: new { Statut = nouveauStatut, piece.DateTerminee },
                 motif: null);
 
             if (resteLivraisonForcee.HasValue)
