@@ -377,27 +377,45 @@ namespace GestionCoutureApp.Services
             if (existante == null) return;
 
             // ── Garde champs Boss-only pour la Secrétaire ────────────────────
+            // TÂCHE 3 : règles basées sur l'état réel (paiements + statut),
+            // et non plus sur des règles fixes qui s'appliquaient toujours.
             if (operateur.RoleEnum == RoleEmploye.Secretaire)
             {
-                // Client : interdit
-                if (existante.IdClient != commande.IdClient)
+                var pieceRef = existante.Pieces.FirstOrDefault();
+
+                // Règle 3A : après Terminee/Livree → lecture seule pour la Secrétaire
+                bool estTermineOuLivree = existante.Pieces.Any(p =>
+                    p.Statut == "Terminee" || p.Statut == "Livree");
+                if (estTermineOuLivree)
                     throw new InvalidOperationException(
-                        "La Secrétaire ne peut pas modifier le client d'une commande.");
+                        "Cette commande est terminée ou livrée. " +
+                        "La Secrétaire ne peut plus la modifier. " +
+                        "Seul le Boss peut effectuer des modifications à ce stade.");
 
-                // Pièce : type de vêtement et montant interdits
-                var pieceExistantePourGarde = existante.Pieces.FirstOrDefault();
-                if (pieceExistantePourGarde != null)
+                bool aPaiement = existante.Paiements.Any(p => !p.EstAnnule);
+
+                if (aPaiement)
                 {
-                    if (pieceExistantePourGarde.TypeVetement != piece.TypeVetement)
+                    // Règle 3B : après paiement → montants, type vêtement et client verrouillés
+                    if (existante.IdClient != commande.IdClient)
                         throw new InvalidOperationException(
-                            "La Secrétaire ne peut pas modifier le type de vêtement d'une pièce. " +
-                            "Cette action est réservée au Boss.");
+                            "La Secrétaire ne peut pas modifier le client d'une commande " +
+                            "après qu'un paiement a été encaissé.");
 
-                    if (pieceExistantePourGarde.MontantCouture != piece.MontantCouture)
-                        throw new InvalidOperationException(
-                            "La Secrétaire ne peut pas modifier le prix d'une pièce. " +
-                            "Cette action est réservée au Boss.");
+                    if (pieceRef != null)
+                    {
+                        if (pieceRef.TypeVetement != piece.TypeVetement)
+                            throw new InvalidOperationException(
+                                "La Secrétaire ne peut pas modifier le type de vêtement " +
+                                "après qu'un paiement a été encaissé. Contactez le Boss.");
+
+                        if (pieceRef.MontantCouture != piece.MontantCouture)
+                            throw new InvalidOperationException(
+                                "La Secrétaire ne peut pas modifier le prix " +
+                                "après qu'un paiement a été encaissé. Contactez le Boss.");
+                    }
                 }
+                // Sans paiement → la Secrétaire peut tout modifier (pas de restriction)
             }
 
             // ── Mise à jour de la pièce existante ───────────────────────────
@@ -427,7 +445,10 @@ namespace GestionCoutureApp.Services
 
                 // La Secrétaire peut modifier : couturier, statut, description, mesures
                 // Le Boss peut modifier tout cela + type de vêtement + montant
-                if (operateur.RoleEnum == RoleEmploye.Boss)
+                // TÂCHE 3 : La Secrétaire peut AUSSI modifier type/montant si aucun paiement
+                bool secretaireSansPaiement = operateur.RoleEnum == RoleEmploye.Secretaire
+                    && !existante.Paiements.Any(p => !p.EstAnnule);
+                if (operateur.RoleEnum == RoleEmploye.Boss || secretaireSansPaiement)
                 {
                     pieceExistante.TypeVetement = piece.TypeVetement;
                     pieceExistante.MontantCouture = piece.MontantCouture;
@@ -484,8 +505,10 @@ namespace GestionCoutureApp.Services
             }
 
             // Mise à jour champs commande
-            // La Secrétaire ne peut pas changer le client
-            if (operateur.RoleEnum == RoleEmploye.Boss)
+            // TÂCHE 3 : La Secrétaire peut changer le client si aucun paiement
+            bool secretairePeutChangerClient = operateur.RoleEnum == RoleEmploye.Secretaire
+                && !existante.Paiements.Any(p => !p.EstAnnule);
+            if (operateur.RoleEnum == RoleEmploye.Boss || secretairePeutChangerClient)
                 existante.IdClient = commande.IdClient;
 
             existante.DateFin   = commande.DateFin;
@@ -519,8 +542,17 @@ namespace GestionCoutureApp.Services
 
             using var context = _contextFactory.CreateDbContext();
 
-            // ✅ CORRECTIF : Vérifier que l'opérateur est Boss (seul autorisé à supprimer)
-            Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idOperateur, Models.RoleEmploye.Boss);
+            // TÂCHE 3 : La Secrétaire peut supprimer si aucun paiement et statut initial.
+            // Le Boss garde tous les droits.
+            var operateur = context.Employes.Find(idOperateur);
+            if (operateur == null)
+                throw new UnauthorizedAccessException("Opérateur introuvable.");
+
+            bool estBoss = operateur.Role == "Boss";
+            bool estSecretaire = operateur.Role == "Secretaire";
+            if (!estBoss && !estSecretaire)
+                throw new UnauthorizedAccessException(
+                    "Seuls le Boss et la Secrétaire peuvent supprimer une commande.");
 
             var commande = context.Commandes
                 .Include(c => c.Client)
@@ -535,9 +567,28 @@ namespace GestionCoutureApp.Services
             if (commande.EstSupprimee)
                 throw new InvalidOperationException("Cette commande est déjà marquée comme supprimée.");
 
-            // ✅ CORRECTIF : Bloquer la suppression même si les paiements sont annulés
-            // (ils font partie de l'historique et prouvent qu'il y a eu une transaction)
-            if (commande.Paiements.Any())
+            // ── Règles Secrétaire (TÂCHE 3) ────────────────────────────────
+            if (estSecretaire)
+            {
+                // Condition 1 : aucun paiement (même annulé)
+                if (commande.Paiements.Any())
+                    throw new InvalidOperationException(
+                        "La Secrétaire ne peut supprimer une commande que si aucun paiement " +
+                        "n'a été enregistré. Des paiements existent sur cette commande " +
+                        $"({commande.Paiements.Count} paiement(s)). Contactez le Boss.");
+
+                // Condition 2 : statut initial (toutes les pièces en "A faire")
+                bool statutInitial = !commande.Pieces.Any()
+                    || commande.Pieces.All(p => p.Statut == "A faire");
+                if (!statutInitial)
+                    throw new InvalidOperationException(
+                        "La Secrétaire ne peut supprimer une commande que si elle est encore " +
+                        "au statut initial (toutes les pièces \"À faire\"). " +
+                        "Contactez le Boss pour les autres cas.");
+            }
+
+            // ── Règles Boss : bloque si paiements (historique comptable) ───
+            if (estBoss && commande.Paiements.Any())
             {
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette commande : des paiements y sont rattachés " +
@@ -581,14 +632,14 @@ namespace GestionCoutureApp.Services
                 await auditService.EnregistrerActionAsync(
                     idOperateur: idOperateur,
                     nomOperateur: nomOperateur,
-                    roleOperateur: "Boss", // vérifié par RequireRoleByIdEnum ci-dessus
+                    roleOperateur: operateur.Role,
                     typeAction: "COMMANDE_SUPPRIMEE",
                     entite: "Commande",
                     idEntite: id,
                     valeursAvant: snapshot,
-                    valeursApres: null, // suppression = pas d'état "après"
+                    valeursApres: null,
                     motif: motif,
-                    envoyerNotification: true // notification WhatsApp automatique pour supervision
+                    envoyerNotification: estBoss // notification seulement si Boss
                 );
             }
         }
@@ -789,13 +840,27 @@ namespace GestionCoutureApp.Services
             string ancienStatut = pieceExistante.Statut;
             bool montantModifie = ancienMontant != piece.MontantCouture;
 
-            // Prix : seul le Boss peut modifier le prix d'une pièce déjà enregistrée.
-            // Empêche le scénario "client paie 10 000, on encaisse 7 000 et on
-            // baisse le prix à 7 000" — chaque changement est tracé dans l'audit.
-            if (montantModifie && operateur.RoleEnum != RoleEmploye.Boss)
+            // TÂCHE 3 : Lecture seule pour la Secrétaire après Terminee/Livree
+            if (operateur.RoleEnum == RoleEmploye.Secretaire &&
+                (ancienStatut == "Terminee" || ancienStatut == "Livree"))
             {
                 throw new InvalidOperationException(
-                    "Seul le Boss peut modifier le prix d'une pièce déjà enregistrée.\n" +
+                    "Cette pièce est terminée ou livrée. " +
+                    "La Secrétaire ne peut plus la modifier à ce stade. " +
+                    "Seul le Boss peut effectuer des modifications.");
+            }
+
+            // Prix : règle en fonction du contexte paiement
+            // TÂCHE 3 : Sans paiement → Secrétaire peut modifier le prix.
+            //           Avec paiement → Boss uniquement.
+            var commandeRef = pieceExistante.Commande;
+            bool aPaiementEncaisse = commandeRef?.Paiements.Any(p => !p.EstAnnule) ?? false;
+
+            if (montantModifie && operateur.RoleEnum != RoleEmploye.Boss && aPaiementEncaisse)
+            {
+                throw new InvalidOperationException(
+                    "Seul le Boss peut modifier le prix d'une pièce après qu'un paiement " +
+                    "a été encaissé.\n" +
                     $"Prix actuel : {ancienMontant:N0} FCFA.");
             }
 

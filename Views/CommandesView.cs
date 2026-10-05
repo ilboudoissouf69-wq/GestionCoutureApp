@@ -134,11 +134,13 @@ namespace GestionCoutureApp.Views
             var authService = App.Services.GetRequiredService<IAuthService>();
             _roleUtilisateur = authService.UtilisateurConnecte?.Role ?? "";
 
-        // ===== SECRETAIRE : cacher uniquement supprimer (pas modifier) =====
+        // ===== SECRETAIRE : BtnSupprimer visible (droits vérifiés côté service) =====
+        // TÂCHE 3 : la Secrétaire peut supprimer si aucun paiement + statut initial
         if (_roleUtilisateur == "Secretaire")
         {
             // BtnModifier VISIBLE pour la Secrétaire (droits vérifiés côté service)
-            BtnSupprimer.Visibility = Visibility.Collapsed;
+            // BtnSupprimer maintenant visible — le service rejettera si conditions non remplies
+            BtnSupprimer.Visibility = Visibility.Visible;
             BtnSupprimerPiece.Visibility = Visibility.Collapsed;
         }
 

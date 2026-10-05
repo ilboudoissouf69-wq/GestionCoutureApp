@@ -57,15 +57,52 @@ namespace GestionCoutureApp.Tests
         // ── Prix ──────────────────────────────────────────────────────────
 
         [Test]
-        public void Secretaire_NePeutPas_Modifier_Le_Prix()
+        public void Secretaire_NePeutPas_Modifier_Le_Prix_Apres_Paiement()
         {
-            var (_, piece) = CreerCommande(10000m);
+            // TÂCHE 3 : La Secrétaire ne peut pas modifier le prix APRÈS un paiement.
+            // Sans paiement, elle peut (voir test ci-dessous).
+            var (idCommande, piece) = CreerCommandeSansTerminee(10000m);
+            Payer(idCommande, 5000m); // acompte
             piece.MontantCouture = 7000m;
 
             var ex = Assert.Throws<InvalidOperationException>(() =>
                 _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL"));
-            Assert.That(ex!.Message, Does.Contain("Boss"));
+            Assert.That(ex!.Message, Does.Contain("Boss").Or.Contain("paiement"));
             Assert.That(PieceEnBase(piece.IdPieceCommande).MontantCouture, Is.EqualTo(10000m));
+        }
+
+        [Test]
+        public void Secretaire_Peut_Modifier_Le_Prix_Sans_Paiement()
+        {
+            // TÂCHE 3 : Sans aucun paiement, la Secrétaire peut corriger le prix.
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
+            piece.MontantCouture = 7000m;
+
+            Assert.DoesNotThrow(() =>
+                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL"));
+            Assert.That(PieceEnBase(piece.IdPieceCommande).MontantCouture, Is.EqualTo(7000m));
+        }
+
+        [Test]
+        public void Secretaire_NePeutPas_Modifier_Piece_Terminee()
+        {
+            // TÂCHE 3 : Lecture seule pour la Secrétaire après Terminee.
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
+            // Passer la pièce en Terminee via Boss d'abord
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
+            // Recharger le formulaire depuis la base
+            piece = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = piece.TypeVetement,
+                MontantCouture  = piece.MontantCouture,
+                IdCouturier     = null, // tentative de changement
+                Statut          = "Terminee"
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("terminée").Or.Contain("Terminee").Or.Contain("Boss").Or.Contain("livrée"));
         }
 
         [Test]
@@ -383,11 +420,12 @@ namespace GestionCoutureApp.Tests
         // ── CommandeService.Modifier — droits Secrétaire ─────────────────
 
         [Test]
-        public void Modifier_Secretaire_NePeutPas_Changer_Client()
+        public void Modifier_Secretaire_NePeutPas_Changer_Client_Apres_Paiement()
         {
-            var (idCommande, piece) = CreerCommande(10000m);
+            // TÂCHE 3 : Secrétaire bloquée sur le client APRÈS un paiement
+            var (idCommande, piece) = CreerCommandeSansTerminee(10000m);
+            Payer(idCommande, 3000m); // acompte
 
-            // Fabriquer une commande avec un autre client
             var commandeModif = new Commande
             {
                 IdCommande = idCommande,
@@ -410,37 +448,71 @@ namespace GestionCoutureApp.Tests
         }
 
         [Test]
-        public void Modifier_Secretaire_NePeutPas_Changer_Prix()
+        public void Modifier_Secretaire_Peut_Changer_Client_Sans_Paiement()
         {
-            var (idCommande, piece) = CreerCommande(10000m);
+            // TÂCHE 3 : Sans paiement, la Secrétaire peut corriger le client
+            // Créer un 2e client valide en base
+            using (var ctx = _factory.CreateDbContext())
+            {
+                ctx.Clients.Add(new Client { IdClient = 99, Nom = "DIOP", Prenom = "Cheikh", Telephone = "7600000099" });
+                ctx.SaveChanges();
+            }
+            var (idCommande, piece) = CreerCommandeSansTerminee(10000m);
 
             var commandeModif = new Commande
             {
-                IdCommande = idCommande,
-                IdClient   = IdClient,
-                DateFin    = DateTime.Now.AddDays(10),
-                HeureDebut = TimeSpan.Zero
+                IdCommande = idCommande, IdClient = 99,
+                DateFin = DateTime.Now.AddDays(10), HeureDebut = TimeSpan.Zero
             };
             var pieceModif = new PieceCommande
             {
                 IdPieceCommande = piece.IdPieceCommande,
                 TypeVetement    = piece.TypeVetement,
-                MontantCouture  = 7500m,   // prix modifié — interdit Secrétaire
+                MontantCouture  = piece.MontantCouture,
+                Statut          = piece.Statut
+            };
+
+            Assert.DoesNotThrow(() =>
+                _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+                    IdSecretaire, "Marie FALL"));
+
+            using var ctx2 = _factory.CreateDbContext();
+            Assert.That(ctx2.Commandes.Find(idCommande)!.IdClient, Is.EqualTo(99));
+        }
+
+        [Test]
+        public void Modifier_Secretaire_NePeutPas_Changer_Prix_Apres_Paiement()
+        {
+            // TÂCHE 3 : Secrétaire bloquée sur le prix APRÈS un paiement
+            var (idCommande, piece) = CreerCommandeSansTerminee(10000m);
+            Payer(idCommande, 5000m);
+
+            var commandeModif = new Commande
+            {
+                IdCommande = idCommande, IdClient = IdClient,
+                DateFin    = DateTime.Now.AddDays(10), HeureDebut = TimeSpan.Zero
+            };
+            var pieceModif = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = piece.TypeVetement,
+                MontantCouture  = 7500m,   // prix modifié
                 Statut          = piece.Statut
             };
 
             var ex = Assert.Throws<InvalidOperationException>(() =>
                 _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
                     IdSecretaire, "Marie FALL"));
-            Assert.That(ex!.Message, Does.Contain("prix").IgnoreCase.Or.Contain("montant").IgnoreCase);
-            // Prix inchangé en base
+            Assert.That(ex!.Message, Does.Contain("prix").IgnoreCase.Or.Contain("montant").IgnoreCase.Or.Contain("paiement").IgnoreCase);
             Assert.That(PieceEnBase(piece.IdPieceCommande).MontantCouture, Is.EqualTo(10000m));
         }
 
         [Test]
-        public void Modifier_Secretaire_NePeutPas_Changer_TypeVetement()
+        public void Modifier_Secretaire_NePeutPas_Changer_TypeVetement_Apres_Paiement()
         {
-            var (idCommande, piece) = CreerCommande(10000m);
+            // TÂCHE 3 : Secrétaire bloquée sur le type après paiement
+            var (idCommande, piece) = CreerCommandeSansTerminee(10000m);
+            Payer(idCommande, 5000m);
 
             var commandeModif = new Commande
             {
@@ -450,7 +522,7 @@ namespace GestionCoutureApp.Tests
             var pieceModif = new PieceCommande
             {
                 IdPieceCommande = piece.IdPieceCommande,
-                TypeVetement    = "Boubou",   // changement — interdit
+                TypeVetement    = "Boubou",   // changement
                 MontantCouture  = piece.MontantCouture,
                 Statut          = piece.Statut
             };
@@ -458,13 +530,16 @@ namespace GestionCoutureApp.Tests
             var ex = Assert.Throws<InvalidOperationException>(() =>
                 _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
                     IdSecretaire, "Marie FALL"));
-            Assert.That(ex!.Message, Does.Contain("type").IgnoreCase.Or.Contain("vêtement").IgnoreCase);
+            Assert.That(ex!.Message, Does.Contain("type").IgnoreCase.Or.Contain("vêtement").IgnoreCase.Or.Contain("paiement").IgnoreCase);
         }
 
         [Test]
         public void Modifier_Secretaire_Peut_Changer_DateLivraison_Et_Couturier()
         {
-            var (idCommande, piece) = CreerCommande(10000m);
+            // TÂCHE 3 : La Secrétaire peut toujours modifier date, heure et couturier
+            // même après un paiement (et même après Terminee si ça passe par Modifier —
+            // mais Modifier bloque Terminee/Livree via Secrétaire, donc on teste avant Terminee)
+            var (idCommande, piece) = CreerCommandeSansTerminee(10000m);
             var nouvelleDate = DateTime.Now.AddDays(14);
 
             var commandeModif = new Commande
@@ -537,6 +612,33 @@ namespace GestionCoutureApp.Tests
                 MontantCouture = piece.MontantCouture,
                 IdCouturier = piece.IdCouturier,
                 Statut = piece.Statut
+            };
+            return (commande.IdCommande, formulaire);
+        }
+
+        /// <summary>
+        /// Crée une commande avec une pièce en statut "A faire" (aucun paiement).
+        /// Utilisée pour tester les règles TÂCHE 3 (avant tout paiement).
+        /// </summary>
+        private (int idCommande, PieceCommande piece) CreerCommandeSansTerminee(decimal montant)
+        {
+            var commande = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
+            var piece = new PieceCommande
+            {
+                TypeVetement = "Chemise",
+                MontantCouture = montant,
+                IdCouturier = IdCouturier,
+                Statut = "A faire"
+            };
+            _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
+
+            var formulaire = new PieceCommande
+            {
+                IdPieceCommande = piece.IdPieceCommande,
+                TypeVetement    = piece.TypeVetement,
+                MontantCouture  = piece.MontantCouture,
+                IdCouturier     = piece.IdCouturier,
+                Statut          = piece.Statut
             };
             return (commande.IdCommande, formulaire);
         }

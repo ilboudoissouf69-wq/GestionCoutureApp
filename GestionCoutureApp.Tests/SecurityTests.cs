@@ -113,12 +113,14 @@ namespace GestionCoutureApp.Tests
         }
 
         // ================================================================
-        // TEST #1 : Tentative de suppression par secrétaire (FAILLE #1)
+        // TEST #1 : Tentative de suppression par secrétaire avec paiement (FAILLE #1)
+        // TÂCHE 3 : La Secrétaire peut supprimer sans paiement.
+        //           Elle ne peut pas supprimer si un paiement existe.
         // ================================================================
         [Test]
-        public async Task Test01_Secretaire_Ne_Peut_Pas_Supprimer_Commande()
+        public async Task Test01_Secretaire_Ne_Peut_Pas_Supprimer_Commande_Avec_Paiement()
         {
-            // Arrange : Créer une commande
+            // Arrange : Créer une commande avec paiement
             var commande = new Commande
             {
                 IdClient = 1,
@@ -136,8 +138,17 @@ namespace GestionCoutureApp.Tests
 
             _commandeService.Ajouter(commande, piece, new System.Collections.Generic.List<Mesure>(), idOperateur: 1, nomOperateur: "Mamadou DIALLO");
 
-            // Act & Assert : La secrétaire (ID=2) tente de supprimer
-            var exception = Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
+            // Ajouter un paiement — après ça, la Secrétaire ne peut plus supprimer
+            _paiementService.Ajouter(new Paiement
+            {
+                IdCommande = commande.IdCommande,
+                MontantPaye = 5000m,
+                DatePaiement = DateTime.Now,
+                ModePaiement = "Especes"
+            }, idOperateur: 1, nomOperateur: "Mamadou DIALLO");
+
+            // Act & Assert : La secrétaire (ID=2) tente de supprimer → refus
+            var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
                 await _commandeService.SupprimerAsync(
                     id: commande.IdCommande,
@@ -148,8 +159,42 @@ namespace GestionCoutureApp.Tests
                 );
             });
 
-            Assert.That(exception.Message, Does.Contain("Accès refusé"));
-            Assert.That(exception.Message, Does.Contain("Boss"));
+            Assert.That(exception.Message, Does.Contain("paiement").IgnoreCase);
+        }
+
+        [Test]
+        public async Task Test01b_Secretaire_Peut_Supprimer_Commande_Sans_Paiement_Statut_Initial()
+        {
+            // TÂCHE 3 : La Secrétaire peut supprimer si aucun paiement et statut initial
+            var commande = new Commande
+            {
+                IdClient = 1,
+                DateDebut = DateTime.Now,
+                DateFin = DateTime.Now.AddDays(7),
+                Statut = "A faire"
+            };
+            var piece = new PieceCommande
+            {
+                TypeVetement = "Robe", MontantCouture = 15000, Statut = "A faire"
+            };
+            _commandeService.Ajouter(commande, piece,
+                new System.Collections.Generic.List<Mesure>(), idOperateur: 1, nomOperateur: "Mamadou DIALLO");
+
+            // Pas de paiement → suppression autorisée
+            Assert.DoesNotThrowAsync(async () =>
+            {
+                await _commandeService.SupprimerAsync(
+                    id: commande.IdCommande,
+                    idOperateur: 2, // Secrétaire
+                    nomOperateur: "Marie FALL",
+                    motif: "Erreur de saisie, annulée",
+                    auditService: _auditService
+                );
+            });
+
+            // Vérifier que la commande est bien supprimée logiquement
+            using var ctx = _contextFactory.CreateDbContext();
+            Assert.That(ctx.Commandes.Find(commande.IdCommande)!.EstSupprimee, Is.True);
         }
 
         // ================================================================
