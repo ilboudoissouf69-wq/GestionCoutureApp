@@ -61,9 +61,13 @@ namespace GestionCoutureApp.Models
 
         // Propriété [NotMapped] pour la réutilisation des mesures
         // dans la ComboBox de CommandesView.
+        // Format : "TypeVetement — dd/MM/yyyy" (date de création de la commande),
+        // trié du plus récent au plus ancien par l'appelant.
         [NotMapped]
         public string LabelReutilisation =>
-            $"Cmd {IdCommande} — {TypeVetement} (piece {IdPieceCommande})";
+            Commande != null
+                ? $"{TypeVetement} — {Commande.DateCreation:dd/MM/yyyy}"
+                : $"{TypeVetement} — (Cmd {IdCommande})";
 
         // Point 5 (Alertes) : le rendez-vous est normalement porté par la
         // commande entière. Ce champ ne sert QUE dans le cas d'exception —

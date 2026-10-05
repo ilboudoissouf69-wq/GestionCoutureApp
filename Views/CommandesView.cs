@@ -91,6 +91,9 @@ namespace GestionCoutureApp.Views
         private const int PAGE_SIZE = 15;
         private int _currentPage = 1;
         private string _currentSearch = "";
+        // Filtres T7
+        private string? _filtreStatut = null;     // null = tous
+        private int? _filtreCouturierId = null;   // null = tous
 
         public CommandesView()
         {
@@ -165,12 +168,36 @@ namespace GestionCoutureApp.Views
             }
 
             CmbClient.ItemsSource = _clientService.ObtenirTous();
-            // ✅ FIX : filtrer par rôle Couturier — la secrétaire et le Boss
-            // n'ont pas à apparaître dans la liste d'attribution des pièces.
-            CmbCouturier.ItemsSource = _context.Employes
-                .Where(e => e.Statut == "Actif" && e.Role == "Couturier")
+            // CmbCouturier : inclut Boss (rôle Boss) ET Couturier — filtré par rôle
+            var couturiers = _context.Employes
+                .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
                 .OrderBy(e => e.Prenom)
-                .ToList();
+                .ToList()
+                .Select(e => new Employe
+                {
+                    IdEmploye = e.IdEmploye,
+                    Nom       = e.Nom,
+                    Prenom    = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
+                    Role      = e.Role,
+                    Statut    = e.Statut,
+                    Identifiant = e.Identifiant,
+                    MotDePasse  = e.MotDePasse
+                }).ToList();
+            CmbCouturier.ItemsSource = couturiers;
+
+            // Filtre couturier dans la liste : même liste avec option "Tous"
+            var tousCouturiers = new List<object> { new { IdEmploye = (int?)null, Prenom = "Tous les couturiers" } };
+            tousCouturiers.AddRange(couturiers.Select(e => (object)e));
+            // initialisation différée après InitializeComponent — géré dans Loaded
+
+            // Initialiser CmbFiltreCouturier (barre de filtres T7)
+            if (CmbFiltreCouturier != null)
+            {
+                var filtreCouturiers = new List<Employe> { new Employe { IdEmploye = 0, Prenom = "Tous les couturiers", Nom = "", Identifiant = "", MotDePasse = "" } };
+                filtreCouturiers.AddRange(couturiers);
+                CmbFiltreCouturier.ItemsSource = filtreCouturiers;
+                CmbFiltreCouturier.SelectedIndex = 0;
+            }
 
             // ✅ FIX : Protection complète autour du chargement des types de vêtements
             try
@@ -257,49 +284,69 @@ namespace GestionCoutureApp.Views
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
                 GridCommandes.IsEnabled = false;
-                
-                // ✅ OPTIMISATION : Utiliser la version légère pour l'affichage tableau
-                var result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+
+                PagedResult<Commande> result;
+
+                // Appliquer les filtres statut + couturier si actifs
+                if (_filtreStatut != null || _filtreCouturierId != null)
+                {
+                    // On utilise ObtenirPageCommandesStatutAsync qui supporte le filtre statut
+                    // puis on filtre couturier côté client (volume faible = 1 page)
+                    result = await _commandeService.ObtenirPageCommandesStatutAsync(
+                        _filtreStatut, _currentPage, PAGE_SIZE,
+                        string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch);
+
+                    // Filtrage couturier supplémentaire en mémoire
+                    if (_filtreCouturierId.HasValue)
+                    {
+                        result = new PagedResult<Commande>
+                        {
+                            Items = result.Items.Where(c =>
+                                c.Pieces.Any(p => p.IdCouturier == _filtreCouturierId.Value)).ToList(),
+                            TotalCount = result.TotalCount,
+                            Page = result.Page,
+                            PageSize = result.PageSize
+                        };
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(_currentSearch))
+                {
+                    result = await _commandeService.RechercherPageLightAsync(_currentSearch, _currentPage, PAGE_SIZE);
+                }
+                else
+                {
+                    result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+                }
+
                 GridCommandes.ItemsSource = result.Items;
-                
+
                 // ── Restaurer la sélection après rechargement ──────────────────
-                // Quand on réassigne ItemsSource, WPF crée de nouveaux objets et
-                // perd la sélection courante (l'ancien objet n'est plus dans la
-                // nouvelle liste). On retrouve l'item par IdCommande et on le
-                // resélectionne pour que le panneau de droite reste cohérent.
                 if (_commandeSelectionneeId > 0)
                 {
                     var itemAReselectioner = result.Items
                         .FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
                     if (itemAReselectioner != null)
                     {
-                        // _chargementEnCours bloque GridCommandes_SelectionChanged
-                        // pour éviter un rechargement en cascade du panneau de droite
-                        // (les champs ont déjà été mis à jour par RafraichirFormulairePiece).
                         _chargementEnCours = true;
-                        try
-                        {
-                            GridCommandes.SelectedItem = itemAReselectioner;
-                        }
-                        finally
-                        {
-                            _chargementEnCours = false;
-                        }
+                        try { GridCommandes.SelectedItem = itemAReselectioner; }
+                        finally { _chargementEnCours = false; }
                     }
                 }
-                
-                // Mettre à jour les boutons de pagination
+
+                // Pagination
                 BtnPagePrecedente.IsEnabled = result.HasPrevious;
-                BtnPageSuivante.IsEnabled = result.HasNext;
-                
-                // Mettre à jour l'info de pagination
-                int start = (result.Page - 1) * result.PageSize + 1;
-                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                BtnPageSuivante.IsEnabled   = result.HasNext;
+
+                int start = result.TotalCount == 0 ? 0 : (result.Page - 1) * result.PageSize + 1;
+                int end   = Math.Min(result.Page * result.PageSize, result.TotalCount);
                 TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} commandes";
+
+                // Compteur retard (en arrière-plan, non bloquant)
+                _ = MettreAJourCompteurRetard();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message, 
+                MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
@@ -350,6 +397,67 @@ namespace GestionCoutureApp.Views
         {
             _currentPage++;
             await ChargerCommandes();
+        }
+
+        // ==================================================================
+        // Filtres T7 : statut, couturier, compteur retard
+        // ==================================================================
+        private async void CmbFiltreStatut_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CmbFiltreStatut.SelectedItem is ComboBoxItem item)
+            {
+                _filtreStatut = item.Tag?.ToString();
+                if (string.IsNullOrEmpty(_filtreStatut)) _filtreStatut = null;
+            }
+            _currentPage = 1;
+            await ChargerCommandes();
+        }
+
+        private async void CmbFiltreCouturier_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CmbFiltreCouturier.SelectedItem is Employe emp && emp.IdEmploye > 0)
+                _filtreCouturierId = emp.IdEmploye;
+            else
+                _filtreCouturierId = null;
+            _currentPage = 1;
+            await ChargerCommandes();
+        }
+
+        private async void BtnCompteurRetard_Click(object sender, RoutedEventArgs e)
+        {
+            // Toggle : si déjà filtré retard, revenir à tous ; sinon filtrer retard
+            if (_filtreStatut == "Retard")
+            {
+                _filtreStatut = null;
+                if (CmbFiltreStatut.SelectedItem is ComboBoxItem ci && ci.Tag?.ToString() == "Retard")
+                    CmbFiltreStatut.SelectedIndex = 0;
+            }
+            else
+            {
+                _filtreStatut = "Retard";
+            }
+            _currentPage = 1;
+            await ChargerCommandes();
+        }
+
+        /// <summary>
+        /// Met à jour le compteur de commandes en retard affiché sur le bouton.
+        /// Appelé après chaque rechargement.
+        /// </summary>
+        private async Task MettreAJourCompteurRetard()
+        {
+            try
+            {
+                var result = await _commandeService.ObtenirPageCommandesStatutAsync(
+                    "Retard", 1, 999, null);
+                int nb = result.TotalCount;
+                Dispatcher.Invoke(() =>
+                {
+                    if (TxtCompteurRetard != null)
+                        TxtCompteurRetard.Text = nb == 0 ? "✅ 0 retard" : $"🔴 {nb} retard{(nb > 1 ? "s" : "")}";
+                });
+            }
+            catch { /* silencieux */ }
         }
 
         // ==================================================================

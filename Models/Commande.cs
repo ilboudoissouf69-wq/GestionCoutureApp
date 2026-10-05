@@ -204,6 +204,21 @@ namespace GestionCoutureApp.Models
             }
         }
 
+        /// <summary>Statut du paiement calculé pour l'affichage dans la liste.</summary>
+        [NotMapped]
+        public string StatutPaiement
+        {
+            get
+            {
+                decimal total = MontantTotalAvecMateriaux;
+                decimal encaisse = MontantEncaisse;
+                if (total <= 0) return "Impayé";
+                if (encaisse <= 0) return "Impayé";
+                if (encaisse >= total - 0.01m) return "Soldé";
+                return "Acompte";
+            }
+        }
+
         /// <summary>Couturier(s) de la commande pour affichage dans StatutView.</summary>
         [NotMapped]
         public string CouturiersAffiche

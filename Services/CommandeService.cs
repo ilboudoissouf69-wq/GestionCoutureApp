@@ -1038,16 +1038,18 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             var query = context.PiecesCommande
                 .Include(p => p.Mesures)
-                .Include(p => p.Commande)
+                .Include(p => p.Commande)   // nécessaire pour LabelReutilisation (DateCreation)
                 .Where(p => p.Commande != null
                     && p.Commande.IdClient == idClient
-                    && p.TypeVetement == typeVetement);
+                    && p.TypeVetement == typeVetement
+                    && !p.Commande.EstSupprimee);
 
             if (exclureIdCommande.HasValue)
                 query = query.Where(p => p.IdCommande != exclureIdCommande.Value);
 
             return query
-                .OrderByDescending(p => p.IdPieceCommande)
+                .OrderByDescending(p => p.Commande!.DateCreation)  // plus récent en premier
+                .ThenByDescending(p => p.IdPieceCommande)
                 .Take(10)
                 .ToList();
         }
