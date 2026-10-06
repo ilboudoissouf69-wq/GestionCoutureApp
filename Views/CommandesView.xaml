@@ -33,11 +33,9 @@
             <!-- Titre -->
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
                 <TextBlock Text="Gestion des Commandes"
-                           FontSize="24" FontWeight="Bold"
-                           Foreground="{StaticResource PrimaryBrush}"/>
+                           FontSize="22" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
                 <Border Height="3" Width="48" CornerRadius="2"
-                        Background="#CC0000" HorizontalAlignment="Left"
-                        Margin="0,8,0,0"/>
+                        Background="{StaticResource AccentBrush}" HorizontalAlignment="Left" Margin="0,6,0,0"/>
             </StackPanel>
 
             <!-- Recherche -->
@@ -574,7 +572,7 @@
                         <!-- ════════════════════════════════════════════
                              ZONE 1 — EN-TÊTE COMMANDE
                         ════════════════════════════════════════════ -->
-                        <Border Background="#F8F5F3"
+                        <Border Background="#F8FAFC"
                                 CornerRadius="8"
                                 Padding="16,12"
                                 Margin="0,0,0,16"
@@ -583,7 +581,7 @@
                             <StackPanel>
                                 <TextBlock Text="📌  EN-TÊTE COMMANDE"
                                            FontSize="11" FontWeight="Bold"
-                                           Foreground="#8B7355"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
                                            Margin="0,0,0,12"/>
 
                                 <!-- Client -->
@@ -644,7 +642,7 @@
                         <!-- ════════════════════════════════════════════
                              ZONE 2 — PANIER DE PIÈCES
                         ════════════════════════════════════════════ -->
-                        <Border Background="#F8F5F3"
+                        <Border Background="#F8FAFC"
                                 CornerRadius="8"
                                 Padding="16,12"
                                 Margin="0,0,0,16"
@@ -653,7 +651,7 @@
                             <StackPanel>
                                 <TextBlock Text="🛒  PANIER DE PIÈCES"
                                            FontSize="11" FontWeight="Bold"
-                                           Foreground="#8B7355"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
                                            Margin="0,0,0,10"/>
 
                                 <!-- Tableau des pièces -->
@@ -674,8 +672,8 @@
                                           Margin="0,0,0,10">
                                     <DataGrid.Resources>
                                         <Style TargetType="DataGridColumnHeader">
-                                            <Setter Property="Background" Value="#1A1A1A"/>
-                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="Background" Value="#F8FAFC"/>
+                                            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
                                             <Setter Property="FontSize" Value="11"/>
                                             <Setter Property="FontWeight" Value="SemiBold"/>
                                             <Setter Property="Padding" Value="10,8"/>
@@ -714,7 +712,7 @@
                                                         <TextBlock Grid.Column="0"
                                                                    Text="🧵  Matériaux &amp; Suppléments"
                                                                    FontSize="11" FontWeight="Bold"
-                                                                   Foreground="#8B7355"/>
+                                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
                                                         <Button Grid.Column="1"
                                                                 Content="✏️  Éditer cette pièce"
                                                                 FontSize="11" FontWeight="SemiBold"
@@ -763,13 +761,13 @@
                                                                         </TextBlock.Text>
                                                                     </TextBlock>
                                                                     <Border Grid.Column="2"
-                                                                            Background="#FFF3F0"
+                                                                            Background="#FEF3C7"
                                                                             CornerRadius="3"
                                                                             Padding="6,2"
                                                                             HorizontalAlignment="Right">
                                                                         <TextBlock Text="{Binding MontantAffiche}"
                                                                                    FontSize="11" FontWeight="Bold"
-                                                                                   Foreground="#CC0000"/>
+                                                                                   Foreground="{StaticResource AccentBrush}"/>
                                                                     </Border>
                                                                 </Grid>
                                                             </DataTemplate>
@@ -1248,13 +1246,13 @@
 
                                                                 <!-- Montant total ligne -->
                                                                 <Border Grid.Column="2"
-                                                                        Background="#FFF3F0"
+                                                                        Background="#FEF3C7"
                                                                         CornerRadius="4"
                                                                         Padding="8,3"
                                                                         HorizontalAlignment="Right">
                                                                     <TextBlock Text="{Binding MontantAffiche}"
                                                                                FontSize="12" FontWeight="Bold"
-                                                                               Foreground="#CC0000"/>
+                                                                               Foreground="{StaticResource AccentBrush}"/>
                                                                 </Border>
 
                                                                 <!-- Supprimer -->
@@ -1523,3 +1521,4 @@
         </Border>
     </Grid>
 </Page>
+

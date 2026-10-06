@@ -29,6 +29,16 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                // Personnaliser la bannière d'accueil
+                var authService = App.Services.GetRequiredService<IAuthService>();
+                var utilisateur = authService.UtilisateurConnecte;
+                if (utilisateur != null)
+                    TxtBienvenue.Text = $"Bonjour, {utilisateur.Prenom} {utilisateur.Nom} 👋";
+
+                // Date du jour en français
+                TxtDateDuJour.Text = DateTime.Now.ToString("dddd dd MMMM yyyy",
+                    new System.Globalization.CultureInfo("fr-FR"));
+
                 ChargerCartesStats();
                 ChargerGraphiqueRevenus();
                 ChargerStatsCouturiers();
@@ -39,6 +49,13 @@ namespace GestionCoutureApp.Views
                 MessageBox.Show("Erreur chargement dashboard : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        // Bouton action rapide "Nouvelle commande" → navigue vers CommandesView
+        private void BtnNouvelleCommande_Click(object sender, RoutedEventArgs e)
+        {
+            if (NavigationService != null)
+                NavigationService.Navigate(new CommandesView());
         }
 
         // ------------------------------------------------------------------
@@ -135,13 +152,14 @@ namespace GestionCoutureApp.Views
 
                 var barre = new Border
                 {
-                    CornerRadius = new CornerRadius(4),
+                    CornerRadius = new CornerRadius(5),
+                    // Ambre-600 (#D97706) quand actif, Slate-200 sinon
                     Background = montant > 0
-                        ? new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))
-                        : new SolidColorBrush(Color.FromRgb(220, 220, 220)),
-                    Margin = new Thickness(0, 6, 0, 6),
+                        ? new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06))
+                        : new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                    Margin = new Thickness(0, 5, 0, 5),
                     VerticalAlignment = VerticalAlignment.Center,
-                    Height = 24
+                    Height = 26
                 };
 
                 // Conteneur pour la largeur proportionnelle
@@ -157,7 +175,8 @@ namespace GestionCoutureApp.Views
                     Text = montant > 0 ? montant.ToString("N0") : "-",
                     FontSize = 11,
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = montant > 0 ? Brushes.White : Brushes.Gray,
+                    // Blanc sur ambre, gris sur fond vide
+                    Foreground = montant > 0 ? Brushes.White : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(10, 0, 0, 0)
                 };

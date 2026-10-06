@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,7 +24,11 @@ namespace GestionCoutureApp.Views
             _languageService = App.Services.GetRequiredService<ILanguageService>();
             _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
             
-            TxtUtilisateur.Text = $"{employe.Prenom} {employe.Nom} ({employe.Role})";
+            // Nom affiché (prénom + nom, sans le rôle — le badge s'en charge)
+            TxtUtilisateur.Text = $"{employe.Prenom} {employe.Nom}";
+            
+            // Badge rôle coloré selon le rôle
+            AppliquerBadgeRole(employe.Role);
 
             string role = employe.Role;
 
@@ -39,49 +44,40 @@ namespace GestionCoutureApp.Views
                 if (role == "Boss")
                 {
                     BtnTableauDeBord.Visibility = Visibility.Visible;
-                    BtnClients.Visibility = Visibility.Visible;
-                    BtnCommandes.Visibility = Visibility.Visible;
-                    BtnPaiements.Visibility = Visibility.Visible;
-                    BtnStatut.Visibility = Visibility.Visible;
-                    BtnTypesVetements.Visibility = Visibility.Visible;
-                    BtnEmployes.Visibility = Visibility.Visible;
-                    BtnCommissions.Visibility = Visibility.Visible;
-                    BtnRetours.Visibility = Visibility.Visible;
-                    BtnParametres.Visibility = Visibility.Visible;
-                    BtnAlertes.Visibility = Visibility.Visible;
-                    BtnDepenses.Visibility = Visibility.Visible;
+                    BtnClients.Visibility       = Visibility.Visible;
+                    BtnCommandes.Visibility     = Visibility.Visible;
+                    BtnPaiements.Visibility     = Visibility.Visible;
+                    BtnStatut.Visibility        = Visibility.Visible;
+                    BtnAlertes.Visibility       = Visibility.Visible;
+                    BtnRetours.Visibility       = Visibility.Visible;
+                    // Groupe Gestion
+                    LblGroupeGestion.Visibility = Visibility.Visible;
+                    BtnCommissions.Visibility   = Visibility.Visible;
+                    BtnDepenses.Visibility      = Visibility.Visible;
+                    // Groupe Admin
+                    SepAdmin.Visibility         = Visibility.Visible;
+                    LblGroupeAdmin.Visibility   = Visibility.Visible;
+                    BtnTypesVetements.Visibility= Visibility.Visible;
+                    BtnEmployes.Visibility      = Visibility.Visible;
+                    BtnParametres.Visibility    = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
                 else if (role == "Secretaire")
                 {
                     BtnTableauDeBord.Visibility = Visibility.Visible;
-                    BtnClients.Visibility = Visibility.Visible;
-                    BtnCommandes.Visibility = Visibility.Visible;
-                    BtnPaiements.Visibility = Visibility.Visible;
-                    BtnStatut.Visibility = Visibility.Visible;
-                    BtnRetours.Visibility = Visibility.Visible;
-                    BtnTypesVetements.Visibility = Visibility.Collapsed;
-                    BtnEmployes.Visibility = Visibility.Collapsed;
-                    BtnCommissions.Visibility = Visibility.Collapsed;
-                    BtnParametres.Visibility = Visibility.Collapsed;
-                    BtnAlertes.Visibility = Visibility.Visible;
-                    BtnDepenses.Visibility = Visibility.Collapsed;
+                    BtnClients.Visibility       = Visibility.Visible;
+                    BtnCommandes.Visibility     = Visibility.Visible;
+                    BtnPaiements.Visibility     = Visibility.Visible;
+                    BtnStatut.Visibility        = Visibility.Visible;
+                    BtnAlertes.Visibility       = Visibility.Visible;
+                    BtnRetours.Visibility       = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
                 else if (role == "Couturier")
                 {
-                    BtnTableauDeBord.Visibility = Visibility.Collapsed;
-                    BtnClients.Visibility = Visibility.Collapsed;
-                    BtnCommandes.Visibility = Visibility.Collapsed;
-                    BtnPaiements.Visibility = Visibility.Collapsed;
-                    BtnTypesVetements.Visibility = Visibility.Collapsed;
-                    BtnEmployes.Visibility = Visibility.Collapsed;
-                    BtnCommissions.Visibility = Visibility.Collapsed;
-                    BtnDepenses.Visibility = Visibility.Collapsed;
-                    BtnDeconnexion.Visibility = Visibility.Visible;
-                    BtnAlertes.Visibility = Visibility.Collapsed;
+                    BtnDeconnexion.Visibility   = Visibility.Visible;
                     ContentFrame.Navigate(new CouturierDashboardView(employe));
                 }
             };
@@ -117,8 +113,41 @@ namespace GestionCoutureApp.Views
         private void UpdateTranslations()
         {
             // Pour l'instant, MainWindow n'a pas beaucoup de textes traduisibles
-            // Les boutons de navigation et les messages d'erreur restent en français
-            // pour l'instant car ils nécessitent une traduction complète
+        }
+
+        // ------------------------------------------------------------------
+        // Badge rôle coloré dans la sidebar
+        // ------------------------------------------------------------------
+        private void AppliquerBadgeRole(string role)
+        {
+            switch (role)
+            {
+                case "Boss":
+                    BadgeRole.Background = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06));
+                    TxtRole.Text = "BOSS";
+                    break;
+                case "Secretaire":
+                    BadgeRole.Background = new SolidColorBrush(Color.FromRgb(0x1D, 0x4E, 0xD8));
+                    TxtRole.Text = "SECRÉTAIRE";
+                    break;
+                case "Couturier":
+                    BadgeRole.Background = new SolidColorBrush(Color.FromRgb(0x15, 0x80, 0x3D));
+                    TxtRole.Text = "COUTURIER";
+                    break;
+                default:
+                    BadgeRole.Background = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+                    TxtRole.Text = role.ToUpperInvariant();
+                    break;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Changer mot de passe depuis la sidebar
+        // ------------------------------------------------------------------
+        private void BtnChangerMdp_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new ChangerMotDePasseWindow(_employeConnecte) { Owner = this };
+            dlg.ShowDialog();
         }
 
         // ------------------------------------------------------------------
@@ -126,11 +155,8 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private void SetBoutonActif(Button bouton)
         {
-            // Remet l'ancien bouton au style normal
             if (_boutonActif != null)
                 _boutonActif.Style = (Style)Resources["NavBtn"];
-
-            // Applique le style actif au nouveau bouton
             bouton.Style = (Style)Resources["NavBtnActif"];
             _boutonActif = bouton;
         }
@@ -273,6 +299,8 @@ namespace GestionCoutureApp.Views
                 badge.Text       = nbUrgentes > 0 ? nbUrgentes.ToString() : "";
                 badge.Visibility = nbUrgentes > 0 ? Visibility.Visible : Visibility.Collapsed;
             }
+            if (FindName("BadgeAlertesBorder") is Border borderBadge)
+                borderBadge.Visibility = nbUrgentes > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void BtnDepenses_Click(object sender, RoutedEventArgs e)

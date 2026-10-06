@@ -19,20 +19,20 @@
         </Grid.RowDefinitions>
 
         <!-- ── Titre ── -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+        <StackPanel Grid.Row="0" Margin="0,0,0,18">
             <TextBlock Text="Suivi des commandes"
-                       FontSize="24" FontWeight="Bold"
+                       FontSize="22" FontWeight="Bold"
                        Foreground="{StaticResource PrimaryBrush}"/>
-            <Border Height="3" Width="60" CornerRadius="2"
-                    Background="#CC0000" HorizontalAlignment="Left"
-                    Margin="0,8,0,0"/>
+            <Border Height="3" Width="44" CornerRadius="2"
+                    Background="{StaticResource AccentBrush}"
+                    HorizontalAlignment="Left" Margin="0,6,0,0"/>
         </StackPanel>
 
         <!-- ── Barre de filtres rapides ── -->
         <Border Grid.Row="1"
                 Background="White"
-                CornerRadius="8"
-                Padding="16,12"
+                CornerRadius="10"
+                Padding="14,10"
                 Margin="0,0,0,12"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1">
@@ -47,211 +47,122 @@
                 <WrapPanel Grid.Column="0" Orientation="Horizontal">
 
                     <Button x:Name="BtnFiltreRetard"
-                            Content="🔴  En retard"
-                            Height="34" Padding="14,0"
+                            Content="⚠ En retard"
+                            Height="32" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4"
-                            Cursor="Hand"
-                            Click="BtnFiltre_Click"
-                            Tag="Retard">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#FEF2F2"/>
-                                <Setter Property="Foreground" Value="#DC2626"/>
-                                <Setter Property="BorderBrush" Value="#FCA5A5"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#FEE2E2"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
+                            Margin="0,0,6,4" Cursor="Hand"
+                            Click="BtnFiltre_Click" Tag="Retard">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#FEE2E2" BorderBrush="#FCA5A5"
+                                        BorderThickness="1.5" CornerRadius="16"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground><SolidColorBrush Color="#B91C1C"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreAfaire"
-                            Content="⬜  À faire"
-                            Height="34" Padding="14,0"
+                            Content="⬜ À faire"
+                            Height="32" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4"
-                            Cursor="Hand"
-                            Click="BtnFiltre_Click"
-                            Tag="A faire">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#F9FAFB"/>
-                                <Setter Property="Foreground" Value="#374151"/>
-                                <Setter Property="BorderBrush" Value="#D1D5DB"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#F3F4F6"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
+                            Margin="0,0,6,4" Cursor="Hand"
+                            Click="BtnFiltre_Click" Tag="A faire">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#F1F5F9" BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1.5" CornerRadius="16"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground><SolidColorBrush Color="#475569"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreEnCours"
-                            Content="🟡  En cours"
-                            Height="34" Padding="14,0"
+                            Content="🟡 En cours"
+                            Height="32" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4"
-                            Cursor="Hand"
-                            Click="BtnFiltre_Click"
-                            Tag="En cours">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#FFFBEB"/>
-                                <Setter Property="Foreground" Value="#92400E"/>
-                                <Setter Property="BorderBrush" Value="#FCD34D"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#FEF3C7"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
+                            Margin="0,0,6,4" Cursor="Hand"
+                            Click="BtnFiltre_Click" Tag="En cours">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#FEF3C7" BorderBrush="#FDE68A"
+                                        BorderThickness="1.5" CornerRadius="16"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground><SolidColorBrush Color="#92400E"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreTerminee"
-                            Content="🟢  Terminée"
-                            Height="34" Padding="14,0"
+                            Content="🟢 Terminée"
+                            Height="32" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4"
-                            Cursor="Hand"
-                            Click="BtnFiltre_Click"
-                            Tag="Terminee">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#F0FDF4"/>
-                                <Setter Property="Foreground" Value="#065F46"/>
-                                <Setter Property="BorderBrush" Value="#6EE7B7"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#DCFCE7"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
+                            Margin="0,0,6,4" Cursor="Hand"
+                            Click="BtnFiltre_Click" Tag="Terminee">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#DCFCE7" BorderBrush="#86EFAC"
+                                        BorderThickness="1.5" CornerRadius="16"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground><SolidColorBrush Color="#15803D"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreLivree"
-                            Content="🔵  Livrée"
-                            Height="34" Padding="14,0"
+                            Content="🔵 Livrée"
+                            Height="32" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4"
-                            Cursor="Hand"
-                            Click="BtnFiltre_Click"
-                            Tag="Livree">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#EFF6FF"/>
-                                <Setter Property="Foreground" Value="#1E40AF"/>
-                                <Setter Property="BorderBrush" Value="#93C5FD"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#DBEAFE"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
+                            Margin="0,0,6,4" Cursor="Hand"
+                            Click="BtnFiltre_Click" Tag="Livree">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#DBEAFE" BorderBrush="#93C5FD"
+                                        BorderThickness="1.5" CornerRadius="16"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground><SolidColorBrush Color="#1D4ED8"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreAll"
-                            Content="  Tous"
-                            Height="34" Padding="14,0"
+                            Content="☰ Tous"
+                            Height="32" Padding="14,0"
                             FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4"
-                            Cursor="Hand"
-                            Click="BtnFiltre_Click"
-                            Tag="">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#1A1A1A"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="BorderThickness" Value="0"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
+                            Margin="0,0,6,4" Cursor="Hand"
+                            Click="BtnFiltre_Click" Tag="">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bg" Background="#0F172A"
+                                        CornerRadius="16"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#374151"/>
+                                        <Setter TargetName="bg" Property="Background" Value="#1E293B"/>
                                     </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Foreground><SolidColorBrush Color="White"/></Button.Foreground>
                     </Button>
                 </WrapPanel>
 
@@ -267,15 +178,18 @@
         <!-- ── Indicateur chargement ── -->
         <Border Grid.Row="2"
                 x:Name="LoadingIndicator"
-                Background="#F8F9FA"
-                Padding="12"
+                Background="#FFFBF5"
+                Padding="14"
                 Visibility="Collapsed"
-                CornerRadius="6"
+                CornerRadius="8"
+                BorderBrush="{StaticResource AccentBrush}"
+                BorderThickness="1"
                 Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <TextBlock Text="⏳" FontSize="14" Margin="0,0,8,0"/>
                 <TextBlock Text="Chargement..." FontSize="12"
-                           Foreground="#6B7280" VerticalAlignment="Center"/>
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
 
@@ -457,29 +371,26 @@
                                             Margin="0,0,4,0"
                                             Click="BtnPasserA_Click"
                                             Tag="{Binding IdCommande}">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Background" Value="#1E40AF"/>
-                                                <Setter Property="Foreground" Value="White"/>
-                                                <Setter Property="BorderThickness" Value="0"/>
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="Button">
-                                                            <Border Background="{TemplateBinding Background}"
-                                                                    CornerRadius="5"
-                                                                    Padding="{TemplateBinding Padding}">
-                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="bg"
+                                                        Background="{StaticResource AccentBrush}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#1D4ED8"/>
+                                                        <Setter TargetName="bg" Property="Background"
+                                                                Value="{StaticResource AccentHoverBrush}"/>
                                                     </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                        <Button.Foreground>
+                                            <SolidColorBrush Color="White"/>
+                                        </Button.Foreground>
                                     </Button>
 
                                     <!-- Bouton WhatsApp -->

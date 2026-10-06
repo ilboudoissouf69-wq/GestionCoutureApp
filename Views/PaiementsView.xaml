@@ -10,279 +10,277 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- BANDEAU TITRE -->
+        <!-- ── BANNIÈRE TITRE ── -->
         <Border Grid.Row="0"
                 CornerRadius="12"
-                Padding="24,16"
-                Margin="0,0,0,24"
-                Background="#1A1A1A">
+                Padding="24,18"
+                Margin="0,0,0,22">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#0F172A" Offset="0"/>
+                    <GradientStop Color="#1E1106" Offset="0.6"/>
+                    <GradientStop Color="#451A03" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0"
-                        VerticalAlignment="Center">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="Gestion des Paiements"
-                               FontSize="24"
-                            FontWeight="Bold"
-                            Foreground="White"/>
-                    <Border Height="3"
-                            Width="48"
-                            CornerRadius="2"
-                            Background="#CC0000"
-                            HorizontalAlignment="Left"
-                            Margin="0,8,0,0"/>
+                               FontSize="22" FontWeight="Bold"
+                               Foreground="White"/>
+                    <Border Height="2" Width="40" CornerRadius="1"
+                            HorizontalAlignment="Left" Margin="0,8,0,0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="Transparent" Offset="0"/>
+                                <GradientStop Color="#D97706"     Offset="0.5"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
                 </StackPanel>
                 <Border Grid.Column="1"
-                        CornerRadius="12"
-                        Padding="16,8"
-                        Background="#2A2A2A">
-                    <TextBlock x:Name="TxtOperateurConnecte"
-                               Text="Operateur : -"
-                               FontSize="13"
-                            FontWeight="SemiBold"
-                            Foreground="#B0A8A4"/>
+                        CornerRadius="8" Padding="14,8"
+                        Background="#0F172A"
+                        BorderBrush="#1E293B" BorderThickness="1"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="👤 " FontSize="13" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtOperateurConnecte"
+                                   Text="Opérateur : -"
+                                   FontSize="13" FontWeight="SemiBold"
+                                   Foreground="#94A3B8"/>
+                    </StackPanel>
                 </Border>
             </Grid>
         </Border>
 
-        <!-- CORPS -->
+        <!-- ── CORPS ── -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="20"/>
-                <ColumnDefinition Width="370"/>
+                <ColumnDefinition Width="380"/>
             </Grid.ColumnDefinitions>
 
-            <!-- GAUCHE : Tableau -->
+            <!-- GAUCHE : Tableau paiements -->
             <Grid Grid.Column="0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0"
-                        Style="{StaticResource Card}"
-                        Padding="0">
+                <Border Grid.Row="0" Style="{StaticResource CardNoPad}">
                     <StackPanel>
-                        <!-- Indicateur de chargement -->
-                        <Border x:Name="LoadingIndicator" 
-                                Background="#F8F9FA" 
-                                Padding="12" 
-                                Visibility="Collapsed">
+                        <!-- Loading -->
+                        <Border x:Name="LoadingIndicator"
+                                Background="#FFFBF5"
+                                Padding="14" Visibility="Collapsed"
+                                BorderBrush="{StaticResource AccentBrush}"
+                                BorderThickness="0,0,0,2">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="⏳" FontSize="14" Margin="0,0,8,0"/>
-                                <TextBlock Text="Chargement..." FontSize="12" Foreground="#6B7280" VerticalAlignment="Center"/>
+                                <TextBlock Text="Chargement..." FontSize="12"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
-                        
+
                         <DataGrid x:Name="GridPaiements"
                                   Style="{StaticResource ModernGrid}"
                                   SelectionChanged="GridPaiements_SelectionChanged"
                                   VirtualizingStackPanel.IsVirtualizing="True"
                                   VirtualizingStackPanel.VirtualizationMode="Recycling"
                                   ScrollViewer.CanContentScroll="True">
-                        <DataGrid.Columns>
-                            <!-- N° Reçu : auto — s'adapte au contenu -->
-                            <DataGridTextColumn Header="N° Reçu"
-                                    Binding="{Binding RecuNumero}"
-                                    Width="Auto"
-                                    MinWidth="110">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock"
-                                           BasedOn="{StaticResource DataGridCellText}"/>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-
-                            <!-- Client : prend l'espace restant -->
-                            <DataGridTextColumn Header="Client"
-                                    Binding="{Binding Commande.Client.Nom}"
-                                    Width="*"
-                                    MinWidth="90">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock"
-                                           BasedOn="{StaticResource DataGridCellText}"/>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-
-                            <!-- Montant : aligné à droite -->
-                            <DataGridTextColumn Header="Montant (FCFA)"
-                                    Binding="{Binding MontantPaye, StringFormat={}{0:N0}}"
-                                    Width="Auto"
-                                    MinWidth="100">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock"
-                                           BasedOn="{StaticResource DataGridCellText}">
-                                        <Setter Property="HorizontalAlignment" Value="Right"/>
-                                        <Setter Property="FontWeight" Value="SemiBold"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-
-                            <!-- Mode de paiement -->
-                            <DataGridTextColumn Header="Mode"
-                                    Binding="{Binding ModePaiement}"
-                                    Width="Auto"
-                                    MinWidth="85">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock"
-                                           BasedOn="{StaticResource DataGridCellText}"/>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-
-                            <!-- Opérateur -->
-                            <DataGridTextColumn Header="Opérateur"
-                                    Binding="{Binding NomOperateur}"
-                                    Width="Auto"
-                                    MinWidth="90">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock"
-                                           BasedOn="{StaticResource DataGridCellText}"/>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-
-                            <!-- Date/Heure -->
-                            <DataGridTextColumn Header="Date / Heure"
-                                    Binding="{Binding DatePaiement, StringFormat={}{0:dd/MM/yyyy HH:mm}}"
-                                    Width="Auto"
-                                    MinWidth="120">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock"
-                                           BasedOn="{StaticResource DataGridCellText}">
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-
-                            <!-- Statut : badge coloré -->
-                            <DataGridTemplateColumn Header="Statut" Width="95" MinWidth="80">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Border CornerRadius="10"
-                                                Padding="8,3"
-                                                HorizontalAlignment="Center"
-                                                Margin="4,2"
-                                                ToolTip="{Binding StatutAffichage}">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#E8F5E9"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding EstAnnule}" Value="True">
-                                                            <Setter Property="Background" Value="#FCEAEA"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <TextBlock Text="{Binding StatutAffichage}"
-                                                       FontSize="11"
-                                                       FontWeight="Bold">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="N° Reçu"
+                                                    Binding="{Binding RecuNumero}"
+                                                    Width="Auto" MinWidth="110"
+                                                    ElementStyle="{StaticResource DataGridCellText}"/>
+                                <DataGridTextColumn Header="Client"
+                                                    Binding="{Binding Commande.Client.Nom}"
+                                                    Width="*" MinWidth="90"
+                                                    ElementStyle="{StaticResource DataGridCellText}"/>
+                                <DataGridTextColumn Header="Montant (FCFA)"
+                                                    Binding="{Binding MontantPaye, StringFormat={}{0:N0}}"
+                                                    Width="Auto" MinWidth="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock"
+                                               BasedOn="{StaticResource DataGridCellText}">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Mode"
+                                                    Binding="{Binding ModePaiement}"
+                                                    Width="Auto" MinWidth="85"
+                                                    ElementStyle="{StaticResource DataGridCellText}"/>
+                                <DataGridTextColumn Header="Opérateur"
+                                                    Binding="{Binding NomOperateur}"
+                                                    Width="Auto" MinWidth="90"
+                                                    ElementStyle="{StaticResource DataGridCellText}"/>
+                                <DataGridTextColumn Header="Date / Heure"
+                                                    Binding="{Binding DatePaiement, StringFormat={}{0:dd/MM/yy HH:mm}}"
+                                                    Width="Auto" MinWidth="110">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock"
+                                               BasedOn="{StaticResource DataGridCellText}">
+                                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <!-- Statut badge -->
+                                <DataGridTemplateColumn Header="Statut" Width="90" MinWidth="80">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="10"
+                                                    Padding="8,3"
+                                                    HorizontalAlignment="Center"
+                                                    Margin="4,2"
+                                                    ToolTip="{Binding StatutAffichage}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#DCFCE7"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding EstAnnule}" Value="True">
-                                                                <Setter Property="Foreground" Value="#CC0000"/>
+                                                                <Setter Property="Background" Value="#FEE2E2"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </Border>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                    
-                    <!-- ═══════════════════════════════ PAGINATION ═══════════════════════ -->
-                    <Border Background="#FAF5F2" Padding="16,12" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- Info pagination -->
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock x:Name="TxtPaginationInfo" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" FontWeight="Medium"/>
-                            </StackPanel>
-                            
-                            <!-- Boutons de navigation -->
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="BtnPagePrecedente" Content="←" Width="36" Height="32" 
-                                        Margin="0,0,8,0" Click="BtnPagePrecedente_Click"
-                                        Style="{StaticResource BtnGhost}" IsEnabled="False" FontSize="14"/>
-                                <Button x:Name="BtnPageSuivante" Content="→" Width="36" Height="32"
-                                        Click="BtnPageSuivante_Click"
-                                        Style="{StaticResource BtnGhost}" IsEnabled="False" FontSize="14"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding StatutAffichage}"
+                                                           FontSize="11" FontWeight="Bold">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#15803D"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#B91C1C"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <!-- Pagination -->
+                        <Border Background="White"
+                                Padding="14,10"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="0,1,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="TxtPaginationInfo"
+                                           Grid.Column="0" FontSize="12"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="BtnPagePrecedente"
+                                            Content="← Préc."
+                                            Height="30" Padding="10,0" FontSize="12"
+                                            Margin="0,0,8,0"
+                                            Style="{StaticResource BtnGhost}"
+                                            IsEnabled="False"
+                                            Click="BtnPagePrecedente_Click"/>
+                                    <Button x:Name="BtnPageSuivante"
+                                            Content="Suiv. →"
+                                            Height="30" Padding="10,0" FontSize="12"
+                                            Style="{StaticResource BtnGhost}"
+                                            IsEnabled="False"
+                                            Click="BtnPageSuivante_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </Border>
 
+                <!-- Actions bas tableau -->
                 <StackPanel Grid.Row="1"
-                        Orientation="Horizontal"
-                        Margin="0,12,0,0">
+                            Orientation="Horizontal"
+                            Margin="0,12,0,0">
                     <Button x:Name="BtnGenererRecu"
-                            Content="Imprimer le recu"
                             Style="{StaticResource BtnNavy}"
-                            Height="38"
-                            Padding="16,0"
-                            Click="BtnGenererRecu_Click"
-                            Margin="0,0,10,0"/>
+                            Height="38" Padding="16,0"
+                            Margin="0,0,10,0"
+                            Click="BtnGenererRecu_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🖨️" FontSize="13" Margin="0,0,7,0"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="Imprimer le reçu" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnAnnuler"
-                            Content="Annuler ce paiement"
                             Style="{StaticResource BtnDanger}"
-                            Height="38"
-                            Padding="16,0"
-                            Click="BtnAnnuler_Click"/>
+                            Height="38" Padding="16,0"
+                            Click="BtnAnnuler_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🚫" FontSize="13" Margin="0,0,7,0"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="Annuler ce paiement" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
 
-            <!-- DROITE : Formulaire -->
+            <!-- DROITE : Formulaire encaissement -->
             <Border Grid.Column="2"
-                    Style="{StaticResource Card}"
-                    Padding="0"
+                    Style="{StaticResource CardNoPad}"
                     VerticalAlignment="Top">
                 <StackPanel>
-                    <!-- En-tête panel — noir -->
-                    <Border CornerRadius="10,10,0,0"
-                            Padding="20,14"
-                            Background="#1A1A1A">
-                        <TextBlock Text="Enregistrer un paiement"
-                                   FontSize="14"
-                                FontWeight="Bold"
-                                Foreground="White"/>
+                    <!-- En-tête panneau -->
+                    <Border CornerRadius="12,12,0,0" Padding="20,14">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#0F172A" Offset="0"/>
+                                <GradientStop Color="#1E293B" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <StackPanel>
+                            <TextBlock Text="💳  Enregistrer un paiement"
+                                       FontSize="14" FontWeight="Bold"
+                                       Foreground="White"/>
+                            <TextBlock Text="Espèces · Mobile Money · Virement · Chèque"
+                                       FontSize="11" Foreground="#94A3B8"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
                     </Border>
 
-                    <StackPanel Margin="20,16,20,20">
+                    <StackPanel Margin="20,18,20,20">
 
-                        <TextBlock Text="Commande *"
-                                Style="{StaticResource FieldLabel}"/>
+                        <TextBlock Text="Commande *" Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="CmbCommande"
                                   Style="{StaticResource ModernComboBox}"
                                   DisplayMemberPath="DisplayText"
                                   Margin="0,0,0,14"
                                   SelectionChanged="CmbCommande_SelectionChanged"/>
 
-                        <!-- Resume commande -->
-                        <Border CornerRadius="8"
-                                Padding="14,12"
+                        <!-- Résumé commande -->
+                        <Border CornerRadius="10"
+                                Padding="16,14"
                                 Margin="0,0,0,16"
-                                Background="#FBF8F6"
+                                Background="#F8FAFC"
                                 BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1">
                             <StackPanel>
                                 <TextBlock x:Name="TxtInfoClient"
                                            Text="Client : -"
-                                           FontSize="13"
-                                        FontWeight="SemiBold"
+                                           FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource PrimaryBrush}"/>
-                                <Separator Background="{StaticResource BorderBrush}"
-                                        Margin="0,8"/>
+                                <Border Height="1"
+                                        Background="{StaticResource BorderBrush}"
+                                        Margin="0,10"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -290,91 +288,93 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="TOTAL"
-                                                FontSize="10"
-                                                FontWeight="Bold"
+                                                   FontSize="10" FontWeight="Bold"
                                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                                         <TextBlock x:Name="TxtInfoMontant"
-                                                Text="- FCFA"
-                                                   FontSize="15"
-                                                FontWeight="Bold"
+                                                   Text="- FCFA"
+                                                   FontSize="16" FontWeight="Bold"
                                                    Foreground="{StaticResource PrimaryBrush}"
                                                    Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="RESTE"
-                                                FontSize="10"
-                                                FontWeight="Bold"
+                                        <TextBlock Text="RESTE DÛ"
+                                                   FontSize="10" FontWeight="Bold"
                                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                                         <TextBlock x:Name="TxtInfoReste"
-                                                Text="- FCFA"
-                                                   FontSize="15"
-                                                FontWeight="Bold"
+                                                   Text="- FCFA"
+                                                   FontSize="16" FontWeight="Bold"
                                                    Foreground="{StaticResource DangerBrush}"
                                                    Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </Grid>
-                                <TextBlock x:Name="TxtInfoDejaPaye"
-                                           Text="Deja paye : 0 FCFA"
-                                           FontSize="12"
-                                           Foreground="{StaticResource SuccessBrush}"
-                                           Margin="0,6,0,0"/>
+                                <!-- Déjà payé -->
+                                <Border CornerRadius="6" Padding="10,5"
+                                        Margin="0,10,0,0"
+                                        Background="#DCFCE7"
+                                        BorderBrush="#86EFAC" BorderThickness="1">
+                                    <TextBlock x:Name="TxtInfoDejaPaye"
+                                               Text="Déjà payé : 0 FCFA"
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="#15803D"/>
+                                </Border>
                             </StackPanel>
                         </Border>
 
                         <TextBlock Text="Montant du paiement (FCFA) *"
-                                Style="{StaticResource FieldLabel}"/>
+                                   Style="{StaticResource FieldLabel}"/>
                         <TextBox x:Name="TxtMontant"
                                  Style="{StaticResource ModernTextBox}"
-                                 Margin="0,0,0,12"
-                                 PreviewTextInput="TxtMontant_PreviewTextInput"
-                                 Text=""/>
+                                 Margin="0,0,0,14"
+                                 PreviewTextInput="TxtMontant_PreviewTextInput"/>
 
                         <TextBlock Text="Mode de paiement"
-                                Style="{StaticResource FieldLabel}"/>
+                                   Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="CmbModePaiement"
                                   Style="{StaticResource ModernComboBox}"
                                   Margin="0,0,0,20"
-                                SelectedIndex="0">
-                            <ComboBoxItem Content="Especes"/>
-                            <ComboBoxItem Content="Mobile Money"/>
-                            <ComboBoxItem Content="Virement"/>
-                            <ComboBoxItem Content="Cheque"/>
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="💵  Espèces"/>
+                            <ComboBoxItem Content="📱  Mobile Money (Orange/Moov/Wave)"/>
+                            <ComboBoxItem Content="🏦  Virement"/>
+                            <ComboBoxItem Content="📄  Chèque"/>
                         </ComboBox>
 
                         <Button x:Name="BtnEnregistrer"
-                                Content="Enregistrer le paiement"
                                 Style="{StaticResource BtnSuccess}"
-                                Height="42"
-                                FontSize="13"
-                                FontWeight="Bold"
-                                Click="BtnEnregistrer_Click"
-                                Margin="0,0,0,16"/>
+                                Height="44"
+                                FontSize="13" FontWeight="Bold"
+                                Margin="0,0,0,18"
+                                Click="BtnEnregistrer_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="💳" FontSize="15" Margin="0,0,8,0"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="Enregistrer le paiement"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
 
-                        <Separator Background="{StaticResource BorderBrush}"
-                                Margin="0,0,0,12"/>
+                        <Border Height="1"
+                                Background="{StaticResource BorderBrush}"
+                                Margin="0,0,0,14"/>
 
                         <TextBlock Text="Historique des paiements"
-                                   FontSize="13"
-                                FontWeight="SemiBold"
+                                   FontSize="13" FontWeight="SemiBold"
                                    Foreground="{StaticResource PrimaryBrush}"
                                    Margin="0,0,0,8"/>
                         <Border BorderBrush="{StaticResource BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="7">
+                                CornerRadius="8">
                             <ListBox x:Name="ListeHistorique"
                                      MaxHeight="160"
-                                    FontSize="11"
+                                     FontSize="11"
                                      FontFamily="Consolas"
                                      BorderThickness="0"
-                                    Background="Transparent">
+                                     Background="Transparent">
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem">
-                                        <Setter Property="Padding"
-                                                Value="10,7"/>
-                                        <Setter Property="BorderBrush"
-                                                Value="{StaticResource BorderBrush}"/>
-                                        <Setter Property="BorderThickness"
-                                                Value="0,0,0,1"/>
+                                        <Setter Property="Padding"         Value="10,7"/>
+                                        <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
+                                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
                                     </Style>
                                 </ListBox.ItemContainerStyle>
                             </ListBox>

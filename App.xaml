@@ -1,600 +1,551 @@
-﻿<Application x:Class="GestionCoutureApp.App"
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Application x:Class="GestionCoutureApp.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown"
              DispatcherUnhandledException="Application_DispatcherUnhandledException">
-        <Application.Resources>
+    <Application.Resources>
 
-                <!-- ======================================================== -->
-                <!-- PALETTE — Retouche Choco / Ilassa Design                  -->
-                <!--   Rouge marque   : #CC0000                                -->
-                <!--   Rouge hover    : #B30000                                -->
-                <!--   Noir charbon   : #1A1A1A                                -->
-                <!--   Fond chaud     : #F7F3F0  (blanc cassé, pas froid)      -->
-                <!--   Surface        : #FFFFFF                                -->
-                <!--   Bordure chaude : #E0D6D0                                -->
-                <!-- ======================================================== -->
-                <Color x:Key="PrimaryColor">#1A1A1A</Color>
-                <Color x:Key="AccentColor">#CC0000</Color>
-                <Color x:Key="AccentHoverColor">#B30000</Color>
-                <Color x:Key="DangerColor">#DC2626</Color>
-                <Color x:Key="WarningColor">#F59E0B</Color>
-                <Color x:Key="SuccessColor">#10B981</Color>
-                <Color x:Key="SurfaceColor">#FFFFFF</Color>
-                <Color x:Key="BackgroundColor">#F7F3F0</Color>
-                <Color x:Key="BorderColor">#E5D0C8</Color>
-                <Color x:Key="TextPrimaryColor">#1A1A1A</Color>
-                <Color x:Key="TextSecondaryColor">#6B6460</Color>
-                <Color x:Key="SubtleBackgroundColor">#FAF5F2</Color>
+        <!-- ============================================================ -->
+        <!-- PALETTE OFFICIELLE — Retouche Choco / Atelier Ilboudo        -->
+        <!-- Thème : Tailwind Slate + Amber Couture                       -->
+        <!-- ============================================================ -->
 
-                <SolidColorBrush x:Key="PrimaryBrush"
-                                 Color="{StaticResource PrimaryColor}"/>
-                <SolidColorBrush x:Key="AccentBrush"
-                                 Color="{DynamicResource AccentColor}"/>
-                <SolidColorBrush x:Key="AccentHoverBrush"
-                                 Color="{DynamicResource AccentHoverColor}"/>
-                <SolidColorBrush x:Key="DangerBrush"
-                                 Color="{StaticResource DangerColor}"/>
-                <SolidColorBrush x:Key="WarningBrush"
-                                 Color="{StaticResource WarningColor}"/>
-                <SolidColorBrush x:Key="SuccessBrush"
-                                 Color="{StaticResource SuccessColor}"/>
-                <SolidColorBrush x:Key="SurfaceBrush"
-                                 Color="{StaticResource SurfaceColor}"/>
-                <SolidColorBrush x:Key="BackgroundBrush"
-                                 Color="{StaticResource BackgroundColor}"/>
-                <SolidColorBrush x:Key="BorderBrush"
-                                 Color="{StaticResource BorderColor}"/>
-                <SolidColorBrush x:Key="TextPrimaryBrush"
-                                 Color="{StaticResource TextPrimaryColor}"/>
-                <SolidColorBrush x:Key="TextSecondaryBrush"
-                                 Color="{StaticResource TextSecondaryColor}"/>
-                <SolidColorBrush x:Key="SubtleBackgroundBrush"
-                                 Color="{StaticResource SubtleBackgroundColor}"/>
+        <!-- Couleurs principales -->
+        <Color x:Key="PrimaryColor">#0F172A</Color>       <!-- Slate-900  : titres  -->
+        <Color x:Key="BodyColor">#334155</Color>           <!-- Slate-700  : corps   -->
+        <Color x:Key="SecondaryColor">#64748B</Color>      <!-- Slate-500  : labels  -->
+        <Color x:Key="BackgroundColor">#F8FAFC</Color>     <!-- Slate-50   : fond    -->
+        <Color x:Key="SurfaceColor">#FFFFFF</Color>        <!-- Blanc pur  : cartes  -->
+        <Color x:Key="BorderColor">#E2E8F0</Color>         <!-- Slate-200  : bordures-->
+        <Color x:Key="SubtleBackgroundColor">#F1F5F9</Color><!-- Slate-100: hover discret-->
 
-                <!-- ======================================================== -->
-                <!-- STYLE TEXTBOX                                              -->
-                <!-- ======================================================== -->
-                <Style TargetType="TextBox"
-                       x:Key="ModernTextBox">
-                        <Setter Property="Height"
-                                Value="38"/>
-                        <Setter Property="FontSize"
-                                Value="13"/>
-                        <Setter Property="Padding"
-                                Value="10,0"/>
-                        <Setter Property="VerticalContentAlignment"
-                                Value="Center"/>
-                        <Setter Property="Background"
-                                Value="White"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource TextPrimaryBrush}"/>
-                        <Setter Property="BorderBrush"
-                                Value="{DynamicResource BorderBrush}"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="SnapsToDevicePixels"
-                                Value="True"/>
-                        <Setter Property="UseLayoutRounding"
-                                Value="True"/>
+        <!-- Couleur marque — Or & Ambre -->
+        <Color x:Key="AccentColor">#D97706</Color>         <!-- Amber-600  : primaire-->
+        <Color x:Key="AccentHoverColor">#B45309</Color>    <!-- Amber-700  : hover   -->
+        <Color x:Key="AccentLightColor">#FEF3C7</Color>    <!-- Amber-100  : fond badge-->
+
+        <!-- Rouge marque (héritage) -->
+        <Color x:Key="BrandRedColor">#CC0000</Color>
+        <Color x:Key="BrandRedHoverColor">#B30000</Color>
+
+        <!-- Couleurs d'états -->
+        <Color x:Key="SuccessColor">#15803D</Color>
+        <Color x:Key="SuccessBgColor">#DCFCE7</Color>
+        <Color x:Key="SuccessBorderColor">#86EFAC</Color>
+        <Color x:Key="WarningColor">#92400E</Color>
+        <Color x:Key="WarningBgColor">#FEF3C7</Color>
+        <Color x:Key="WarningBorderColor">#FDE68A</Color>
+        <Color x:Key="DangerColor">#B91C1C</Color>
+        <Color x:Key="DangerBgColor">#FEE2E2</Color>
+        <Color x:Key="DangerBorderColor">#FCA5A5</Color>
+        <Color x:Key="InfoColor">#1D4ED8</Color>
+        <Color x:Key="InfoBgColor">#DBEAFE</Color>
+        <Color x:Key="InfoBorderColor">#93C5FD</Color>
+
+        <!-- Sidebar -->
+        <Color x:Key="SidebarBgColor">#020617</Color>      <!-- Slate-950  -->
+        <Color x:Key="SidebarNavHoverColor">#1E293B</Color><!-- Slate-800  -->
+        <Color x:Key="SidebarNavTextColor">#94A3B8</Color> <!-- Slate-400  -->
+        <Color x:Key="SidebarBorderColor">#1E293B</Color>  <!-- Slate-800  -->
+
+        <!-- ── Brushes ── -->
+        <SolidColorBrush x:Key="PrimaryBrush"            Color="{StaticResource PrimaryColor}"/>
+        <SolidColorBrush x:Key="BodyBrush"               Color="{StaticResource BodyColor}"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush"      Color="{StaticResource SecondaryColor}"/>
+        <SolidColorBrush x:Key="BackgroundBrush"         Color="{StaticResource BackgroundColor}"/>
+        <SolidColorBrush x:Key="SurfaceBrush"            Color="{StaticResource SurfaceColor}"/>
+        <SolidColorBrush x:Key="BorderBrush"             Color="{StaticResource BorderColor}"/>
+        <SolidColorBrush x:Key="SubtleBackgroundBrush"   Color="{StaticResource SubtleBackgroundColor}"/>
+
+        <!-- Accent dynamique (modifiable via ThemeService) -->
+        <SolidColorBrush x:Key="AccentBrush"             Color="{DynamicResource AccentColor}"/>
+        <SolidColorBrush x:Key="AccentHoverBrush"        Color="{DynamicResource AccentHoverColor}"/>
+        <SolidColorBrush x:Key="AccentLightBrush"        Color="{StaticResource AccentLightColor}"/>
+
+        <!-- Rouge marque (garde-en-arrière compatibilité) -->
+        <SolidColorBrush x:Key="BrandRedBrush"           Color="{StaticResource BrandRedColor}"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush"        Color="{StaticResource PrimaryColor}"/>
+
+        <!-- États -->
+        <SolidColorBrush x:Key="SuccessBrush"            Color="{StaticResource SuccessColor}"/>
+        <SolidColorBrush x:Key="SuccessBgBrush"          Color="{StaticResource SuccessBgColor}"/>
+        <SolidColorBrush x:Key="WarningBrush"            Color="{StaticResource WarningColor}"/>
+        <SolidColorBrush x:Key="WarningBgBrush"          Color="{StaticResource WarningBgColor}"/>
+        <SolidColorBrush x:Key="DangerBrush"             Color="{StaticResource DangerColor}"/>
+        <SolidColorBrush x:Key="DangerBgBrush"           Color="{StaticResource DangerBgColor}"/>
+        <SolidColorBrush x:Key="InfoBrush"               Color="{StaticResource InfoColor}"/>
+        <SolidColorBrush x:Key="InfoBgBrush"             Color="{StaticResource InfoBgColor}"/>
+
+        <!-- Sidebar -->
+        <SolidColorBrush x:Key="SidebarBgBrush"          Color="{StaticResource SidebarBgColor}"/>
+        <SolidColorBrush x:Key="SidebarNavHoverBrush"    Color="{StaticResource SidebarNavHoverColor}"/>
+        <SolidColorBrush x:Key="SidebarNavTextBrush"     Color="{StaticResource SidebarNavTextColor}"/>
+        <SolidColorBrush x:Key="SidebarBorderBrush"      Color="{StaticResource SidebarBorderColor}"/>
+
+        <!-- ============================================================ -->
+        <!-- TYPOGRAPHIES                                                   -->
+        <!-- ============================================================ -->
+        <Style TargetType="TextBlock" x:Key="FieldLabel">
+            <Setter Property="FontSize"      Value="12"/>
+            <Setter Property="FontWeight"    Value="SemiBold"/>
+            <Setter Property="Foreground"    Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Margin"        Value="0,0,0,5"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="SectionTitle">
+            <Setter Property="FontSize"      Value="22"/>
+            <Setter Property="FontWeight"    Value="Bold"/>
+            <Setter Property="Foreground"    Value="{DynamicResource PrimaryBrush}"/>
+            <Setter Property="Margin"        Value="0,0,0,20"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="CardTitle">
+            <Setter Property="FontSize"      Value="15"/>
+            <Setter Property="FontWeight"    Value="SemiBold"/>
+            <Setter Property="Foreground"    Value="{DynamicResource PrimaryBrush}"/>
+            <Setter Property="Margin"        Value="0,0,0,14"/>
+        </Style>
+
+        <Style TargetType="TextBlock" x:Key="DataGridCellText">
+            <Setter Property="TextTrimming"         Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment"    Value="Center"/>
+            <Setter Property="Foreground"           Value="{DynamicResource BodyBrush}"/>
+            <Setter Property="ToolTip"              Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- TEXTBOX — arrondie, focus ambre                               -->
+        <!-- ============================================================ -->
+        <Style TargetType="TextBox" x:Key="ModernTextBox">
+            <Setter Property="Height"                   Value="40"/>
+            <Setter Property="FontSize"                 Value="13"/>
+            <Setter Property="Padding"                  Value="12,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background"               Value="White"/>
+            <Setter Property="Foreground"               Value="{DynamicResource PrimaryBrush}"/>
+            <Setter Property="BorderBrush"              Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness"          Value="1"/>
+            <Setter Property="SnapsToDevicePixels"      Value="True"/>
+            <Setter Property="UseLayoutRounding"        Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush"     Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="border" Property="Background"      Value="#FFFBF5"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush"     Value="#94A3B8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- PASSWORDBOX — même style que TextBox                          -->
+        <!-- ============================================================ -->
+        <Style TargetType="PasswordBox" x:Key="ModernPasswordBox">
+            <Setter Property="Height"                   Value="40"/>
+            <Setter Property="FontSize"                 Value="13"/>
+            <Setter Property="Padding"                  Value="12,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background"               Value="White"/>
+            <Setter Property="Foreground"               Value="{DynamicResource PrimaryBrush}"/>
+            <Setter Property="BorderBrush"              Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness"          Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush"     Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="2"/>
+                                <Setter TargetName="border" Property="Background"      Value="#FFFBF5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- COMBOBOX — arrondie, cohérente avec TextBox                   -->
+        <!-- ============================================================ -->
+        <Style TargetType="ComboBox" x:Key="ModernComboBox">
+            <Setter Property="Height"                   Value="40"/>
+            <Setter Property="FontSize"                 Value="13"/>
+            <Setter Property="Padding"                  Value="10,0"/>
+            <Setter Property="Background"               Value="White"/>
+            <Setter Property="Foreground"               Value="{DynamicResource PrimaryBrush}"/>
+            <Setter Property="BorderBrush"              Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness"          Value="1"/>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- BOUTON PRIMAIRE — Ambre / Or                                   -->
+        <!-- ============================================================ -->
+        <Style TargetType="Button" x:Key="BtnPrimary">
+            <Setter Property="Height"        Value="40"/>
+            <Setter Property="FontSize"      Value="13"/>
+            <Setter Property="FontWeight"    Value="SemiBold"/>
+            <Setter Property="Foreground"    Value="White"/>
+            <Setter Property="Background"    Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="Padding"       Value="20,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.40"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Variantes couleurs (héritent du template BtnPrimary) -->
+        <Style TargetType="Button" x:Key="BtnSuccess" BasedOn="{StaticResource BtnPrimary}">
+            <Setter Property="Background" Value="#15803D"/>
+        </Style>
+        <Style TargetType="Button" x:Key="BtnDanger" BasedOn="{StaticResource BtnPrimary}">
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+        </Style>
+        <Style TargetType="Button" x:Key="BtnWarning" BasedOn="{StaticResource BtnPrimary}">
+            <Setter Property="Background" Value="#D97706"/>
+        </Style>
+        <Style TargetType="Button" x:Key="BtnNavy" BasedOn="{StaticResource BtnPrimary}">
+            <Setter Property="Background" Value="{DynamicResource PrimaryBrush}"/>
+        </Style>
+
+        <!-- Rouge marque (héritage) -->
+        <Style TargetType="Button" x:Key="BtnRed" BasedOn="{StaticResource BtnPrimary}">
+            <Setter Property="Background" Value="#CC0000"/>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- BOUTON GHOST — transparent avec hover léger                   -->
+        <!-- ============================================================ -->
+        <Style TargetType="Button" x:Key="BtnGhost">
+            <Setter Property="Height"        Value="40"/>
+            <Setter Property="FontSize"      Value="13"/>
+            <Setter Property="Foreground"    Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="BorderBrush"   Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="Padding"       Value="16,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background"   Value="{DynamicResource SubtleBackgroundBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush"  Value="#94A3B8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- BOUTON FILTRE PILL — pour les filtres statut (toggle pill)    -->
+        <!-- ============================================================ -->
+        <Style TargetType="Button" x:Key="BtnFilterPill">
+            <Setter Property="Height"        Value="32"/>
+            <Setter Property="FontSize"      Value="12"/>
+            <Setter Property="FontWeight"    Value="SemiBold"/>
+            <Setter Property="Foreground"    Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Background"    Value="White"/>
+            <Setter Property="BorderBrush"   Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="Padding"       Value="16,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="16"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background"  Value="{DynamicResource AccentLightBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background"  Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- BOUTON FILTRE PILL ACTIF                                       -->
+        <!-- ============================================================ -->
+        <Style TargetType="Button" x:Key="BtnFilterPillActive" BasedOn="{StaticResource BtnFilterPill}">
+            <Setter Property="Background"    Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderBrush"   Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="Foreground"    Value="White"/>
+        </Style>
+
+        <!-- ============================================================ -->
+        <!-- DATAGRID MODERNE — lignes épurées, sélection ambre           -->
+        <!-- ============================================================ -->
+        <Style TargetType="DataGrid" x:Key="ModernGrid">
+            <Setter Property="AutoGenerateColumns"      Value="False"/>
+            <Setter Property="IsReadOnly"               Value="True"/>
+            <Setter Property="HeadersVisibility"        Value="Column"/>
+            <Setter Property="GridLinesVisibility"      Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="CanUserResizeColumns"     Value="True"/>
+            <Setter Property="CanUserReorderColumns"    Value="False"/>
+            <Setter Property="Background"               Value="White"/>
+            <Setter Property="BorderBrush"              Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness"          Value="1"/>
+            <Setter Property="RowBackground"            Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#FAFBFC"/>
+            <Setter Property="FontSize"                 Value="13"/>
+            <Setter Property="SelectionMode"            Value="Single"/>
+            <Setter Property="ColumnHeaderStyle">
+                <Setter.Value>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background"   Value="#F8FAFC"/>
+                        <Setter Property="Foreground"   Value="{DynamicResource TextSecondaryBrush}"/>
+                        <Setter Property="FontWeight"   Value="SemiBold"/>
+                        <Setter Property="FontSize"     Value="11"/>
+                        <Setter Property="Padding"      Value="12,10"/>
+                        <Setter Property="BorderBrush"  Value="{DynamicResource BorderBrush}"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                        <Setter Property="Cursor"       Value="Arrow"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#F1F5F9"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="RowStyle">
+                <Setter.Value>
+                    <Style TargetType="DataGridRow">
+                        <Setter Property="Height"   Value="46"/>
+                        <Setter Property="Cursor"   Value="Hand"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#FFFBF5"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#FEF3C7"/>
+                                <Setter Property="Foreground" Value="{StaticResource PrimaryColor}"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected"   Value="True"/>
+                                    <Condition Property="IsMouseOver"  Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Background" Value="#FDE68A"/>
+                            </MultiTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="CellStyle">
+                <Setter.Value>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Padding"                Value="12,0"/>
+                        <Setter Property="BorderBrush"            Value="Transparent"/>
+                        <Setter Property="BorderThickness"        Value="0"/>
+                        <Setter Property="VerticalAlignment"      Value="Center"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="FocusVisualStyle"       Value="{x:Null}"/>
+                        <Setter Property="Foreground"             Value="{DynamicResource BodyBrush}"/>
                         <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="TextBox">
-                                                <Border x:Name="border"
-                                                        Background="{TemplateBinding Background}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
-                                                        <ScrollViewer x:Name="PART_ContentHost"
-                                                                      Margin="{TemplateBinding Padding}"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsFocused"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="BorderBrush"
-                                                                        Value="{DynamicResource AccentBrush}"/>
-                                                                <Setter TargetName="border"
-                                                                        Property="BorderThickness"
-                                                                        Value="2"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="BorderBrush"
-                                                                        Value="#B0A8A4"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
+                            <Setter.Value>
+                                <ControlTemplate TargetType="DataGridCell">
+                                    <Border x:Name="CellBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            Padding="{TemplateBinding Padding}"
+                                            SnapsToDevicePixels="True">
+                                        <ContentPresenter VerticalAlignment="Center"
+                                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="CellBorder" Property="Background"   Value="Transparent"/>
+                                        </Trigger>
+                                        <Trigger Property="IsFocused" Value="True">
+                                            <Setter TargetName="CellBorder" Property="BorderBrush"    Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="CellBorder" Property="BorderThickness" Value="0,0,0,2"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
                         </Setter>
-                </Style>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource PrimaryColor}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-                <!-- ======================================================== -->
-                <!-- STYLE PASSWORDBOX                                          -->
-                <!-- ======================================================== -->
-                <Style TargetType="PasswordBox"
-                       x:Key="ModernPasswordBox">
-                        <Setter Property="Height"
-                                Value="38"/>
-                        <Setter Property="FontSize"
-                                Value="13"/>
-                        <Setter Property="Padding"
-                                Value="10,0"/>
-                        <Setter Property="VerticalContentAlignment"
-                                Value="Center"/>
-                        <Setter Property="Background"
-                                Value="White"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource TextPrimaryBrush}"/>
-                        <Setter Property="BorderBrush"
-                                Value="{DynamicResource BorderBrush}"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="PasswordBox">
-                                                <Border x:Name="border"
-                                                        Background="{TemplateBinding Background}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
-                                                        <ScrollViewer x:Name="PART_ContentHost"
-                                                                      Margin="{TemplateBinding Padding}"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsFocused"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="BorderBrush"
-                                                                        Value="{DynamicResource AccentBrush}"/>
-                                                                <Setter TargetName="border"
-                                                                        Property="BorderThickness"
-                                                                        Value="2"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
+        <!-- ============================================================ -->
+        <!-- CARTE (Card) — fond blanc, bordure Slate-200, ombre légère   -->
+        <!-- ============================================================ -->
+        <Style TargetType="Border" x:Key="Card">
+            <Setter Property="Background"       Value="White"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="BorderBrush"      Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="Padding"          Value="24"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#000000" Opacity="0.06"
+                                      BlurRadius="10" ShadowDepth="2" Direction="270"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-                <!-- ======================================================== -->
-                <!-- STYLE COMBOBOX                                             -->
-                <!-- ======================================================== -->
-                <Style TargetType="ComboBox"
-                       x:Key="ModernComboBox">
-                        <Setter Property="Height"
-                                Value="38"/>
-                        <Setter Property="FontSize"
-                                Value="13"/>
-                        <Setter Property="Padding"
-                                Value="10,0"/>
-                        <Setter Property="Background"
-                                Value="White"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource TextPrimaryBrush}"/>
-                        <Setter Property="BorderBrush"
-                                Value="{DynamicResource BorderBrush}"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                </Style>
+        <!-- Variante Card sans padding (pour DataGrid qui gèrent leurs marges) -->
+        <Style TargetType="Border" x:Key="CardNoPad" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="0"/>
+        </Style>
 
-                <!-- ======================================================== -->
-                <!-- BOUTON PRIMAIRE — Rouge marque                             -->
-                <!-- ======================================================== -->
-                <Style TargetType="Button"
-                       x:Key="BtnPrimary">
-                        <Setter Property="Height"
-                                Value="38"/>
-                        <Setter Property="FontSize"
-                                Value="13"/>
-                        <Setter Property="FontWeight"
-                                Value="SemiBold"/>
-                        <Setter Property="Foreground"
-                                Value="White"/>
-                        <Setter Property="Background"
-                                Value="{DynamicResource AccentBrush}"/>
-                        <Setter Property="BorderThickness"
-                                Value="0"/>
-                        <Setter Property="Cursor"
-                                Value="Hand"/>
-                        <Setter Property="Padding"
-                                Value="18,0"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                                <Border x:Name="border"
-                                                        Background="{TemplateBinding Background}"
-                                                        CornerRadius="7"
-                                                        Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="Background"
-                                                                        Value="{DynamicResource AccentHoverBrush}"/>
-                                                                <Setter TargetName="border"
-                                                                        Property="RenderTransform">
-                                                                    <Setter.Value>
-                                                                        <ScaleTransform ScaleX="1.02" ScaleY="1.02"/>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                        </Trigger>
-                                                        <Trigger Property="IsPressed"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="Opacity"
-                                                                        Value="0.85"/>
-                                                                <Setter TargetName="border"
-                                                                        Property="RenderTransform">
-                                                                    <Setter.Value>
-                                                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                        </Trigger>
-                                                        <Trigger Property="IsEnabled"
-                                                                 Value="False">
-                                                                <Setter TargetName="border"
-                                                                        Property="Opacity"
-                                                                        Value="0.40"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
+        <!-- ============================================================ -->
+        <!-- BADGE / PILULE STATUT                                         -->
+        <!-- ============================================================ -->
 
-                <!-- Variantes boutons -->
-                <Style TargetType="Button"
-                       x:Key="BtnSuccess"
-                       BasedOn="{StaticResource BtnPrimary}">
-                        <Setter Property="Background"
-                                Value="{DynamicResource SuccessBrush}"/>
-                </Style>
-                <Style TargetType="Button"
-                       x:Key="BtnDanger"
-                       BasedOn="{StaticResource BtnPrimary}">
-                        <Setter Property="Background"
-                                Value="{DynamicResource DangerBrush}"/>
-                </Style>
-                <Style TargetType="Button"
-                       x:Key="BtnWarning"
-                       BasedOn="{StaticResource BtnPrimary}">
-                        <Setter Property="Background"
-                                Value="{DynamicResource WarningBrush}"/>
-                </Style>
-                <!-- BtnNavy devient noir charbon -->
-                <Style TargetType="Button"
-                       x:Key="BtnNavy"
-                       BasedOn="{StaticResource BtnPrimary}">
-                        <Setter Property="Background"
-                                Value="{DynamicResource PrimaryBrush}"/>
-                </Style>
+        <!-- Succès : Soldé / Livré / Prêt -->
+        <Style TargetType="Border" x:Key="BadgeSuccess">
+            <Setter Property="Background"       Value="{DynamicResource SuccessBgBrush}"/>
+            <Setter Property="BorderBrush"      Value="#86EFAC"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="10,3"/>
+        </Style>
 
-                <Style TargetType="Button"
-                       x:Key="BtnGhost">
-                        <Setter Property="Height"
-                                Value="38"/>
-                        <Setter Property="FontSize"
-                                Value="13"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource TextSecondaryBrush}"/>
-                        <Setter Property="Background"
-                                Value="Transparent"/>
-                        <Setter Property="BorderThickness"
-                                Value="0"/>
-                        <Setter Property="Cursor"
-                                Value="Hand"/>
-                        <Setter Property="Padding"
-                                Value="18,0"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                                <Border x:Name="border"
-                                                        Background="{TemplateBinding Background}"
-                                                        CornerRadius="7"
-                                                        Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="Background"
-                                                                        Value="{DynamicResource SubtleBackgroundBrush}"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsPressed"
-                                                                 Value="True">
-                                                                <Setter TargetName="border"
-                                                                        Property="Opacity"
-                                                                        Value="0.7"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsEnabled"
-                                                                 Value="False">
-                                                                <Setter TargetName="border"
-                                                                        Property="Opacity"
-                                                                        Value="0.3"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
+        <!-- Alerte : En cours / Acompte -->
+        <Style TargetType="Border" x:Key="BadgeWarning">
+            <Setter Property="Background"       Value="{DynamicResource WarningBgBrush}"/>
+            <Setter Property="BorderBrush"      Value="#FDE68A"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="10,3"/>
+        </Style>
 
-                <!-- ======================================================== -->
-                <!-- DATAGRID — style global ModernGrid                        -->
-                <!--   • Séparateurs verticaux et horizontaux visibles         -->
-                <!--   • Colonnes redimensionnables par l'utilisateur          -->
-                <!--   • Sélection de ligne bien visible (fond + texte)        -->
-                <!--   • Cellules avec padding confortable et texte tronqué    -->
-                <!-- ======================================================== -->
-                <Style TargetType="DataGrid"
-                       x:Key="ModernGrid">
-                        <Setter Property="AutoGenerateColumns"
-                                Value="False"/>
-                        <Setter Property="IsReadOnly"
-                                Value="True"/>
-                        <Setter Property="HeadersVisibility"
-                                Value="Column"/>
+        <!-- Danger : Retard / Annulé -->
+        <Style TargetType="Border" x:Key="BadgeDanger">
+            <Setter Property="Background"       Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="BorderBrush"      Value="#FCA5A5"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="10,3"/>
+        </Style>
 
-                        <!-- Grille complète : lignes H + séparateurs V bien visibles -->
-                        <Setter Property="GridLinesVisibility"
-                                Value="All"/>
-                        <Setter Property="HorizontalGridLinesBrush"
-                                Value="#E8E0DB"/>
-                        <Setter Property="VerticalGridLinesBrush"
-                                Value="#D8CFC9"/>
+        <!-- Info : Terminé -->
+        <Style TargetType="Border" x:Key="BadgeInfo">
+            <Setter Property="Background"       Value="{DynamicResource InfoBgBrush}"/>
+            <Setter Property="BorderBrush"      Value="#93C5FD"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="10,3"/>
+        </Style>
 
-                        <!-- Pas de scroll horizontal : les colonnes s'adaptent -->
-                        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility"
-                                Value="Disabled"/>
+        <!-- Neutre -->
+        <Style TargetType="Border" x:Key="BadgeNeutral">
+            <Setter Property="Background"       Value="{DynamicResource SubtleBackgroundBrush}"/>
+            <Setter Property="BorderBrush"      Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="10,3"/>
+        </Style>
 
-                        <!-- Redimensionnement manuel activé -->
-                        <Setter Property="CanUserResizeColumns"
-                                Value="True"/>
-                        <Setter Property="CanUserReorderColumns"
-                                Value="False"/>
+        <!-- ============================================================ -->
+        <!-- SÉPARATEUR SIDEBAR                                             -->
+        <!-- ============================================================ -->
+        <Style TargetType="Separator" x:Key="NavSep">
+            <Setter Property="Background"  Value="#1E293B"/>
+            <Setter Property="Margin"      Value="16,6"/>
+            <Setter Property="Height"      Value="1"/>
+        </Style>
 
-                        <Setter Property="Background"
-                                Value="White"/>
-                        <Setter Property="BorderBrush"
-                                Value="{DynamicResource BorderBrush}"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="RowBackground"
-                                Value="White"/>
-                        <Setter Property="AlternatingRowBackground"
-                                Value="#FBF8F6"/>
-                        <Setter Property="FontSize"
-                                Value="13"/>
-                        <Setter Property="SelectionMode"
-                                Value="Single"/>
+        <!-- ============================================================ -->
+        <!-- INDICATEUR DE CHARGEMENT STANDARD                             -->
+        <!-- ============================================================ -->
+        <Style TargetType="Border" x:Key="LoadingCard">
+            <Setter Property="Background"       Value="White"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="24,16"/>
+            <Setter Property="BorderBrush"      Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderThickness"  Value="1"/>
+        </Style>
 
-                        <!-- En-têtes de colonnes -->
-                        <Setter Property="ColumnHeaderStyle">
-                                <Setter.Value>
-                                        <Style TargetType="DataGridColumnHeader">
-                                                <Setter Property="Background"
-                                                        Value="#F2ECE8"/>
-                                                <Setter Property="Foreground"
-                                                        Value="{DynamicResource TextSecondaryBrush}"/>
-                                                <Setter Property="FontWeight"
-                                                        Value="SemiBold"/>
-                                                <Setter Property="FontSize"
-                                                        Value="12"/>
-                                                <Setter Property="Padding"
-                                                        Value="10,10"/>
-                                                <!-- Séparateur rouge en bas + gris à droite -->
-                                                <Setter Property="BorderBrush"
-                                                        Value="#D8CFC9"/>
-                                                <Setter Property="BorderThickness"
-                                                        Value="0,0,1,2"/>
-                                                <Setter Property="Cursor"
-                                                        Value="Arrow"/>
-                                                <Style.Triggers>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter Property="Background"
-                                                                        Value="#EAE2DE"/>
-                                                        </Trigger>
-                                                </Style.Triggers>
-                                        </Style>
-                                </Setter.Value>
-                        </Setter>
-
-                        <!-- Style de ligne : hover et sélection bien contrastés -->
-                        <Setter Property="RowStyle">
-                                <Setter.Value>
-                                        <Style TargetType="DataGridRow">
-                                                <Setter Property="Height"
-                                                        Value="44"/>
-                                                <Setter Property="Cursor"
-                                                        Value="Hand"/>
-                                                <!-- Fond sélectionné défini ici pour la ligne entière -->
-                                                <Setter Property="Background"
-                                                        Value="Transparent"/>
-                                                <Style.Triggers>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter Property="Background"
-                                                                        Value="#F0EAE6"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsSelected"
-                                                                 Value="True">
-                                                                <Setter Property="Background"
-                                                                        Value="#FFE0D4"/>
-                                                                <Setter Property="Foreground"
-                                                                        Value="#1A1A1A"/>
-                                                        </Trigger>
-                                                        <!-- IsSelected ET IsMouseOver -->
-                                                        <MultiTrigger>
-                                                                <MultiTrigger.Conditions>
-                                                                        <Condition Property="IsSelected" Value="True"/>
-                                                                        <Condition Property="IsMouseOver" Value="True"/>
-                                                                </MultiTrigger.Conditions>
-                                                                <Setter Property="Background"
-                                                                        Value="#FFCDB8"/>
-                                                        </MultiTrigger>
-                                                </Style.Triggers>
-                                        </Style>
-                                </Setter.Value>
-                        </Setter>
-
-                        <!-- Style de cellule : padding confortable, texte tronqué + tooltip -->
-                        <Setter Property="CellStyle">
-                                <Setter.Value>
-                                        <Style TargetType="DataGridCell">
-                                                <!-- Padding confortable 8px -->
-                                                <Setter Property="Padding"
-                                                        Value="10,0"/>
-                                                <!-- Séparateur vertical de cellule visible -->
-                                                <Setter Property="BorderBrush"
-                                                        Value="#D8CFC9"/>
-                                                <Setter Property="BorderThickness"
-                                                        Value="0,0,1,0"/>
-                                                <Setter Property="VerticalAlignment"
-                                                        Value="Center"/>
-                                                <Setter Property="VerticalContentAlignment"
-                                                        Value="Center"/>
-                                                <Setter Property="FocusVisualStyle"
-                                                        Value="{x:Null}"/>
-                                                <Setter Property="Template">
-                                                        <Setter.Value>
-                                                                <ControlTemplate TargetType="DataGridCell">
-                                                                        <Border x:Name="CellBorder"
-                                                                                Background="{TemplateBinding Background}"
-                                                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                                                Padding="{TemplateBinding Padding}"
-                                                                                SnapsToDevicePixels="True">
-                                                                                <ContentPresenter
-                                                                                        VerticalAlignment="Center"
-                                                                                        SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                                                                        </Border>
-                                                                        <ControlTemplate.Triggers>
-                                                                                <!-- Sélection : fond discret, le RowStyle gère la couleur principale -->
-                                                                                <Trigger Property="IsSelected"
-                                                                                         Value="True">
-                                                                                        <Setter TargetName="CellBorder"
-                                                                                                Property="Background"
-                                                                                                Value="Transparent"/>
-                                                                                        <Setter TargetName="CellBorder"
-                                                                                                Property="BorderBrush"
-                                                                                                Value="#C8A898"/>
-                                                                                </Trigger>
-                                                                                <!-- Focus : bordure accent sans halo bleu système -->
-                                                                                <Trigger Property="IsFocused"
-                                                                                         Value="True">
-                                                                                        <Setter TargetName="CellBorder"
-                                                                                                Property="BorderBrush"
-                                                                                                Value="#CC0000"/>
-                                                                                        <Setter TargetName="CellBorder"
-                                                                                                Property="BorderThickness"
-                                                                                                Value="0,0,1,1"/>
-                                                                                </Trigger>
-                                                                        </ControlTemplate.Triggers>
-                                                                </ControlTemplate>
-                                                        </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                        <Trigger Property="IsSelected"
-                                                                 Value="True">
-                                                                <Setter Property="Foreground"
-                                                                        Value="#1A1A1A"/>
-                                                        </Trigger>
-                                                </Style.Triggers>
-                                        </Style>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
-
-                <!-- ======================================================== -->
-                <!-- STYLE DATAGRIDTEXTCOLUMN ELEMENT — texte tronqué+tooltip -->
-                <!-- S'applique automatiquement aux TextBlock dans les         -->
-                <!-- DataGridTextColumn via ElementStyle                       -->
-                <!-- ======================================================== -->
-                <Style TargetType="TextBlock"
-                       x:Key="DataGridCellText">
-                        <Setter Property="TextTrimming"
-                                Value="CharacterEllipsis"/>
-                        <Setter Property="VerticalAlignment"
-                                Value="Center"/>
-                        <Setter Property="ToolTip"
-                                Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
-                </Style>
-
-                <!-- ======================================================== -->
-                <!-- CARTE (card panel)                                         -->
-                <!-- ======================================================== -->
-                <Style TargetType="Border"
-                       x:Key="Card">
-                        <Setter Property="Background"
-                                Value="White"/>
-                        <Setter Property="CornerRadius"
-                                Value="12"/>
-                        <Setter Property="BorderBrush"
-                                Value="{DynamicResource BorderBrush}"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="Padding"
-                                Value="24"/>
-                        <Setter Property="SnapsToDevicePixels"
-                                Value="True"/>
-                        <Setter Property="Effect">
-                                <Setter.Value>
-                                        <DropShadowEffect Color="#000000"
-                                                        Opacity="0.06"
-                                                        BlurRadius="12"
-                                                        ShadowDepth="2"
-                                                        Direction="270"/>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
-
-                <!-- ======================================================== -->
-                <!-- TYPOGRAPHIES                                               -->
-                <!-- ======================================================== -->
-                <Style TargetType="TextBlock"
-                       x:Key="FieldLabel">
-                        <Setter Property="FontSize"
-                                Value="12"/>
-                        <Setter Property="FontWeight"
-                                Value="SemiBold"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource TextSecondaryBrush}"/>
-                        <Setter Property="Margin"
-                                Value="0,0,0,4"/>
-                </Style>
-
-                <Style TargetType="TextBlock"
-                       x:Key="SectionTitle">
-                        <Setter Property="FontSize"
-                                Value="22"/>
-                        <Setter Property="FontWeight"
-                                Value="Bold"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource PrimaryBrush}"/>
-                        <Setter Property="Margin"
-                                Value="0,0,0,20"/>
-                </Style>
-
-                <Style TargetType="TextBlock"
-                       x:Key="CardTitle">
-                        <Setter Property="FontSize"
-                                Value="15"/>
-                        <Setter Property="FontWeight"
-                                Value="SemiBold"/>
-                        <Setter Property="Foreground"
-                                Value="{DynamicResource PrimaryBrush}"/>
-                        <Setter Property="Margin"
-                                Value="0,0,0,16"/>
-                </Style>
-
-        </Application.Resources>
+    </Application.Resources>
 </Application>

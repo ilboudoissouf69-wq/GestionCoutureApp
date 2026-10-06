@@ -21,18 +21,12 @@ namespace GestionCoutureApp.Views
         {
             string identifiant = TxtIdentifiant.Text.Trim();
             // CORRECTIF : un mot de passe ne doit JAMAIS être modifié (ex: .Trim())
-            // avant vérification ou hachage. Tronquer les espaces en début/fin
-            // change silencieusement la valeur effective du mot de passe : un
-            // utilisateur ayant choisi un mot de passe avec un espace volontaire
-            // ne pourrait plus jamais se reconnecter avec la valeur exacte qu'il
-            // a définie, et la politique de mots de passe se retrouve affaiblie
-            // sans qu'aucun message n'explique pourquoi.
+            // avant vérification ou hachage.
             string motDePasse = TxtPassword.Password;
 
             if (string.IsNullOrEmpty(identifiant) || string.IsNullOrEmpty(motDePasse))
             {
-                TxtErreur.Text = "Veuillez remplir tous les champs.";
-                TxtErreur.Visibility = Visibility.Visible;
+                AfficherErreur("Veuillez remplir tous les champs.");
                 return;
             }
 
@@ -43,15 +37,14 @@ namespace GestionCoutureApp.Views
             }
             catch (CompteVerrouilleException ex)
             {
-                TxtErreur.Text = $"Trop de tentatives échouées. Réessayez dans " +
-                                  $"{Math.Ceiling(ex.TempsRestant.TotalSeconds)} secondes.";
-                TxtErreur.Visibility = Visibility.Visible;
+                AfficherErreur($"Trop de tentatives échouées. Réessayez dans " +
+                               $"{Math.Ceiling(ex.TempsRestant.TotalSeconds)} secondes.");
                 return;
             }
 
             if (employe != null)
             {
-                TxtErreur.Visibility = Visibility.Collapsed;
+                MasquerErreur();
 
                 // Logger la connexion réussie
                 _logService.LogAction("Connexion réussie", 
@@ -81,16 +74,15 @@ namespace GestionCoutureApp.Views
                     var changerMdp = new ChangerMotDePasseWindow(employe);
                     changerMdp.ShowDialog();
 
-                    if (!changerMdp.ChangementReussi)
-                    {
-                        // L'utilisateur a cliqué "Se déconnecter" sans changer
-                        // son mot de passe : on reste sur l'écran de connexion.
-                        TxtErreur.Text = "Vous devez changer votre mot de passe avant de continuer.";
-                        TxtErreur.Visibility = Visibility.Visible;
-                        TxtPassword.Clear();
-                        TxtIdentifiant.Focus();
-                        return;
-                    }
+                if (!changerMdp.ChangementReussi)
+                {
+                    // L'utilisateur a cliqué "Se déconnecter" sans changer
+                    // son mot de passe : on reste sur l'écran de connexion.
+                    AfficherErreur("Vous devez changer votre mot de passe avant de continuer.");
+                    TxtPassword.Clear();
+                    TxtIdentifiant.Focus();
+                    return;
+                }
 
                     // Changement réussi : on recharge l'employé depuis la base
                     // pour que MainWindow dispose du hash à jour (et non de
@@ -146,10 +138,24 @@ namespace GestionCoutureApp.Views
             {
                 // Logger la tentative de connexion échouée
                 _logService.LogWarning($"Tentative de connexion échouée pour l'identifiant: {identifiant}");
-                
-                TxtErreur.Text = "Identifiant ou mot de passe incorrect.";
-                TxtErreur.Visibility = Visibility.Visible;
+                AfficherErreur("Identifiant ou mot de passe incorrect.");
             }
+        }
+
+        // ------------------------------------------------------------------
+        // Helpers affichage erreur — synchronisent TxtErreur + BorderErreur
+        // ------------------------------------------------------------------
+        private void AfficherErreur(string message)
+        {
+            TxtErreur.Text          = message;
+            TxtErreur.Visibility    = Visibility.Visible;
+            BorderErreur.Visibility = Visibility.Visible;
+        }
+
+        private void MasquerErreur()
+        {
+            TxtErreur.Visibility    = Visibility.Collapsed;
+            BorderErreur.Visibility = Visibility.Collapsed;
         }
 
         private void BtnFermer_Click(object sender, RoutedEventArgs e)

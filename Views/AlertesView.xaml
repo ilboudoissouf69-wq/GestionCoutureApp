@@ -41,52 +41,56 @@
 
                 <!-- 4 badges KPI -->
                 <UniformGrid Columns="4">
-                    <Border CornerRadius="8,8,0,0" Padding="16,10"
-                            Margin="0,0,6,0" Background="#CC0000">
+                    <!-- KPI Urgents -->
+                    <Border CornerRadius="10,10,0,0" Padding="16,12"
+                            Margin="0,0,6,0" Background="#B91C1C">
                         <StackPanel>
                             <TextBlock Text="🔴 PROD. URGENTS"
-                                       FontSize="9" FontWeight="Bold" Foreground="#FFCCCC"/>
+                                       FontSize="9" FontWeight="Bold" Foreground="#FCA5A5"/>
                             <TextBlock x:Name="TxtNbProdUrgent" Text="0"
                                        FontSize="24" FontWeight="Bold"
                                        Foreground="White" Margin="0,2,0,0"/>
                             <TextBlock Text="non commencés / bloqués"
-                                       FontSize="10" Foreground="#FFCCCC"/>
+                                       FontSize="10" Foreground="#FCA5A5"/>
                         </StackPanel>
                     </Border>
-                    <Border CornerRadius="8,8,0,0" Padding="16,10"
+                    <!-- KPI Surveiller -->
+                    <Border CornerRadius="10,10,0,0" Padding="16,12"
                             Margin="0,0,6,0" Background="#D97706">
                         <StackPanel>
                             <TextBlock Text="🟡 PROD. À SURVEILLER"
-                                       FontSize="9" FontWeight="Bold" Foreground="#FFF3CD"/>
+                                       FontSize="9" FontWeight="Bold" Foreground="#FEF3C7"/>
                             <TextBlock x:Name="TxtNbProdSurveiller" Text="0"
                                        FontSize="24" FontWeight="Bold"
                                        Foreground="White" Margin="0,2,0,0"/>
                             <TextBlock Text="mi-délai dépassé"
-                                       FontSize="10" Foreground="#FFF3CD"/>
+                                       FontSize="10" Foreground="#FEF3C7"/>
                         </StackPanel>
                     </Border>
-                    <Border CornerRadius="8,8,0,0" Padding="16,10"
-                            Margin="0,0,6,0" Background="#059669">
+                    <!-- KPI Prêts -->
+                    <Border CornerRadius="10,10,0,0" Padding="16,12"
+                            Margin="0,0,6,0" Background="#15803D">
                         <StackPanel>
                             <TextBlock Text="🟢 PRÊTS À RETIRER"
-                                       FontSize="9" FontWeight="Bold" Foreground="#D1FAE5"/>
+                                       FontSize="9" FontWeight="Bold" Foreground="#DCFCE7"/>
                             <TextBlock x:Name="TxtNbPrets" Text="0"
                                        FontSize="24" FontWeight="Bold"
                                        Foreground="White" Margin="0,2,0,0"/>
                             <TextBlock Text="RDV aujourd'hui / passés"
-                                       FontSize="10" Foreground="#D1FAE5"/>
+                                       FontSize="10" Foreground="#DCFCE7"/>
                         </StackPanel>
                     </Border>
-                    <Border CornerRadius="8,8,0,0" Padding="16,10"
-                            Background="#1A1A1A">
+                    <!-- KPI RDV à venir -->
+                    <Border CornerRadius="10,10,0,0" Padding="16,12"
+                            Background="#1D4ED8">
                         <StackPanel>
                             <TextBlock Text="📅 RDV À VENIR"
-                                       FontSize="9" FontWeight="Bold" Foreground="#B0A8A4"/>
+                                       FontSize="9" FontWeight="Bold" Foreground="#DBEAFE"/>
                             <TextBlock x:Name="TxtNbRdvAVenir" Text="0"
                                        FontSize="24" FontWeight="Bold"
                                        Foreground="White" Margin="0,2,0,0"/>
                             <TextBlock Text="cette semaine"
-                                       FontSize="10" Foreground="#B0A8A4"/>
+                                       FontSize="10" Foreground="#DBEAFE"/>
                         </StackPanel>
                     </Border>
                 </UniformGrid>
@@ -107,9 +111,15 @@
                         BorderThickness="1" Margin="0,0,0,20">
                     <StackPanel>
 
-                        <!-- En-tête -->
+                        <!-- En-tête section Production -->
                         <Border CornerRadius="12,12,0,0"
-                                Padding="20,14" Background="#1A1A1A">
+                                Padding="20,14">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#0F172A" Offset="0"/>
+                                    <GradientStop Color="#1E293B" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -120,16 +130,16 @@
                                                FontSize="14" FontWeight="Bold"
                                                Foreground="White"/>
                                     <TextBlock Text="Vêtements non commencés ou en retard · Relancer le couturier"
-                                               FontSize="11" Foreground="#9CA3AF"
+                                               FontSize="11" Foreground="#94A3B8"
                                                Margin="0,3,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Border Background="#CC0000" CornerRadius="4"
+                                    <Border Background="#B91C1C" CornerRadius="6"
                                             Padding="8,3" Margin="0,0,8,0">
                                         <TextBlock Text="🔴 Urgent"
                                                    FontSize="10" Foreground="White"/>
                                     </Border>
-                                    <Border Background="#D97706" CornerRadius="4"
+                                    <Border Background="#D97706" CornerRadius="6"
                                             Padding="8,3">
                                         <TextBlock Text="🟡 Mi-délai"
                                                    FontSize="10" Foreground="White"/>
@@ -138,8 +148,8 @@
                             </Grid>
                         </Border>
 
-                        <!-- ItemsControl pour éviter les styles DataGrid problématiques -->
-                        <Grid x:Name="GridProdHeader" Background="#F8F5F3">
+                        <!-- En-tête production header -->
+                        <Grid x:Name="GridProdHeader" Background="#F8FAFC">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="46"/>
                                 <ColumnDefinition Width="130"/>
@@ -191,7 +201,7 @@
                                             </Grid.ColumnDefinitions>
 
                                             <!-- Badge urgence -->
-                                            <Border Grid.Column="0" CornerRadius="4"
+                                            <Border Grid.Column="0" CornerRadius="6"
                                                     Margin="8,6" Padding="4,2"
                                                     HorizontalAlignment="Center">
                                                 <Border.Style>
@@ -199,7 +209,7 @@
                                                         <Setter Property="Background" Value="#D97706"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding EstUrgent}" Value="True">
-                                                                <Setter Property="Background" Value="#CC0000"/>
+                                                                <Setter Property="Background" Value="#B91C1C"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -243,7 +253,7 @@
                                                         <Setter Property="Foreground" Value="#D97706"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding EstUrgent}" Value="True">
-                                                                <Setter Property="Foreground" Value="#CC0000"/>
+                                                                <Setter Property="Foreground" Value="#B91C1C"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -257,7 +267,7 @@
                                                         <Setter Property="Foreground" Value="#D97706"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding EstUrgent}" Value="True">
-                                                                <Setter Property="Foreground" Value="#CC0000"/>
+                                                                <Setter Property="Foreground" Value="#B91C1C"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -285,9 +295,9 @@
                         BorderThickness="1">
                     <StackPanel>
 
-                        <!-- En-tête -->
+                        <!-- En-tête section Retrait -->
                         <Border CornerRadius="12,12,0,0"
-                                Padding="20,14" Background="#065F46">
+                                Padding="20,14" Background="#15803D">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -298,10 +308,10 @@
                                                FontSize="14" FontWeight="Bold"
                                                Foreground="White"/>
                                     <TextBlock Text="Vêtements terminés ou RDV confirmés · Notifiez le client en 1 clic"
-                                               FontSize="11" Foreground="#6EE7B7"
+                                               FontSize="11" Foreground="#86EFAC"
                                                Margin="0,3,0,0"/>
                                 </StackPanel>
-                                <Border Grid.Column="1" Background="#059669"
+                                <Border Grid.Column="1" Background="#166534"
                                         CornerRadius="6" Padding="10,4"
                                         VerticalAlignment="Center">
                                     <TextBlock Text="💬  WhatsApp activé uniquement si terminé"
@@ -311,8 +321,8 @@
                             </Grid>
                         </Border>
 
-                        <!-- En-tête colonnes -->
-                        <Grid Background="#F0FDF4">
+                        <!-- En-tête colonnes retrait -->
+                        <Grid Background="#DCFCE7">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="46"/>
                                 <ColumnDefinition Width="150"/>

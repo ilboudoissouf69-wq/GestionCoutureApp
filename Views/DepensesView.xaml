@@ -17,12 +17,14 @@
                     <TextBlock Text="Dépenses &amp; Bilan Financier"
                                FontSize="22" FontWeight="Bold"
                                Foreground="{StaticResource PrimaryBrush}"/>
-                    <Border Height="3" Width="48" CornerRadius="2"
-                            Background="#CC0000" HorizontalAlignment="Left"
+                    <Border Height="3" Width="44" CornerRadius="2"
+                            Background="{StaticResource AccentBrush}"
+                            HorizontalAlignment="Left"
                             Margin="0,6,0,4"/>
                     <TextBlock x:Name="TxtPeriodeLabel"
                                Text="Période : ce mois-ci"
-                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                               FontSize="12"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
                 </StackPanel>
                 <!-- Sélecteur de période rapide -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
@@ -52,60 +54,76 @@
             <UniformGrid Columns="4" Margin="0,0,0,16">
 
                 <!-- 1 — CA Encaissé -->
-                <Border CornerRadius="8" Padding="16,12" Margin="0,0,8,0" Background="#1A1A1A">
+                <Border CornerRadius="12" Padding="18,14" Margin="0,0,10,0">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#0F172A" Offset="0"/>
+                            <GradientStop Color="#1E293B" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
                     <StackPanel>
                         <TextBlock Text="CA ENCAISSÉ" FontSize="9" FontWeight="Bold"
-                                   Foreground="#B0A8A4"/>
+                                   Foreground="#94A3B8"/>
                         <TextBlock x:Name="TxtCaEncaisse" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA total paiements" FontSize="10" Foreground="#B0A8A4"/>
+                        <TextBlock Text="FCFA total paiements"
+                                   FontSize="10" Foreground="#64748B"/>
                     </StackPanel>
                 </Border>
 
                 <!-- 2 — Charges d'exploitation -->
-                <Border CornerRadius="8" Padding="16,12" Margin="0,0,8,0" Background="#CC0000">
+                <Border CornerRadius="12" Padding="18,14" Margin="0,0,10,0">
+                    <Border.Background>
+                        <SolidColorBrush Color="#B91C1C"/>
+                    </Border.Background>
                     <StackPanel>
                         <TextBlock Text="CHARGES EXPLOITATION" FontSize="9" FontWeight="Bold"
-                                   Foreground="#FFCCCC"/>
+                                   Foreground="#FCA5A5"/>
                         <TextBlock x:Name="TxtCharges" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
                         <TextBlock x:Name="TxtChargesDetail" Text="FCFA (dép. + salaires)"
-                                   FontSize="10" Foreground="#FFCCCC" TextWrapping="Wrap"/>
+                                   FontSize="10" Foreground="#FCA5A5" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
                 <!-- 3 — Marge Brute -->
-                <Border CornerRadius="8" Padding="16,12" Margin="0,0,8,0" Background="#065F46">
+                <Border CornerRadius="12" Padding="18,14" Margin="0,0,10,0">
+                    <Border.Background>
+                        <SolidColorBrush Color="#15803D"/>
+                    </Border.Background>
                     <StackPanel>
                         <TextBlock Text="MARGE BRUTE" FontSize="9" FontWeight="Bold"
-                                   Foreground="#6EE7B7"/>
+                                   Foreground="#86EFAC"/>
                         <TextBlock x:Name="TxtMargeBrute" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="CA − commissions − matériaux" FontSize="10"
-                                   Foreground="#6EE7B7" TextWrapping="Wrap"/>
+                        <TextBlock Text="CA − commissions − matériaux"
+                                   FontSize="10" Foreground="#86EFAC" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
                 <!-- 4 — Bénéfice Net -->
-                <Border CornerRadius="8" Padding="16,12" Background="#1E3A5F">
+                <Border CornerRadius="12" Padding="18,14">
+                    <Border.Background>
+                        <SolidColorBrush Color="#1D4ED8"/>
+                    </Border.Background>
                     <StackPanel>
                         <TextBlock Text="BÉNÉFICE NET" FontSize="9" FontWeight="Bold"
                                    Foreground="#93C5FD"/>
                         <TextBlock x:Name="TxtBeneficeNet" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="Marge brute − charges fixes" FontSize="10"
-                                   Foreground="#93C5FD" TextWrapping="Wrap"/>
+                        <TextBlock Text="Marge brute − charges fixes"
+                                   FontSize="10" Foreground="#93C5FD" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </UniformGrid>
 
             <!-- Détail KPI (sous les cartes) -->
-            <Border Background="#F8F5F3" BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1" CornerRadius="8" Padding="16,10"
+            <Border Background="#F8FAFC" BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,10"
                     Margin="0,0,0,20">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -144,7 +162,13 @@
             <!-- ══ FORMULAIRE NOUVELLE DÉPENSE ════════════════════════════ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <Border CornerRadius="10,10,0,0" Padding="20,14" Background="#1A1A1A">
+                    <Border CornerRadius="12,12,0,0" Padding="20,14">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#0F172A" Offset="0"/>
+                                <GradientStop Color="#1E293B" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
                         <TextBlock Text="Enregistrer une dépense" FontSize="14"
                                    FontWeight="Bold" Foreground="White"/>
                     </Border>
@@ -278,27 +302,39 @@
                         <!-- Boutons export -->
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <Button x:Name="BtnExportCsv"
-                                    Content="📊  Export CSV"
-                                    Height="32" Padding="12,0,12,0"
+                                    Style="{StaticResource BtnNavy}"
+                                    Height="32" Padding="12,0"
                                     FontSize="12"
-                                    Background="#1E3A5F" Foreground="White"
-                                    BorderThickness="0" Cursor="Hand"
                                     Margin="0,0,8,0"
-                                    Click="BtnExportCsv_Click"/>
+                                    Click="BtnExportCsv_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📊" FontSize="12" Margin="0,0,6,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Export CSV" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                             <Button x:Name="BtnValiderSelection"
-                                    Content="✅  Valider sélection"
-                                    Height="32" Padding="12,0,12,0"
+                                    Style="{StaticResource BtnSuccess}"
+                                    Height="32" Padding="12,0"
                                     FontSize="12"
-                                    Background="#059669" Foreground="White"
-                                    BorderThickness="0" Cursor="Hand"
                                     Margin="0,0,8,0"
-                                    Click="BtnValider_Click"/>
-                            <Button Content="🚫  Annuler sélection"
-                                    Height="32" Padding="12,0,12,0"
+                                    Click="BtnValider_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="✅" FontSize="12" Margin="0,0,6,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Valider sélection" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource BtnDanger}"
+                                    Height="32" Padding="12,0"
                                     FontSize="12"
-                                    Background="#CC0000" Foreground="White"
-                                    BorderThickness="0" Cursor="Hand"
-                                    Click="BtnSupprimer_Click"/>
+                                    Click="BtnSupprimer_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🚫" FontSize="12" Margin="0,0,6,0"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="Annuler sélection" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Grid>
 
@@ -308,17 +344,6 @@
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
                               SelectionMode="Single">
-                        <DataGrid.Resources>
-                            <Style TargetType="DataGridColumnHeader">
-                                <Setter Property="Background" Value="#1A1A1A"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="FontSize" Value="11"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
-                                <Setter Property="Padding" Value="10,8"/>
-                                <Setter Property="BorderBrush" Value="#3A3A3A"/>
-                                <Setter Property="BorderThickness" Value="0,0,1,0"/>
-                            </Style>
-                        </DataGrid.Resources>
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Date"
                                                 Binding="{Binding DateAffichee}"
@@ -405,19 +430,25 @@
                     </DataGrid>
 
                     <!-- Pied : total filtré -->
-                    <Border Background="#1A1A1A" CornerRadius="0,0,8,8"
-                            Padding="16,10" Margin="0,0,0,0">
+                    <Border CornerRadius="0,0,12,12"
+                            Padding="16,12">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#0F172A" Offset="0"/>
+                                <GradientStop Color="#1E293B" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="TOTAL AFFICHÉ : "
                                        FontSize="12" FontWeight="Bold"
-                                       Foreground="#B0A8A4" VerticalAlignment="Center"/>
+                                       Foreground="#94A3B8" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtTotalFiltre"
                                        Text="0 FCFA"
                                        FontSize="16" FontWeight="Bold"
                                        Foreground="White" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtNbFiltre"
                                        Text="  — 0 dépense(s)"
-                                       FontSize="12" Foreground="#B0A8A4"
+                                       FontSize="12" Foreground="#64748B"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
