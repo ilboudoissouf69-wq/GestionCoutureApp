@@ -26,8 +26,8 @@ namespace GestionCoutureApp
             // que les exceptions du thread UI ; AppDomain couvre le reste.
             AppDomain.CurrentDomain.UnhandledException += AppDomain_UnhandledException;
 
-            // ✅ Activer la détection et le logging des erreurs de binding WPF
-            // Ces erreurs sont normalement silencieuses et peuvent causer des bugs difficiles à détecter
+            // Les erreurs de binding WPF sont silencieuses par défaut.
+            // Cette configuration les écrit dans un fichier dédié pour faciliter le diagnostic.
             ConfigurerBindingErrorLogging();
 
             // ====== Configuration DI ======
@@ -43,20 +43,17 @@ namespace GestionCoutureApp
             // DbContext de courte duree via IDbContextFactory, puis le "dispose".
             // C'est le pattern recommande par Microsoft pour les apps WPF/WinForms.
             // ------------------------------------------------------------------
-            // Logs structurés (sortie debug VS + Event Log Windows)
+            // Logs structurés (sortie debug VS)
             services.AddLogging(logging =>
             {
                 logging.AddDebug();
-                // ✅ CORRECTIF AUDIT #4 : Niveau Warning pour production
                 // En production, on limite aux avertissements et erreurs pour éviter
-                // de surcharger les logs avec des informations de debug/trace.
+                // de noyer les logs avec des informations de debug.
                 logging.SetMinimumLevel(LogLevel.Warning);
             });
 
-            // CORRECTIF : la base est désormais stockée dans %LOCALAPPDATA%
-            // (voir Helpers/AppPaths.cs) au lieu d'un chemin relatif, qui
-            // dépendait du répertoire de lancement et posait des problèmes
-            // de droits d'écriture une fois l'app installée dans Program Files.
+            // La base est stockée dans %LOCALAPPDATA% (voir Helpers/AppPaths.cs)
+            // pour garantir les droits d'écriture quelle que soit l'installation.
             services.AddDbContextFactory<ApplicationDbContext>(options =>
                 options.UseSqlite(AppPaths.ChaineConnexionSqlite));
 
@@ -77,16 +74,16 @@ namespace GestionCoutureApp
             services.AddSingleton<ITresorerieService, TresorerieService>();
             services.AddSingleton<IAuditService, AuditService>();
             
-            // ✅ CORRECTIF AUDIT #14 : EventAggregator pour notifications globales
+            // EventAggregator pour notifications globales entre vues
             services.AddSingleton<IEventAggregator, EventAggregator>();
             
-            // ✅ CORRECTIF AUDIT #15 : LanguageService pour multilinguisme dynamique
+            // LanguageService pour multilinguisme dynamique
             services.AddSingleton<ILanguageService, LanguageService>();
             
-            // ✅ CORRECTIF AUDIT #16 : ThemeService pour gestion dynamique des couleurs
+            // ThemeService pour gestion dynamique des couleurs
             services.AddSingleton<IThemeService, ThemeService>();
             
-            // ✅ CORRECTIF AUDIT #17 : ReceiptService pour synchronisation des infos reçus
+            // ReceiptService pour synchronisation des informations de reçus
             services.AddSingleton<IReceiptService, ReceiptService>();
 
             // Sauvegarde automatique
@@ -102,25 +99,6 @@ namespace GestionCoutureApp
             logService.LogInfo($"Version: 2.0 - Retouche Choco");
             logService.LogInfo($"Date de démarrage: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
             logService.LogInfo("═══════════════════════════════════════════════════");
-
-            // ✅ TESTS EDGE CASES : Exécuter les tests de robustesse au démarrage
-            // Désactivé en production - activer uniquement pour les tests
-            /*
-            try
-            {
-                string edgeCaseReport = EdgeCaseValidator.RunEdgeCaseTests();
-                logService.LogInfo("TESTS EDGE CASES EXÉCUTÉS AVEC SUCCÈS");
-                
-                // Sauvegarder le rapport dans un fichier
-                string reportPath = System.IO.Path.Combine(AppPaths.DossierApplication, "EdgeCaseReport.txt");
-                System.IO.File.WriteAllText(reportPath, edgeCaseReport);
-                logService.LogInfo($"Rapport sauvegardé: {reportPath}");
-            }
-            catch (Exception ex)
-            {
-                logService.LogError($"Erreur lors des tests edge cases: {ex.Message}");
-            }
-            */
 
             // Démarre la sauvegarde automatique dès le lancement
             Services.GetRequiredService<BackupService>();
@@ -266,17 +244,10 @@ namespace GestionCoutureApp
                     catch { /* déjà présente */ }
                 }
 
-                // CORRECTIF (robustesse concurrence) : le mode journal par défaut de
-                // SQLite ("DELETE" / rollback journal) bloque tous les lecteurs pendant
-                // qu'une écriture est en cours. Le mode WAL (Write-Ahead Logging) permet
-                // aux lectures de continuer pendant une écriture, ce qui réduit fortement
-                // les erreurs "database is locked" quand plusieurs opérations se
-                // chevauchent (ex. la sauvegarde automatique VACUUM INTO en tâche de fond
-                // pendant que l'utilisateur enregistre un paiement). PRAGMA journal_mode
-                // est persistant dans le fichier .db : l'exécuter au démarrage à chaque
-                // lancement garantit qu'il reste actif même après une restauration
-                // manuelle d'une ancienne sauvegarde qui n'aurait pas ce mode.
-                // ✅ CORRECTIF AUDIT #5 : Utilisation de ExecuteSql
+                // Mode WAL (Write-Ahead Logging) : permet aux lectures de continuer
+                // pendant une écriture, réduisant les erreurs "database is locked".
+                // PRAGMA journal_mode est persistant — on le réapplique à chaque
+                // démarrage pour qu'il reste actif même après une restauration.
                 context.Database.ExecuteSql($"PRAGMA journal_mode=WAL;");
 
                 // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.
@@ -423,24 +394,9 @@ namespace GestionCoutureApp
                     context.SaveChanges();
                 }
 
-                // ====== Données de démonstration ======
-                // CORRECTIF CRITIQUE : DemoDataSeeder.Seeder() se déclenchait
-                // automatiquement dès que la table Clients était vide — ce qui
-                // est EXACTEMENT l'état d'une installation neuve chez un vrai
-                // utilisateur. Résultat : n'importe quelle installation
-                // "production" se retrouvait truffée de 350 faux clients,
-                // ~600 fausses commandes et, surtout, de comptes employés
-                // fictifs avec des mots de passe prévisibles et documentés
-                // dans le code source (ex. identifiant "secretaire01" / mot de
-                // passe "sec01pass", "couturier001" / "cou001pass" — voir
-                // Data/DemoDataSeeder.cs). N'importe qui ayant lu (ou deviné)
-                // ce schéma pouvait se connecter à l'application d'un vrai
-                // client avec un accès Secrétaire ou Couturier.
-                //
-                // Le jeu de données de démo n'est désormais inséré que si on
-                // le demande explicitement, en lançant l'application avec
-                // l'argument "--demo" (ex. depuis un raccourci de
-                // démonstration/formation, jamais pour un poste client réel).
+                // Le jeu de données de démonstration n'est inséré que si l'application
+                // est lancée avec l'argument "--demo" (raccourci dédié formation/demo).
+                // Ne jamais activer ce mode sur un poste client réel.
                 bool demandeDemoExplicite = e.Args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
                 if (demandeDemoExplicite)
                 {
@@ -449,14 +405,10 @@ namespace GestionCoutureApp
             }
             catch (Exception ex)
             {
-                // CORRECTIF : une erreur d'initialisation de la base (fichier
-                // verrouillé, migration corrompue, disque plein, droits
-                // insuffisants...) empêchait l'app de fonctionner correctement,
-                // mais elle continuait quand même vers l'écran de connexion.
-                // Résultat : l'utilisateur pouvait se connecter puis voir
-                // l'app planter à la moindre lecture/écriture en base, sans
-                // comprendre pourquoi. On arrête maintenant proprement
-                // l'application dans ce cas, avec un message clair.
+                // Une erreur d'initialisation de la base (fichier verrouillé, migration
+                // corrompue, disque plein, droits insuffisants...) doit arrêter
+                // proprement l'application plutôt que de laisser l'utilisateur
+                // se connecter pour voir tout planter à la première lecture/écriture.
                 MessageBox.Show(
                     "Erreur critique lors de l'initialisation de la base de données :\n\n" + ex.Message +
                     "\n\nL'application va se fermer. Si le problème persiste, vérifiez qu'aucune " +
@@ -871,8 +823,8 @@ namespace GestionCoutureApp
                 log.LogInfo("[MIGRATION MANUELLE] ConsolidationFinale appliquée.");
             }
 
-            // ── TÂCHE 1 : DateTerminee / IdOperateurTerminee sur PiecesCommande ──
-            // Appliquée séparément (hors ConsolidationFinale) pour rester idempotent.
+            // Migration DateTerminee / IdOperateurTerminee sur PiecesCommande.
+            // Appliquée séparément (hors ConsolidationFinale) pour rester idempotente.
             AppliquerSi("20261005000001_DateTermineePieceCommande", c =>
             {
                 // 1. Ajouter les colonnes

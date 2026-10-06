@@ -20,14 +20,9 @@ namespace GestionCoutureApp.Services
             _logger = logger;
         }
 
-        // ÉTAPE 1b-i (Point 1 — Commandes multi-pièces) : le moteur de calcul
-        // de commission opère maintenant sur PieceCommande, plus sur Commande
-        // directement. C'est un changement CRITIQUE et pas seulement
-        // cosmétique : depuis que CommandeService ne renseigne plus jamais
-        // Commande.IdCouturier/Statut/MontantTotal (dépréciés, voir Commande.cs),
-        // continuer à interroger ces champs ici aurait fait calculer un
-        // aperçu de commission TOUJOURS VIDE pour tout le monde, silencieusement
-        // (aucune exception levée — juste "0 couturier(s) éligible(s)").
+        // Le moteur de calcul de commission opère sur PieceCommande, et non sur Commande
+        // directement. Les champs Commande.IdCouturier/Statut/MontantTotal sont dépréciés
+        // depuis la migration multi-pièces et ne sont plus jamais renseignés par CommandeService.
         public List<ApercuCommission> CalculerApercu(
             DateTime dateDebut, DateTime dateFin, decimal pourcentage,
             bool surMontantEncaisse, int? idCouturierFiltre)
@@ -42,9 +37,8 @@ namespace GestionCoutureApp.Services
                     .ThenInclude(c => c!.Pieces)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.MaterielSupplements)
-                // TÂCHE 1 : on filtre sur DateTerminee (UTC) dans la période,
-                // et NON plus sur Commande.DateFin (date de RDV).
-                // Une pièce sans DateTerminee (pas encore terminée) est exclue.
+                // Filtre sur DateTerminee (date réelle de terminaison), pas sur Commande.DateFin
+                // (date de RDV). Une pièce sans DateTerminee n'est pas encore terminée.
                 .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
                             p.DateTerminee.HasValue &&
                             p.DateTerminee.Value.Date >= dateDebut.Date &&
@@ -58,12 +52,10 @@ namespace GestionCoutureApp.Services
 
             var pieces = query.ToList();
 
-            // ✅ CORRECTIF AUDIT #4 : Charger les retours pour exclure les pièces défectueuses
-            // Les pièces avec un retour non résolu (Signalé ou En reprise) ne doivent pas
-            // être commissionnées tant que le problème n'est pas corrigé.
-            // TÂCHE 1 : on n'applique plus de filtre de date sur les retours — toute pièce
-            // avec un retour non résolu actif est exclue, quelle que soit la date du retour.
-            var retoursNonResolus = context.Retours
+        // Charger les retours non résolus pour exclure les pièces défectueuses.
+        // Toute pièce avec un retour actif (Signalé ou En reprise) est exclue
+        // de la commission jusqu'à résolution.
+        var retoursNonResolus = context.Retours
                 .Where(r => !r.EstAnnule &&
                             (r.Statut == "Signale" || r.Statut == "En reprise"))
                 .Select(r => r.IdPieceCommande)
@@ -95,21 +87,8 @@ namespace GestionCoutureApp.Services
                 // CA couture uniquement — les matériaux sont exclus de la commission
                 decimal caTotal = piecesCouturier.Sum(p => p.MontantCouture);
 
-                // CORRECTIF (audit) — BUG CRITIQUE : l'ancienne version faisait
-                // `piecesCouturier.Sum(p => p.Commande.MontantEncaisse)`, c'est-à-dire
-                // qu'elle additionnait TOUT l'encaissé de la commande entière, une
-                // fois PAR PIÈCE du couturier. Conséquences réelles (AjouterPiece est
-                // bien câblé dans CommandesView, donc atteignable en production) :
-                //   - 2 pièces du même couturier sur une même commande => son encaissé
-                //     est compté deux fois.
-                //   - 2 pièces de couturiers différents sur la même commande => les
-                //     DEUX couturiers reçoivent une commission calculée sur 100% de
-                //     l'encaissé, alors qu'aucun des deux n'a fait tout le travail.
-                //
-                // Correction : chaque pièce ne reçoit que sa PART PROPORTIONNELLE de
-                // l'encaissé de la commande, au prorata de son propre montant de
-                // couture sur le total de la commande (même principe que le prorata
-                // couture/matériel prévu au Point 2 du cahier).
+                // L'encaissé couture est la part des paiements attribuable à la couture
+                // seule, répartie proportionnellement entre les pièces de la commande.
                 decimal caEncaisse = piecesCouturier.Sum(p => PartEncaisseeDeLaPiece(p));
 
                 decimal base_ = surMontantEncaisse ? caEncaisse : caTotal;
@@ -120,37 +99,10 @@ namespace GestionCoutureApp.Services
                     .SelectMany(p => p.MaterielSupplements ?? new List<MaterielSupplement>())
                     .Sum(m => m.Quantite * m.PrixUnitaire);
 
-                // ── CORRECTIF BUG 4 ──────────────────────────────────────────────
-                // TotalEncaisse représente l'encaissé COUTURE uniquement (caEncaisse).
-                // Il NE DOIT PAS inclure totalMateriaux : les matériaux sont un flux
-                // de trésorerie distinct (achat tissu/boutons refacturé au client) et
-                // ne font jamais partie de la base de calcul des commissions, ni du
-                // bénéfice atelier résiduel après paiement du couturier.
-                //
-                // Avant ce correctif :
-                //   TotalEncaisse = caEncaisse + totalMateriaux
-                //   ResteAtelier  = TotalEncaisse - Commission
-                //                 = caEncaisse + totalMateriaux - Commission
-                //   → le bénéfice atelier était ARTIFICIELLEMENT GONFLÉ des matériaux,
-                //     donnant l'impression que l'atelier "gagnait" la valeur des
-                //     matériaux qu'il avait pourtant achetés.
-                //
-                // Après correctif :
-                //   TotalEncaisse = caEncaisse  (couture seule)
-                //   ResteAtelier  = caEncaisse - Commission  (bénéfice couture atelier)
-                //   TotalMateriaux reste affiché séparément en colonne "dont matériaux"
-                //   pour information, sans jamais entrer dans resteAtelierGlobal.
-                //
-                // REMARQUE flux achat matériaux :
-                //   Il n'existe pas encore de flux automatique créant une Dépense
-                //   correspondant à l'achat du matériau au moment où le
-                //   MaterielSupplement est ajouté à une pièce. Ce workflow
-                //   (MaterielSupplement → Dépense automatique) est une amélioration
-                //   à valider avec l'utilisateur avant implémentation, car il dépend
-                //   du moment réel d'achat (avant ou après la commande) et du mode
-                //   de remboursement (avance couturier, achat atelier, etc.).
-                //   Documenté ici comme TODO — ne pas implémenter sans validation.
-                decimal totalEncaisse = caEncaisse; // COUTURE uniquement
+                // TotalEncaisse représente l'encaissé couture uniquement (hors matériaux).
+                // Les matériaux sont un flux distinct refacturé au client et n'entrent
+                // jamais dans la base de calcul des commissions ni dans le bénéfice atelier.
+        decimal totalEncaisse = caEncaisse;
 
                 resultat.Add(new ApercuCommission
                 {
@@ -219,7 +171,7 @@ namespace GestionCoutureApp.Services
             if (apercu == null || apercu.Count == 0)
                 throw new InvalidOperationException("Aucune commission à enregistrer pour cette période.");
 
-            // ✅ CORRECTIF AUDIT #8 : Contrôle d'accès côté service (défense en profondeur)
+            // Contrôle d'accès côté service : seul le Boss peut enregistrer des commissions.
             Helpers.AuthorizationHelper.RequireRoleById(_contextFactory, idOperateur, "Boss");
 
             lock (_verrou)
@@ -227,9 +179,8 @@ namespace GestionCoutureApp.Services
                 using var context = _contextFactory.CreateDbContext();
                 using var transaction = context.Database.BeginTransaction();
 
-                // ✅ CORRECTIF AUDIT #2 : Validation AVANT toute modification
                 // Vérifie qu'aucune pièce n'a été verrouillée entre le calcul de l'aperçu
-                // et l'enregistrement (race condition)
+                // et l'enregistrement (race condition possible dans un atelier multi-poste futur).
                 var conflits = new List<string>();
 
                 foreach (var ligne in apercu)
@@ -266,21 +217,14 @@ namespace GestionCoutureApp.Services
                         "\n\nRecalculez un nouvel aperçu avec le bouton \"Aperçu\" et réessayez.");
                 }
 
-                // ✅ Enregistrement normal si aucun conflit
+                // Enregistrement normal si aucun conflit
                 foreach (var ligne in apercu)
                 {
                     if (ligne.IdsPieces.Count == 0) continue;
 
-                    // Reverrouille en base (et non sur la liste déjà en mémoire
-                    // dans "ligne") : entre l'aperçu affiché à l'écran et le
-                    // clic sur "Enregistrer", une pièce a pu être verrouillée
-                    // entre-temps par une autre opération. Le filtre
-                    // "IdCommission == null" ici est ce qui empêche réellement
-                    // qu'une même pièce soit comptée deux fois.
-                    // CORRECTIF (audit) : Include(Commande.Pieces) est nécessaire pour
-                    // que PartEncaisseeDeLaPiece() puisse calculer le total de la
-                    // commande (toutes ses pièces) et pas seulement les pièces de CE
-                    // couturier — sinon la proportion serait faussée.
+                    // Include(Commande.Pieces) est nécessaire pour que PartEncaisseeDeLaPiece()
+                    // calcule le total de la commande (toutes ses pièces) et pas seulement
+                    // les pièces de ce couturier — sinon la proportion serait faussée.
                     var pieces = context.PiecesCommande
                         .Include(p => p.Commande)
                             .ThenInclude(c => c!.Pieces)
@@ -291,9 +235,8 @@ namespace GestionCoutureApp.Services
                         .Where(p => ligne.IdsPieces.Contains(p.IdPieceCommande) && p.IdCommission == null)
                         .ToList();
 
-                    // ✅ CORRECTIF AUDIT #2 : Deuxième vérification (défense en profondeur)
-                    // Si le nombre de pièces récupérées ne correspond pas à l'aperçu,
-                    // c'est qu'une ou plusieurs ont été verrouillées entre-temps
+                    // Vérification de cohérence : si le nombre de pièces récupérées ne
+                    // correspond pas à l'aperçu, une ou plusieurs ont été verrouillées entre-temps.
                     if (pieces.Count != ligne.IdsPieces.Count)
                     {
                         transaction.Rollback();
@@ -331,13 +274,8 @@ namespace GestionCoutureApp.Services
                     // raison de fraîcheur que le filtre ci-dessus) :
                     if (surMontantEncaisse)
                     {
-                        // CORRECTIF (audit) : même bug que CalculerApercu (voir
-                        // PartEncaisseeDeLaPiece) — sommer l'encaissé de la commande
-                        // ENTIÈRE par commande distincte ignorait que d'autres pièces
-                        // de cette même commande peuvent appartenir à un autre
-                        // couturier, ou que ce couturier a déjà plusieurs pièces dans
-                        // la même commande. On additionne maintenant la part
-                        // proportionnelle réelle de CHAQUE pièce.
+                        // La part proportionnelle réelle de chaque pièce est recalculée
+                        // depuis la base — même logique que dans CalculerApercu.
                         commission.BaseMontant = pieces.Sum(p => PartEncaisseeDeLaPiece(p));
                     }
                     else
@@ -385,14 +323,14 @@ namespace GestionCoutureApp.Services
 
             using var context = _contextFactory.CreateDbContext();
 
-            // ✅ CORRECTIF AUDIT #8 : Vérifier que l'annulateur est Boss
+            // Seul le Boss peut annuler une commission.
             var annulateur = context.Employes.FirstOrDefault(e => 
                 (e.Prenom + " " + e.Nom) == nomAnnulateur);
             Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
 
             var commission = context.Commissions
-                .Include(c => c.Commandes) // legacy : historique enregistré avant l'Étape 1b-i
-                .Include(c => c.Pieces)    // ÉTAPE 1b-i : verrouillage réel désormais ici
+                .Include(c => c.Commandes) // historique legacy (commissions antérieures au verrouillage par pièce)
+                .Include(c => c.Pieces)    // verrouillage actuel par pièce
                 .FirstOrDefault(c => c.IdCommission == idCommission)
                 ?? throw new InvalidOperationException("Commission introuvable.");
 
@@ -404,14 +342,10 @@ namespace GestionCoutureApp.Services
             commission.DateAnnulation = DateTime.Now;
             commission.NomAnnulateur = nomAnnulateur;
 
-            // CORRECTIF (Étape 1b-i) : sans déverrouiller aussi "Pieces", une
-            // commission annulée laissait ses pièces à jamais verrouillées
-            // (IdCommission toujours renseigné) — elles n'auraient plus jamais
-            // pu être incluses dans un futur calcul de commission
-            // (CalculerApercu filtre explicitement IdCommission == null),
-            // alors même que la commission qui les verrouillait est annulée.
+            // Déverrouiller les pièces : une commission annulée doit libérer
+            // ses pièces pour qu'elles puissent être incluses dans un futur calcul.
             foreach (var cmd in commission.Commandes)
-#pragma warning disable CS0618 // déverrouillage de l'historique légataire, avant l'Étape 1b-i
+#pragma warning disable CS0618 // déverrouillage de l'historique legacy
                 cmd.IdCommission = null;
 #pragma warning restore CS0618
             foreach (var piece in commission.Pieces)

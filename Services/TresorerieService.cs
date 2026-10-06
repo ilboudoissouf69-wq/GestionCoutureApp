@@ -6,8 +6,7 @@ namespace GestionCoutureApp.Services
 {
     /// <summary>
     /// Service de calcul de trésorerie et bilans financiers.
-    /// CORRECTIF AUDIT #A1 : Centralise tous les calculs financiers critiques
-    /// avec une logique métier claire et documentée.
+    /// Centralise tous les calculs financiers critiques avec une logique métier claire.
     /// </summary>
     public class TresorerieService : ITresorerieService
     {
@@ -187,9 +186,7 @@ namespace GestionCoutureApp.Services
 
             int nombreCommandesLivrees = commandesPeriode.Count;
 
-            // 7. Bilan net — formule unifiée (identique à StatsFinancieres.BeneficeNet)
-            // TÂCHE 2 : les matériaux ne sont jamais déduits ici.
-            // CA encaissé contient déjà couture + matériaux.
+            // Bilan net : CA encaissé contient couture + matériaux.
             // Les matériaux s'annulent (atelier avance → client rembourse).
             // Seules les dépenses réelles (loyer, élec, salaires, etc.) sont déduites.
             decimal bilanNet = ca - depenses - totalCommissions - totalPrimes;
@@ -255,10 +252,8 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// ✅ CORRECTIF AUDIT SÉCURITÉ : Rapport de cohérence argent/travail
-        /// Compare le montant total facturé des commandes livrées/terminées avec
-        /// les paiements encaissés (valides + annulés avec motifs) sur une période.
-        /// Signale tout écart significatif qui pourrait indiquer une disparition d'argent.
+        /// Compare le montant total facturé des commandes livrées/terminées avec les paiements
+        /// encaissés sur une période. Signale tout écart significatif.
         /// </summary>
         public RapportCoherenceFinanciere VerifierCoherenceArgentTravail(DateTime dateDebut, DateTime dateFin)
         {

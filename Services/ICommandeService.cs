@@ -6,16 +6,17 @@ namespace GestionCoutureApp.Services
 {
     public interface ICommandeService
     {
-        // ✅ CORRECTIF AUDIT #1 : Event pour notifier les vues des changements
+        // Événement déclenché après toute modification d'une commande.
+        // Permet aux vues ouvertes (PaiementsView, etc.) de se rafraîchir automatiquement.
         event EventHandler<CommandeChangedEventArgs>? CommandeChanged;
 
         List<Commande> ObtenirTous();
         Commande? ObtenirParId(int id);
 
-        // ✅ PAGINATION : Récupère les commandes avec pagination
+        // Récupère les commandes avec pagination
         Task<PagedResult<Commande>> ObtenirPageAsync(int page, int pageSize);
         
-        // ✅ OPTIMISATION : Version légère pour affichage tableau (sans toutes les données incluses)
+        // Version légère pour affichage tableau (sans toutes les données incluses)
         Task<PagedResult<Commande>> ObtenirPageLightAsync(int page, int pageSize);
 
         /// <summary>
@@ -48,7 +49,7 @@ namespace GestionCoutureApp.Services
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
             int idOperateur, string nomOperateur);
 
-        // ✅ CORRECTIF AUDIT : Suppression logique avec autorisation Boss et traçabilité
+        // Suppression logique avec autorisation Boss et traçabilité
         Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null);
 
         [Obsolete("Utilisez SupprimerAsync avec traçabilité complète")]
@@ -56,10 +57,10 @@ namespace GestionCoutureApp.Services
         
         List<Commande> Rechercher(string motCle);
         
-        // ✅ PAGINATION : Cherche des commandes avec pagination
+        // Cherche des commandes avec pagination
         Task<PagedResult<Commande>> RechercherPageAsync(string motCle, int page, int pageSize);
         
-        // ✅ OPTIMISATION : Version légère de recherche
+        // Version légère de recherche pour affichage tableau
         Task<PagedResult<Commande>> RechercherPageLightAsync(string motCle, int page, int pageSize);
 
         List<Mesure> ObtenirMesuresPiece(int idPieceCommande);

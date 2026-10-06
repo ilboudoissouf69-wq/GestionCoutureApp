@@ -99,11 +99,15 @@ namespace GestionCoutureApp.Views
             {
                 var stats = _depenseService.ObtenirStats(_debutPeriode, _finPeriode);
 
-                TxtCaEncaisse.Text  = stats.CaEncaisse.ToString("N0");
-                TxtCharges.Text     = stats.ChargesExploitation.ToString("N0");
-                TxtChargesDetail.Text = $"FCFA (dép. {stats.TotalDepenses:N0} + sal. {stats.SalaireSecretaire:N0})";
-                // TÂCHE 2 : Bénéfice = CA encaissé − commissions − charges (sans les matériaux)
-                TxtMargeBrute.Text  = stats.BeneficeNet.ToString("N0");
+                TxtCaEncaisse.Text    = stats.CaEncaisse.ToString("N0");
+                TxtCharges.Text       = stats.ChargesExploitation.ToString("N0");
+                TxtChargesDetail.Text = $"FCFA (dépenses {stats.TotalDepenses:N0} + salaire {stats.SalaireSecretaire:N0})";
+
+                // Marge Brute = CA − matériaux − commissions (avant charges fixes)
+                TxtMargeBrute.Text = stats.MargeBrute.ToString("N0");
+                TxtMargeBruteDetail.Text = $"FCFA (chiffre d'affaires {stats.CaEncaisse:N0} − matériaux {stats.TotalMateriaux:N0} − commissions {stats.TotalCommissions:N0})";
+
+                // Bénéfice Net = Marge Brute − charges d'exploitation
                 TxtBeneficeNet.Text = stats.BeneficeNet.ToString("N0");
 
                 // Couleur Bénéfice Net

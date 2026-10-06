@@ -10,7 +10,8 @@ namespace GestionCoutureApp.Services
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<CommandeService> _logger;
 
-        // ✅ CORRECTIF AUDIT #1 : Event pour notifier les vues des changements
+        // Événement déclenché après toute modification d'une commande.
+        // Permet aux vues ouvertes (PaiementsView, etc.) de se rafraîchir automatiquement.
         public event EventHandler<CommandeChangedEventArgs>? CommandeChanged;
 
         // ── Détection anti double-soumission ─────────────────────────────
@@ -40,7 +41,7 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             return context.Commandes
-                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
+                .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
@@ -51,13 +52,13 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
-        // ✅ PAGINATION : Récupère les commandes avec pagination
+        // Récupère les commandes avec pagination
         public async Task<PagedResult<Commande>> ObtenirPageAsync(int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
-                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
+                .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
@@ -81,15 +82,15 @@ namespace GestionCoutureApp.Services
             };
         }
         
-        // ✅ OPTIMISATION : Version légère pour affichage tableau (sans toutes les données incluses)
+        // Version légère pour affichage tableau (sans toutes les données incluses)
         public async Task<PagedResult<Commande>> ObtenirPageLightAsync(int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
-                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
+                .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
-                .Include(c => c.Pieces)        // Pièces avec couturier pour affichage tableau
+                .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
                 .OrderByDescending(c => c.DateDebut);
             
@@ -563,11 +564,10 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// ✅ CORRECTIF AUDIT SÉCURITÉ FINANCIÈRE : Suppression LOGIQUE d'une commande
-        /// (au lieu de physique) avec autorisation Boss, traçabilité complète et audit.
-        /// Une commande ne doit JAMAIS être supprimée physiquement de la base si elle a
-        /// un historique financier (paiements, même annulés). La suppression logique
-        /// permet de garder une trace immuable tout en la masquant de l'UI normale.
+        /// Suppression logique d'une commande avec autorisation Boss, traçabilité complète et audit.
+        /// Une commande ne doit jamais être supprimée physiquement si elle a un historique
+        /// financier (paiements, même annulés). La suppression logique masque la commande
+        /// de l'UI normale tout en conservant une trace immuable.
         /// </summary>
         /// <param name="id">ID de la commande</param>
         /// <param name="idOperateur">ID de l'opérateur effectuant la suppression</param>
@@ -657,7 +657,7 @@ namespace GestionCoutureApp.Services
                 Statut = commande.StatutGlobal
             };
 
-            // ✅ SUPPRESSION LOGIQUE : marquer comme supprimée au lieu de supprimer physiquement
+            // Suppression logique : marquer comme supprimée au lieu de supprimer physiquement
             commande.EstSupprimee = true;
             commande.MotifSuppression = motif.Trim();
             commande.DateSuppression = DateTime.Now;
@@ -666,7 +666,7 @@ namespace GestionCoutureApp.Services
 
             context.SaveChanges();
 
-            // ✅ AUDIT : Enregistrer dans le journal d'audit immuable avec notification
+            // Enregistrer dans le journal d'audit immuable avec notification
             if (auditService != null)
             {
                 await auditService.EnregistrerActionAsync(
@@ -684,8 +684,8 @@ namespace GestionCoutureApp.Services
             }
         }
 
-        // ✅ ANCIENNE MÉTHODE DÉPRÉCIÉE : gardée temporairement pour compatibilité
-        // avec les appelants existants, mais lève une exception pour forcer la migration
+        // Ancienne méthode conservée pour compatibilité ascendante — lève une exception
+        // pour forcer la migration vers SupprimerAsync qui garantit la traçabilité.
         [Obsolete("Utilisez SupprimerAsync avec idOperateur/motif pour traçabilité complète")]
         public void Supprimer(int id)
         {
@@ -714,7 +714,7 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
         
-        // ✅ PAGINATION : Cherche des commandes avec pagination
+        // Cherche des commandes avec pagination
         public async Task<PagedResult<Commande>> RechercherPageAsync(string motCle, int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -748,13 +748,13 @@ namespace GestionCoutureApp.Services
             };
         }
         
-        // ✅ OPTIMISATION : Version légère de recherche
+        // Version légère de recherche pour affichage tableau
         public async Task<PagedResult<Commande>> RechercherPageLightAsync(string motCle, int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
-                .Where(c => !c.EstSupprimee) // ✅ CORRECTIF : Filtrer les commandes supprimées
+                .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
@@ -834,11 +834,8 @@ namespace GestionCoutureApp.Services
             piece.IdCommande = idCommande;
             piece.Statut = "A faire";
 
-            // CORRECTIF (audit) : conserver le motif avec la pièce, pas seulement
-            // le vérifier au passage. Sans ça, rien ne prouve après coup pourquoi
-            // cette pièce a été ajoutée après un encaissement — la "traçabilité"
-            // promise par le cahier n'existait que dans un message de dialogue
-            // qui disparaissait dès qu'on cliquait "OK".
+            // Le motif est conservé avec la pièce pour traçabilité complète —
+            // un simple message de dialogue serait perdu à la fermeture de la fenêtre.
             if (aPaiements)
                 piece.MotifAjoutApresEncaissement = motifException!.Trim();
 
@@ -847,7 +844,6 @@ namespace GestionCoutureApp.Services
             context.PiecesCommande.Add(piece);
             context.SaveChanges();
 
-            // ✅ CORRECTIF AUDIT #1 : Notification du changement
             CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
             {
                 IdCommande = idCommande,
@@ -979,7 +975,7 @@ namespace GestionCoutureApp.Services
                     $"Pièce #{pieceExistante.IdPieceCommande} ({pieceExistante.TypeVetement})");
             }
 
-            // ✅ CORRECTIF AUDIT #1 : Notification si montant modifié
+            // Notifier les vues abonnées si le montant a changé
             if (montantModifie)
             {
                 CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
@@ -1063,7 +1059,6 @@ namespace GestionCoutureApp.Services
             Auditer(operateur, nomOperateur, "PIECE_SUPPRIMEE", "PieceCommande",
                 idPieceCommande, avant: snapshot, apres: null, motif: null);
 
-            // ✅ CORRECTIF AUDIT #1 : Notification
             CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
             {
                 IdCommande = piece.IdCommande,

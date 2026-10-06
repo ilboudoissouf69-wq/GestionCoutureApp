@@ -17,12 +17,8 @@ namespace GestionCoutureApp.Services
             _parametresService = parametresService;
         }
 
-        // CORRECTIF (audit) : réécrit pour travailler PIÈCE PAR PIÈCE (et non
-        // plus commande par commande) et pour générer les DEUX types d'alerte
-        // prévus au Point 5 du cahier. L'ancienne version ne produisait que
-        // l'alerte "rendez-vous proche" ; l'alerte "pas encore prise en
-        // charge" (mi-délai entre dépôt et rendez-vous, statut toujours
-        // "À faire") n'existait nulle part dans le code.
+        // Génère les deux types d'alerte par pièce : "rendez-vous proche" et
+        // "pas encore prise en charge" (mi-délai entre dépôt et rendez-vous avec statut "À faire").
         public async Task<List<AlerteRendezVous>> ObtenirAlertesActuelles()
         {
             var delaiHeures = await _parametresService.ObtenirDelaiAlerteRendezVousHeures();
@@ -154,10 +150,8 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
-        // CORRECTIF (audit) : centralise la règle "rendez-vous de la pièce" —
-        // honore désormais PieceCommande.RendezVousException (Point 5, cas
-        // d'exception) au lieu d'utiliser systématiquement le rendez-vous
-        // global de la commande, comme le faisait l'ancienne version.
+        // Retourne le rendez-vous de la pièce : honore PieceCommande.RendezVousException
+        // (cas d'exception de pièce individuelle) en priorité sur le RDV global de la commande.
         private static DateTime ObtenirDateRendezVous(PieceCommande piece, Commande commande)
         {
             if (piece.RendezVousException.HasValue)

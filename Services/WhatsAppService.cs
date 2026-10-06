@@ -9,7 +9,7 @@ namespace GestionCoutureApp.Services
     public class WhatsAppService : IWhatsAppService
     {
         private const string IndicatifParDefaut  = "226";
-        private const string NomAtelierParDefaut = "Retoupe Choco";
+        private const string NomAtelierParDefaut = "Retouche Choco";
 
         // ==================================================================
         // Normalisation numéro

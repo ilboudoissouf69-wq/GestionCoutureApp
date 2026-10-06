@@ -53,7 +53,7 @@
             <!-- ══ 4 CARTES KPI FINANCIÈRES ═══════════════════════════════ -->
             <UniformGrid Columns="4" Margin="0,0,0,16">
 
-                <!-- 1 — CA Encaissé -->
+                <!-- 1 — Chiffre d'Affaires Encaissé -->
                 <Border CornerRadius="12" Padding="18,14" Margin="0,0,10,0">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -62,60 +62,61 @@
                         </LinearGradientBrush>
                     </Border.Background>
                     <StackPanel>
-                        <TextBlock Text="CA ENCAISSÉ" FontSize="9" FontWeight="Bold"
+                        <TextBlock Text="CHIFFRE D'AFFAIRES ENCAISSÉ" FontSize="9" FontWeight="Bold"
                                    Foreground="#94A3B8"/>
                         <TextBlock x:Name="TxtCaEncaisse" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA total paiements"
-                                   FontSize="10" Foreground="#64748B"/>
+                        <TextBlock Text="FCFA — tout l'argent reçu des clients"
+                                   FontSize="10" Foreground="#64748B" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- 2 — Charges d'exploitation -->
+                <!-- 2 — Charges de fonctionnement -->
                 <Border CornerRadius="12" Padding="18,14" Margin="0,0,10,0">
                     <Border.Background>
                         <SolidColorBrush Color="#B91C1C"/>
                     </Border.Background>
                     <StackPanel>
-                        <TextBlock Text="CHARGES EXPLOITATION" FontSize="9" FontWeight="Bold"
+                        <TextBlock Text="CHARGES DE FONCTIONNEMENT" FontSize="9" FontWeight="Bold"
                                    Foreground="#FCA5A5"/>
                         <TextBlock x:Name="TxtCharges" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock x:Name="TxtChargesDetail" Text="FCFA (dép. + salaires)"
+                        <TextBlock x:Name="TxtChargesDetail" Text="FCFA (dépenses + salaires)"
                                    FontSize="10" Foreground="#FCA5A5" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- 3 — Marge Brute -->
+                <!-- 3 — Résultat Brut -->
                 <Border CornerRadius="12" Padding="18,14" Margin="0,0,10,0">
                     <Border.Background>
                         <SolidColorBrush Color="#15803D"/>
                     </Border.Background>
                     <StackPanel>
-                        <TextBlock Text="MARGE BRUTE" FontSize="9" FontWeight="Bold"
+                        <TextBlock Text="RÉSULTAT BRUT" FontSize="9" FontWeight="Bold"
                                    Foreground="#86EFAC"/>
                         <TextBlock x:Name="TxtMargeBrute" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="CA − commissions − matériaux"
+                        <TextBlock x:Name="TxtMargeBruteDetail"
+                                   Text="FCFA (recettes − matériaux − commissions validées)"
                                    FontSize="10" Foreground="#86EFAC" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
-                <!-- 4 — Bénéfice Net -->
+                <!-- 4 — Résultat Net -->
                 <Border CornerRadius="12" Padding="18,14">
                     <Border.Background>
                         <SolidColorBrush Color="#1D4ED8"/>
                     </Border.Background>
                     <StackPanel>
-                        <TextBlock Text="BÉNÉFICE NET" FontSize="9" FontWeight="Bold"
+                        <TextBlock Text="RÉSULTAT NET" FontSize="9" FontWeight="Bold"
                                    Foreground="#93C5FD"/>
                         <TextBlock x:Name="TxtBeneficeNet" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="Marge brute − charges fixes"
+                        <TextBlock Text="Résultat brut − charges de fonctionnement"
                                    FontSize="10" Foreground="#93C5FD" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
@@ -133,25 +134,25 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="dont Commissions" FontSize="10"
+                        <TextBlock Text="Commissions couturiers validées" FontSize="10"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                         <TextBlock x:Name="TxtDetailCommissions" Text="0 FCFA"
                                    FontSize="12" FontWeight="Bold" Foreground="#CC0000"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="dont Matériaux" FontSize="10"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Text="Matériaux avancés (remboursés par les clients)" FontSize="10"
+                                   Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
                         <TextBlock x:Name="TxtDetailMateriaux" Text="0 FCFA"
                                    FontSize="12" FontWeight="Bold" Foreground="#374151"/>
                     </StackPanel>
                     <StackPanel Grid.Column="2">
-                        <TextBlock Text="dont Dépenses" FontSize="10"
+                        <TextBlock Text="Dépenses de fonctionnement validées" FontSize="10"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                         <TextBlock x:Name="TxtDetailDepenses" Text="0 FCFA"
                                    FontSize="12" FontWeight="Bold" Foreground="#374151"/>
                     </StackPanel>
                     <StackPanel Grid.Column="3">
-                        <TextBlock Text="dont Salaire Secrétaire" FontSize="10"
+                        <TextBlock Text="Salaire secrétaire (proraté)" FontSize="10"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                         <TextBlock x:Name="TxtDetailSalaire" Text="0 FCFA"
                                    FontSize="12" FontWeight="Bold" Foreground="#374151"/>

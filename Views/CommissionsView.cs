@@ -14,6 +14,7 @@ namespace GestionCoutureApp.Views
         private readonly ICommissionService _commissionService;
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IAuthService _authService;
+        private readonly IParametresService _parametresService;
 
         private int? _idCouturierSelectionne;
         private bool _surMontantEncaisse = true; // "Encaisse" = index 0 = recommande par defaut
@@ -32,6 +33,7 @@ namespace GestionCoutureApp.Views
 
             _commissionService = App.Services.GetRequiredService<ICommissionService>();
             _contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _parametresService = App.Services.GetRequiredService<IParametresService>();
 
             DateDebut.SelectedDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             DateFin.SelectedDate = DateTime.Today;
@@ -40,7 +42,16 @@ namespace GestionCoutureApp.Views
             ChargerCouturiers();
             ChargerHistorique();
 
-            Loaded += (s, e) => BtnCalculer_Click(null!, null!);
+            Loaded += async (s, e) =>
+            {
+                // Charger le taux et la prime depuis les Paramètres
+                decimal taux  = await _parametresService.ObtenirTauxCommissionDefaut();
+                decimal prime = await _parametresService.ObtenirPrimeZeroDefaut();
+                TxtPourcentage.Text     = taux.ToString("G");
+                TxtPrimeZeroDefaut.Text = prime.ToString("N0");
+                // Lancer l'aperçu avec les valeurs à jour
+                BtnCalculer_Click(null!, null!);
+            };
         }
 
         // ------------------------------------------------------------------
@@ -186,7 +197,9 @@ namespace GestionCoutureApp.Views
             // Note : totalMateriauxGlobal N'EST PAS soustrait de resteAtelierGlobal.
             // Les matériaux sont un flux séparé (achat refacturé client → dépense atelier).
 
-            TxtCaEncaisseTotal.Text   = totalEncaisseGlobal.ToString("N0");
+            // Carte 1 = vrai total encaissé client (couture + matériaux)
+            decimal totalEncaisseBrut = totalEncaisseGlobal + totalMateriauxGlobal;
+            TxtCaEncaisseTotal.Text   = totalEncaisseBrut.ToString("N0");
             TxtTotalMateriauxKpi.Text = totalMateriauxGlobal.ToString("N0");
             TxtCaTotal.Text           = totalCoutureGlobal.ToString("N0");
             TxtTotalCommissions.Text  = totalCommissions.ToString("N0");

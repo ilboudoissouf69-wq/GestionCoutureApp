@@ -25,7 +25,7 @@ namespace GestionCoutureApp.Services
             return context.Clients.ToList();
         }
 
-        // ✅ PAGINATION : Récupère les clients avec pagination
+        // Récupère les clients avec pagination
         public async Task<PagedResult<Client>> ObtenirPageAsync(int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();

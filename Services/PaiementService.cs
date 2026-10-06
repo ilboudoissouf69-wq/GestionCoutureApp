@@ -35,7 +35,7 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
-        // ✅ PAGINATION : Récupère les paiements avec pagination
+        // Récupère les paiements avec pagination
         public async Task<PagedResult<Paiement>> ObtenirPageAsync(int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -60,7 +60,7 @@ namespace GestionCoutureApp.Services
             };
         }
         
-        // ✅ OPTIMISATION : Version légère pour affichage tableau
+        // Version légère pour affichage tableau
         public async Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -128,9 +128,7 @@ namespace GestionCoutureApp.Services
 
         public void Ajouter(Paiement paiement, int idOperateur, string nomOperateur)
         {
-            // ✅ CORRECTIF AUDIT : validation opérateur obligatoire avant toute ouverture
-            // de contexte. Tout paiement doit être associé à un opérateur identifié —
-            // un paiement anonyme serait une faille de traçabilité financière.
+            // Tout paiement doit être associé à un opérateur identifié pour la traçabilité financière.
             if (idOperateur <= 0)
                 throw new InvalidOperationException(
                     "L'identifiant de l'opérateur est obligatoire pour la traçabilité financière.");
@@ -144,24 +142,18 @@ namespace GestionCoutureApp.Services
 
                 decimal totalValide = TotalValideParCommande(context, paiement.IdCommande);
 
-                // ÉTAPE 1b-i : Commande.MontantTotal n'est plus jamais renseigné
-                // par CommandeService — le montant réel est maintenant la somme
-                // des PieceCommande.MontantCouture. Find() ne charge pas les
-                // navigations (Pieces resterait vide) : on utilise donc une
-                // requête explicite avec Include, comme partout ailleurs dans
-                // l'application depuis le correctif équivalent sur ObtenirParId.
-                // ÉTAPE 1b-i + Point 2 (Matériaux) :
-                // - MontantTotalCommande sur le reçu = couture seule
-                //   (base de calcul de la commission du couturier)
-                // - resteReel = couture + matériaux — paiements déjà effectués
-                //   (c'est le montant total que le CLIENT doit rembourser)
+                // Commande.MontantTotal est déprécié — le montant réel est la somme
+                // des PieceCommande.MontantCouture. On utilise une requête explicite
+                // avec Include car Find() ne charge pas les navigations.
+                //
+                // MontantTotalCommande sur le reçu = couture seule (base de calcul des commissions).
+                // resteReel = couture + matériaux − paiements déjà effectués (ce que le CLIENT doit).
                 var commande = context.Commandes
                     .Include(c => c.Pieces)
                     .Include(c => c.MaterielSupplements)
                     .FirstOrDefault(c => c.IdCommande == paiement.IdCommande)
                     ?? throw new InvalidOperationException("Commande introuvable.");
 
-                // ✅ CORRECTIF : Protection contre les listes null
                 if (commande.Pieces == null || commande.Pieces.Count == 0)
                 {
                     throw new InvalidOperationException(
@@ -194,7 +186,7 @@ namespace GestionCoutureApp.Services
 
                 context.Paiements.Add(paiement);
 
-                // ✅ CORRECTIF AUDIT #5 : Gestion retry en cas de doublon (race condition)
+                // En cas de collision sur le numéro de reçu (race condition), régénère et réessaye.
                 try
                 {
                     context.SaveChanges();
@@ -226,11 +218,8 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // ✅ CORRECTIF AUDIT #8 : Seul le Boss peut annuler un paiement
-            // ✅ CORRECTIF AUDIT #9 : Utilisation de RequireRoleById au lieu de la recherche par nom
-            // ✅ CORRECTIF AUDIT #12 : Utilisation de RequireRoleByIdEnum avec enum RoleEmploye
-            // La recherche par nom ("Prénom Nom") est fragile et peut échouer si deux employés
-            // ont le même nom ou si un Boss modifie son nom après connexion.
+            // Seul le Boss peut annuler un paiement. RequireRoleByIdEnum est plus robuste
+            // qu'une recherche par nom (résistant aux homonymes et aux renommages).
             Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idAnnulateur, RoleEmploye.Boss);
 
             var paiement = context.Paiements.Find(idPaiement)

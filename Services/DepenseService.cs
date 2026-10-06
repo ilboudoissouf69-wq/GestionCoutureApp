@@ -62,7 +62,7 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // ✅ CORRECTIF AUDIT #8 : Vérifier que le validateur est Boss
+            // Seul le Boss peut valider une dépense.
             var validateur = context.Employes.FirstOrDefault(e => 
                 (e.Prenom + " " + e.Nom) == nomBoss);
             Helpers.AuthorizationHelper.RequireRole(validateur, "Boss");
@@ -82,7 +82,7 @@ namespace GestionCoutureApp.Services
 
             using var context = _contextFactory.CreateDbContext();
 
-            // ✅ CORRECTIF AUDIT #8 : Seul le Boss peut annuler une dépense
+            // Seul le Boss peut annuler une dépense.
             var annulateur = context.Employes.FirstOrDefault(e => 
                 (e.Prenom + " " + e.Nom) == nomAnnulateur);
             Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
@@ -131,11 +131,8 @@ namespace GestionCoutureApp.Services
                 .AsEnumerable()
                 .Sum(c => c.MontantCommission + c.PrimeQualite);
 
-            // Matériaux facturés clients (sur les commandes de la période)
-            // TÂCHE 2 : les matériaux sont un flux de trésorerie informatif.
-            // Ils circulent (atelier avance → client rembourse dans le paiement)
-            // mais ne sont PAS déduits du bénéfice atelier.
-            // TotalMateriaux est renseigné pour affichage séparé uniquement.
+            // Les matériaux sont un flux de trésorerie informatif (atelier avance → client rembourse)
+            // et ne sont pas déduits du bénéfice atelier. TotalMateriaux est affiché séparément.
             decimal totalMateriaux = context.MaterielsSupplements
                 .Include(m => m.Commande)
                 .Where(m => m.Commande != null &&

@@ -46,7 +46,7 @@ namespace GestionCoutureApp.Services
         bool PeriodeADesTransactions(DateTime dateDebut, DateTime dateFin);
 
         /// <summary>
-        /// ✅ CORRECTIF AUDIT : Vérifie la cohérence entre l'argent encaissé et le travail livré.
+        /// Vérifie la cohérence entre l'argent encaissé et le travail livré.
         /// Signale les écarts significatifs qui pourraient indiquer une disparition d'argent.
         /// </summary>
         RapportCoherenceFinanciere VerifierCoherenceArgentTravail(DateTime dateDebut, DateTime dateFin);
@@ -120,7 +120,7 @@ namespace GestionCoutureApp.Services
 }
 
     /// <summary>
-    /// ✅ CORRECTIF AUDIT : Rapport de cohérence entre argent encaissé et travail effectué
+    /// Rapport de cohérence entre argent encaissé et travail effectué.
     /// </summary>
     public class RapportCoherenceFinanciere
     {
