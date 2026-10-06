@@ -1396,6 +1396,70 @@ namespace GestionCoutureApp.Services
             return new PagedResult<Commande> { Items = items, TotalCount = total, Page = page, PageSize = pageSize };
         }
 
+        // ── TÂCHE 6 : Suggestion couturier ───────────────────────────────
+
+        /// <summary>
+        /// Suggère le couturier Actif (pas Indisponible) le moins chargé.
+        /// Critère 1 : nombre de pièces A faire + En cours (le moins de travail en attente).
+        /// Critère 2 à égalité : DateTerminee la plus ancienne parmi ses pièces terminées
+        ///             (celui qui a terminé le moins récemment).
+        /// Retourne null si aucun couturier disponible.
+        /// IMPORTANT : suggestion uniquement, jamais d'affectation forcée.
+        /// </summary>
+        public Employe? SuggererCouturier()
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            // Couturiers actifs non Indisponibles (uniquement Role=="Couturier")
+            // Le Boss peut coudre mais n'est pas suggéré automatiquement : son rôle
+            // est de superviser, pas d'être assigné à la création de commandes.
+            var couturiers = context.Employes
+                .Where(e => e.Role == "Couturier"
+                         && e.Statut == "Actif")
+                .ToList();
+
+            if (couturiers.Count == 0) return null;
+
+            // Compter les pièces actives de chaque couturier
+            var charges = context.PiecesCommande
+                .Where(p => (p.Statut == "A faire" || p.Statut == "En cours")
+                         && p.IdCouturier.HasValue
+                         && p.Commande != null && !p.Commande.EstSupprimee)
+                .GroupBy(p => p.IdCouturier!.Value)
+                .Select(g => new { IdCouturier = g.Key, NbActives = g.Count() })
+                .ToList();
+
+            // Dernière terminaison par couturier (pour le départage)
+            var derniereTerminaison = context.PiecesCommande
+                .Where(p => p.IdCouturier.HasValue && p.DateTerminee.HasValue
+                         && p.Commande != null && !p.Commande.EstSupprimee)
+                .GroupBy(p => p.IdCouturier!.Value)
+                .Select(g => new { IdCouturier = g.Key, DerniereDate = g.Max(p => p.DateTerminee) })
+                .ToList();
+
+            Employe? meilleur = null;
+            int minActives = int.MaxValue;
+            DateTime? minDerniereDate = DateTime.MaxValue;
+
+            foreach (var c in couturiers)
+            {
+                int actives = charges.FirstOrDefault(x => x.IdCouturier == c.IdEmploye)?.NbActives ?? 0;
+                DateTime? derniere = derniereTerminaison.FirstOrDefault(x => x.IdCouturier == c.IdEmploye)?.DerniereDate;
+
+                if (actives < minActives
+                    || (actives == minActives
+                        && (derniere == null
+                            || (minDerniereDate.HasValue && derniere < minDerniereDate))))
+                {
+                    minActives      = actives;
+                    minDerniereDate = derniere;
+                    meilleur        = c;
+                }
+            }
+
+            return meilleur;
+        }
+
         // ===== StatutView — vue plate paginée de toutes les pièces =====
 
         public async Task<PagedResult<PieceCommande>> ObtenirPagePiecesAsync(

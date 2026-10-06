@@ -190,5 +190,15 @@ namespace GestionCoutureApp.Services
         /// (statut A faire ou En cours). Utilisé par la file "À attribuer".
         /// </summary>
         Task<PagedResult<Commande>> ObtenirCommandesAAttribuerAsync(int page, int pageSize);
+
+        // TÂCHE 6 — Suggestion couturier
+        /// <summary>
+        /// Suggère le couturier actif le moins chargé (le moins de pièces
+        /// En attente/En cours). En cas d'égalité : celui qui a le moins terminé
+        /// récemment (DateTerminee la plus ancienne). Les employés dont le
+        /// statut est "Indisponible" sont exclus.
+        /// Retourne null si aucun couturier actif disponible.
+        /// </summary>
+        Employe? SuggererCouturier();
     }
 }

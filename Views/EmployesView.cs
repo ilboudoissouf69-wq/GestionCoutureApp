@@ -119,8 +119,19 @@ namespace GestionCoutureApp.Views
             }
 
             // Mettre à jour le texte du bouton Suspendre
-            BtnSuspendre.Content = _employeSelectionne.Statut == "Actif"
-                ? "Suspendre" : "Réactiver";
+            // TÂCHE 6 : cycle Actif → Suspendre / Indisponible → Actif (Réactiver)
+            BtnSuspendre.Content = _employeSelectionne.Statut switch
+            {
+                "Actif"        => "Suspendre",
+                "Indisponible" => "Réactiver",
+                _              => "Réactiver"
+            };
+
+            // Bouton Indisponible : visible seulement pour les Actifs
+            if (FindName("BtnIndisponible") is System.Windows.Controls.Button btnIndisp)
+                btnIndisp.Visibility = _employeSelectionne.Statut == "Actif"
+                    ? System.Windows.Visibility.Visible
+                    : System.Windows.Visibility.Collapsed;
         }
 
         // ------------------------------------------------------------------
@@ -397,9 +408,17 @@ namespace GestionCoutureApp.Views
 
             if (_employeSelectionne.Statut == "Actif")
             {
+                // TÂCHE 6 : cycle Actif → Indisponible → Suspendu → Actif
+                // Le Boss choisit l'action via le libellé du bouton
                 _employeSelectionne.Statut = "Suspendu";
                 _context.SaveChanges();
                 AfficherMessage(nomComplet + " suspendu.", succes: true);
+            }
+            else if (_employeSelectionne.Statut == "Indisponible")
+            {
+                _employeSelectionne.Statut = "Actif";
+                _context.SaveChanges();
+                AfficherMessage(nomComplet + " remis actif.", succes: true);
             }
             else
             {
