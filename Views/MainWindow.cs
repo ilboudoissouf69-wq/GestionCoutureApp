@@ -265,6 +265,16 @@ namespace GestionCoutureApp.Views
             }
         }
 
+        // TÂCHE 7 : Mise à jour du badge alertes depuis AlertesView (appelé après chargement)
+        public void MettreAJourBadgeAlertes(int nbUrgentes)
+        {
+            if (FindName("BadgeAlertes") is TextBlock badge)
+            {
+                badge.Text       = nbUrgentes > 0 ? nbUrgentes.ToString() : "";
+                badge.Visibility = nbUrgentes > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
         private void BtnDepenses_Click(object sender, RoutedEventArgs e)
         {
             if (!RoleAutorise("Boss")) return;

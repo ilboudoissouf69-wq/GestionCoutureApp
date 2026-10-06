@@ -43,6 +43,41 @@ namespace GestionCoutureApp.Services
 
         // True si la pièce est terminée (même si le RDV est futur) — active le bouton orange
         public bool PiecePrete => Statut is "Terminée" or "Terminee";
+
+        // ── TÂCHE 7 : Niveau d'urgence ───────────────────────────────────
+
+        /// <summary>
+        /// Niveau d'urgence calculé à partir du RDV et du statut.
+        /// "retard"    : DateRendezVous dépassée et pièce non terminée/livrée
+        /// "jourbj"    : RDV aujourd'hui (même jour) et pièce non terminée
+        /// "demain"    : RDV demain
+        /// "normal"    : autres cas
+        /// </summary>
+        public string NiveauAlerte
+        {
+            get
+            {
+                var maintenant = DateTime.Now;
+                bool pieceFinie = Statut is "Terminee" or "Terminée" or "Livree" or "Livrée";
+                if (pieceFinie) return "normal";
+
+                if (DateRendezVous.Date < maintenant.Date)
+                    return "retard";
+                if (DateRendezVous.Date == maintenant.Date)
+                    return "jourbj";
+                if (DateRendezVous.Date == maintenant.Date.AddDays(1))
+                    return "demain";
+                return "normal";
+            }
+        }
+
+        /// <summary>
+        /// Vrai si le RDV est dans moins d'une heure ou dépassé, et pièce non terminée.
+        /// Déclenche la notification sonore/popup.
+        /// </summary>
+        public bool NecessiteNotificationUrgente =>
+            NiveauAlerte is "retard" or "jourbj"
+            && (DateRendezVous - DateTime.Now).TotalHours <= 1.0;
     }
 
     public interface IAlerteService
