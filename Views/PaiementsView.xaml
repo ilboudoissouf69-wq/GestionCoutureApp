@@ -108,42 +108,38 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+
+                        <!-- Icône loupe -->
                         <TextBlock Grid.Column="0"
                                    Text="🔍" FontSize="13"
                                    VerticalAlignment="Center"
                                    Margin="12,0,6,0"
                                    Foreground="#94A3B8"/>
-                        <TextBox x:Name="TxtRecherche"
-                                 Grid.Column="1"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 FontSize="13"
-                                 Foreground="#334155"
-                                 VerticalContentAlignment="Center"
-                                 Padding="0,10,10,10"
-                                 TextChanged="TxtRecherche_TextChanged">
-                            <TextBox.Style>
-                                <Style TargetType="TextBox">
-                                    <Style.Resources>
-                                        <VisualBrush x:Key="Hint" TileMode="None"
-                                                     Opacity="0.5" Stretch="None"
-                                                     AlignmentX="Left">
-                                            <VisualBrush.Visual>
-                                                <TextBlock Text="Rechercher par n° reçu, client ou opérateur..."
-                                                           FontSize="13"
-                                                           Foreground="#94A3B8"/>
-                                            </VisualBrush.Visual>
-                                        </VisualBrush>
-                                    </Style.Resources>
-                                    <Style.Triggers>
-                                        <Trigger Property="Text" Value="">
-                                            <Setter Property="Background" Value="{StaticResource Hint}"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBox.Style>
-                        </TextBox>
-                    </Grid>
+
+                        <!-- Superposition TextBox + placeholder -->
+                        <Grid Grid.Column="1">
+                            <!-- Placeholder visible uniquement quand vide ET sans focus -->
+                            <TextBlock x:Name="TxtPlaceholderRecherche"
+                                       Text="Rechercher par n° reçu, client ou opérateur..."
+                                       FontSize="13"
+                                       Foreground="#94A3B8"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,10,0"
+                                       IsHitTestVisible="False"
+                                       Visibility="Visible"/>
+
+                            <TextBox x:Name="TxtRecherche"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     FontSize="13"
+                                     Foreground="#334155"
+                                     VerticalContentAlignment="Center"
+                                     Padding="0,10,10,10"
+                                     TextChanged="TxtRecherche_TextChanged"
+                                     GotFocus="TxtRecherche_GotFocus"
+                                     LostFocus="TxtRecherche_LostFocus"/>
+                        </Grid><!-- fin Grid superposition -->
+                    </Grid><!-- fin Grid loupe+champ -->
                 </Border>
 
                 <!-- Filtres : "Afficher :" + pills -->

@@ -192,9 +192,27 @@ namespace GestionCoutureApp.Views
 
         private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
         {
+            // Afficher/masquer le placeholder
+            if (TxtPlaceholderRecherche != null)
+                TxtPlaceholderRecherche.Visibility =
+                    string.IsNullOrEmpty(TxtRecherche.Text) ? Visibility.Visible : Visibility.Collapsed;
+
             // Relance le timer à chaque frappe (debounce 300 ms)
             _rechercheTimer?.Stop();
             _rechercheTimer?.Start();
+        }
+
+        private void TxtRecherche_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (TxtPlaceholderRecherche != null)
+                TxtPlaceholderRecherche.Visibility = Visibility.Collapsed;
+        }
+
+        private void TxtRecherche_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (TxtPlaceholderRecherche != null)
+                TxtPlaceholderRecherche.Visibility =
+                    string.IsNullOrEmpty(TxtRecherche.Text) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ── Filtres statut ──────────────────────────────────────────
