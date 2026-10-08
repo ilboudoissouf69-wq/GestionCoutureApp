@@ -3,6 +3,14 @@ using GestionCoutureApp.Models;
 
 namespace GestionCoutureApp.Services
 {
+    /// <summary>Filtre de statut pour la liste paginée des paiements.</summary>
+    public enum StatutFiltrePaiement
+    {
+        Valides,
+        Annules,
+        Tous
+    }
+
     public interface IPaiementService
     {
         List<Paiement> ObtenirTous();
@@ -12,6 +20,10 @@ namespace GestionCoutureApp.Services
         
         // ✅ OPTIMISATION : Version légère pour affichage tableau
         Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize);
+
+        // ✅ RECHERCHE + FILTRE : surcharge additive (n'altère pas la signature existante)
+        Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize,
+            string? recherche, StatutFiltrePaiement filtre);
         
         List<Paiement> ObtenirParCommande(int idCommande);
         void Ajouter(Paiement paiement, int idOperateur, string nomOperateur);

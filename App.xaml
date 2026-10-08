@@ -2,6 +2,7 @@
 <Application x:Class="GestionCoutureApp.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:GestionCoutureApp.Converters"
              ShutdownMode="OnExplicitShutdown"
              DispatcherUnhandledException="Application_DispatcherUnhandledException">
     <Application.Resources>
@@ -546,6 +547,22 @@
             <Setter Property="BorderBrush"      Value="{DynamicResource AccentBrush}"/>
             <Setter Property="BorderThickness"  Value="1"/>
         </Style>
+
+        <!-- ============================================================ -->
+        <!-- EFFETS D'OMBRE — réutilisables dans les modales               -->
+        <!-- ============================================================ -->
+        <DropShadowEffect x:Key="ShadowMedium"
+                          Color="#000000" Opacity="0.18"
+                          BlurRadius="24" ShadowDepth="6" Direction="270"/>
+        <DropShadowEffect x:Key="ShadowLight"
+                          Color="#000000" Opacity="0.08"
+                          BlurRadius="10" ShadowDepth="2" Direction="270"/>
+
+        <!-- ============================================================ -->
+        <!-- CONVERTERS GLOBAUX                                            -->
+        <!-- ============================================================ -->
+        <converters:BoolToVisibilityConverter    x:Key="BoolToVisibilityConverter"/>
+        <converters:NotEmptyToVisibilityConverter x:Key="NotEmptyToVisibilityConverter"/>
 
     </Application.Resources>
 </Application>

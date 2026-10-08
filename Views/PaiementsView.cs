@@ -13,34 +13,49 @@ namespace GestionCoutureApp.Views
 {
     public partial class PaiementsView : Page
     {
-        private readonly IPaiementService _paiementService;
-        private readonly ICommandeService _commandeService;
-        private readonly IAuthService _authService;
-        private readonly IReceiptService _receiptService;
-        private readonly ILanguageService _languageService;
-        private readonly IEventAggregator _eventAggregator;
+        // ── Services ────────────────────────────────────────────────
+        private readonly IPaiementService   _paiementService;
+        private readonly ICommandeService   _commandeService;
+        private readonly IAuthService       _authService;
+        private readonly IReceiptService    _receiptService;
+        private readonly ILanguageService   _languageService;
+        private readonly IEventAggregator   _eventAggregator;
         private readonly ApplicationDbContext _context;
-        private Commande? _commandeSelectionnee;
-        private Employe? _operateurConnecte;
-        
-        // ✅ PAGINATION
-        private const int PAGE_SIZE = 15;
-        private int _currentPage = 1;
-        
-        // ✅ Protection contre double-clic
+
+        // ── État ────────────────────────────────────────────────────
+        private Employe?   _operateurConnecte;
+        private Commande?  _commandeSelectionnee;   // commande active dans la modale encaissement
+
+        // ── Pagination ──────────────────────────────────────────────
+        private const int PAGE_SIZE  = 15;
+        private int       _currentPage = 1;
+
+        // ── Anti double-clic ────────────────────────────────────────
         private bool _enCoursEnregistrement = false;
+
+        // ── Paiement cible de l'annulation (modale Boss) ────────────
+        private Paiement? _paiementAnnulationEnCours;
+
+        // ── Délai de frappe pour la recherche (300 ms) ──────────────
+        private System.Windows.Threading.DispatcherTimer? _rechercheTimer;
+
+        // ── Propriété exposée pour le binding Visibility bouton Annuler ──
+        /// <summary>True si l'opérateur connecté est Boss — bindé dans le DataGrid template.</summary>
+        public bool EstBoss => _operateurConnecte?.Role == "Boss";
+
+        // ================================================================
+        // CONSTRUCTEURS
+        // ================================================================
 
         /// <summary>
         /// Surcharge : ouvre PaiementsView et présélectionne la commande indiquée.
-        /// La sélection est effectuée dans Loaded pour laisser CmbCommande s'initialiser.
+        /// La sélection est effectuée dans Loaded pour laisser CmbCommandesNonSoldees
+        /// s'initialiser. Si la commande est déjà soldée, un message informatif
+        /// est affiché à la place de la modale vide.
         /// </summary>
         public PaiementsView(int idCommandePreselectionnee) : this()
         {
-            Loaded += (s, e) =>
-            {
-                CmbCommande.SelectedValue = idCommandePreselectionnee;
-                CmbCommande_SelectionChanged(null!, null!);
-            };
+            Loaded += (s, e) => OuvrirModalEncaissementAvecCommande(idCommandePreselectionnee);
         }
 
         public PaiementsView()
@@ -49,296 +64,395 @@ namespace GestionCoutureApp.Views
 
             _paiementService = App.Services.GetRequiredService<IPaiementService>();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
-            _authService = App.Services.GetRequiredService<IAuthService>();
-            _receiptService = App.Services.GetRequiredService<IReceiptService>();
+            _authService     = App.Services.GetRequiredService<IAuthService>();
+            _receiptService  = App.Services.GetRequiredService<IReceiptService>();
             _languageService = App.Services.GetRequiredService<ILanguageService>();
             _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
-            // ✅ CORRECTIF AUDIT #1 : S'abonner aux changements de commande
             _commandeService.CommandeChanged += OnCommandeChanged;
-            
-            // ✅ S'abonner aux changements de langue et de thème
-            _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
-            _eventAggregator.Subscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+            _eventAggregator.Subscribe(SettingsChangedType.Language,     OnLanguageChanged);
+            _eventAggregator.Subscribe(SettingsChangedType.AccentColor,  OnThemeChanged);
 
             var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _context = contextFactory.CreateDbContext();
+
             Unloaded += (s, e) =>
             {
                 _context.Dispose();
-                // ✅ Se désabonner pour éviter les fuites mémoire
                 _commandeService.CommandeChanged -= OnCommandeChanged;
-                _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
+                _eventAggregator.Unsubscribe(SettingsChangedType.Language,    OnLanguageChanged);
                 _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+                _rechercheTimer?.Stop();
             };
 
             _operateurConnecte = _authService.UtilisateurConnecte;
 
-            // Affiche le nom de l'operateur connecte dans le bandeau
             if (_operateurConnecte != null)
                 TxtOperateurConnecte.Text =
-                    "Operateur : " + _operateurConnecte.Prenom + " " + _operateurConnecte.Nom;
+                    "Opérateur : " + _operateurConnecte.Prenom + " " + _operateurConnecte.Nom;
 
-            ChargerCommandes();
+            // Timer de délai recherche (300 ms, single-shot)
+            _rechercheTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _rechercheTimer.Tick += async (s, e) =>
+            {
+                _rechercheTimer.Stop();
+                _currentPage = 1;
+                await ChargerPaiements();
+            };
+
             _ = ChargerPaiements();
         }
-        
-        // ------------------------------------------------------------------
-        // Gestionnaire de changement de langue
-        // ------------------------------------------------------------------
-        private void OnLanguageChanged(SettingsChangedEvent evt)
-        {
-            Dispatcher.Invoke(() => UpdateTranslations());
-        }
-        
-        // ------------------------------------------------------------------
-        // Gestionnaire de changement de thème
-        // ------------------------------------------------------------------
+
+        // ================================================================
+        // LANGUE / THÈME
+        // ================================================================
+
+        private void OnLanguageChanged(SettingsChangedEvent evt) =>
+            Dispatcher.Invoke(UpdateTranslations);
+
         private void OnThemeChanged(SettingsChangedEvent evt)
         {
-            // Les couleurs utilisent DynamicResource, donc elles se mettent à jour automatiquement
+            // Couleurs via DynamicResource — mise à jour automatique
         }
-        
-        // ------------------------------------------------------------------
-        // Mettre à jour les traductions de PaiementsView
-        // ------------------------------------------------------------------
+
         private void UpdateTranslations()
         {
-            // Pour l'instant, PaiementsView n'a pas beaucoup de textes traduisibles
-            // Les messages MessageBox restent en français pour l'instant
+            // PaiementsView n'a pas encore de textes multilingues côté vue
         }
 
-        // ----------------------------------------------------------------
-        // Chargement
-        // ----------------------------------------------------------------
-
-        private void ChargerCommandes()
-        {
-            try
-            {
-                var commandes = _commandeService.ObtenirTous();
-                CmbCommande.ItemsSource = commandes.Select(c => new
-                {
-                    c.IdCommande,
-                    // MontantTotalAvecMateriaux = couture + matériaux (Point 2) :
-                    // c'est le montant réel que le client doit payer sur sa facture.
-                    DisplayText = (c.Client?.Nom ?? "") + " " + (c.Client?.Prenom ?? "")
-                                  + " — " + (c.TypeVetementAffiche ?? "(aucun vêtement)")
-                                  + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA)"
-                }).ToList();
-                CmbCommande.SelectedValuePath = "IdCommande";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message, 
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+        // ================================================================
+        // CHARGEMENT TABLEAU
+        // ================================================================
 
         private async Task ChargerPaiements()
         {
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
-                GridPaiements.IsEnabled = false;
-                
-                // ✅ OPTIMISATION : Utiliser la version légère pour l'affichage tableau
-                var result = await _paiementService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+                GridPaiements.IsEnabled     = false;
+
+                string?             recherche = TxtRecherche.Text.Trim();
+                if (string.IsNullOrEmpty(recherche)) recherche = null;
+
+                StatutFiltrePaiement filtre = RbAnnules.IsChecked == true
+                    ? StatutFiltrePaiement.Annules
+                    : RbTous.IsChecked == true
+                        ? StatutFiltrePaiement.Tous
+                        : StatutFiltrePaiement.Valides;
+
+                var result = await _paiementService.ObtenirPageLightAsync(
+                    _currentPage, PAGE_SIZE, recherche, filtre);
+
                 GridPaiements.ItemsSource = result.Items;
-                
-                // Mettre à jour les boutons de pagination
+
                 BtnPagePrecedente.IsEnabled = result.HasPrevious;
-                BtnPageSuivante.IsEnabled = result.HasNext;
-                
-                // Mettre à jour l'info de pagination
-                int start = (result.Page - 1) * result.PageSize + 1;
-                int end = Math.Min(result.Page * result.PageSize, result.TotalCount);
-                TxtPaginationInfo.Text = $"{start}-{end} / {result.TotalCount} paiements";
+                BtnPageSuivante.IsEnabled   = result.HasNext;
+
+                int start = result.TotalCount == 0 ? 0 : (result.Page - 1) * result.PageSize + 1;
+                int end   = Math.Min(result.Page * result.PageSize, result.TotalCount);
+                TxtPaginationInfo.Text = result.TotalCount == 0
+                    ? "Aucun paiement"
+                    : $"{start}–{end} / {result.TotalCount} paiement{(result.TotalCount > 1 ? "s" : "")}";
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Erreur lors du chargement des paiements : " + ex.Message, 
+                MessageBox.Show("Erreur lors du chargement des paiements : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
                 LoadingIndicator.Visibility = Visibility.Collapsed;
-                GridPaiements.IsEnabled = true;
+                GridPaiements.IsEnabled     = true;
             }
         }
-        
+
+        // ── Pagination ──────────────────────────────────────────────
+
         private async void BtnPagePrecedente_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentPage > 1)
-            {
-                _currentPage--;
-                await ChargerPaiements();
-            }
+            if (_currentPage > 1) { _currentPage--; await ChargerPaiements(); }
         }
-        
+
         private async void BtnPageSuivante_Click(object sender, RoutedEventArgs e)
         {
             _currentPage++;
             await ChargerPaiements();
         }
 
-        // ----------------------------------------------------------------
-        // Selection d'une commande dans la ComboBox
-        // ----------------------------------------------------------------
+        // ── Recherche ───────────────────────────────────────────────
 
-        private void CmbCommande_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // Réinitialiser l'état du formulaire à chaque changement de sélection
-            TxtMontant.IsEnabled     = true;
-            BtnEnregistrer.IsEnabled = true;
+            // Relance le timer à chaque frappe (debounce 300 ms)
+            _rechercheTimer?.Stop();
+            _rechercheTimer?.Start();
+        }
 
+        // ── Filtres statut ──────────────────────────────────────────
+
+        private async void FiltreStatut_Changed(object sender, RoutedEventArgs e)
+        {
+            _currentPage = 1;
+            await ChargerPaiements();
+        }
+
+        // ================================================================
+        // COMMANDES ENCAISSABLES (pour la modale)
+        // ================================================================
+
+        private void ChargerCommandes()
+        {
             try
             {
-                if (CmbCommande.SelectedValue == null) return;
-                int idCmd = (int)CmbCommande.SelectedValue;
+                // Réutilise exactement la requête existante : ObtenirTous inclut
+                // Client, Paiements, Pieces, MaterielSupplements via CommandeService.
+                var commandes = _commandeService.ObtenirTous()
+                    .Where(c => !c.EstSupprimee && c.ResteAPayer > 0.01m)
+                    .ToList();
 
-                // Utiliser ObtenirParId pour charger toutes les relations nécessaires
-                _commandeSelectionnee = _commandeService.ObtenirParId(idCmd);
-                if (_commandeSelectionnee == null) return;
-
-                // Protection contre les propriétés null
-                string nomClient = _commandeSelectionnee.Client?.Nom ?? "";
-                string prenomClient = _commandeSelectionnee.Client?.Prenom ?? "";
-                TxtInfoClient.Text = "Client : " + nomClient + " " + prenomClient;
-
-                decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
-
-                // MontantTotalAvecMateriaux = couture + matériaux (Point 2).
-                // C'est le montant total de la FACTURE que le client doit régler.
-                // La commission du couturier sera calculée séparément sur MontantTotalCalcule
-                // (couture seul) — les matériaux n'y entrent jamais.
-                decimal montantTotal = _commandeSelectionnee.MontantTotalAvecMateriaux;
-                decimal montantCouture = _commandeSelectionnee.MontantTotalCalcule;
-                decimal montantMateriaux = _commandeSelectionnee.TotalMateriaux;
-                decimal reste = montantTotal - totalValide;
-
-                TxtInfoMontant.Text = montantMateriaux > 0
-                    ? $"Total facture : {montantTotal:N0} FCFA  (couture {montantCouture:N0} + materiaux {montantMateriaux:N0})"
-                    : $"Total facture : {montantTotal:N0} FCFA";
-                TxtInfoDejaPaye.Text = "Deja paye : " + totalValide.ToString("N0") + " FCFA";
-                TxtInfoReste.Text = "Reste : " + Math.Max(0m, reste).ToString("N0") + " FCFA";
-
-                // Historique detaille - avec protection
-                try
+                CmbCommandesNonSoldees.ItemsSource = commandes.Select(c => new
                 {
-                    var historique = _paiementService.ObtenirParCommande(idCmd);
-                    ListeHistorique.ItemsSource = historique
-                        .Select(p => p.AffichageHistorique)
-                        .ToList();
-                }
-                catch (Exception histEx)
-                {
-                    ListeHistorique.ItemsSource = new List<string> { "Erreur historique: " + histEx.Message };
-                }
-
-                // Désactive le champ montant si tout est payé.
-                // CORRECTIF : si montantTotal == 0 (commande sans pièces chargées),
-                // on garde le champ actif pour ne pas bloquer l'opérateur.
-                bool peutPayer = montantTotal <= 0.01m  // pas de montant calculé : laisser actif
-                              || reste > 0.01m;          // reste à payer : actif
-                TxtMontant.IsEnabled     = peutPayer;
-                BtnEnregistrer.IsEnabled = peutPayer;
+                    c.IdCommande,
+                    DisplayText = (c.Client?.Prenom ?? "") + " " + (c.Client?.Nom ?? "")
+                                  + " — " + (c.TypeVetementAffiche ?? "(aucun vêtement)")
+                                  + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA"
+                                  + " · reste : " + c.ResteAPayer.ToString("N0") + " FCFA)"
+                }).ToList();
+                CmbCommandesNonSoldees.SelectedValuePath = "IdCommande";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors de la sélection de la commande : {ex.Message}\n\nDétails : {ex.StackTrace}", 
+                MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        // ----------------------------------------------------------------
-        // Clic sur une ligne du tableau -> selectionne la commande
-        // ----------------------------------------------------------------
+        // ================================================================
+        // MODAL ENCAISSEMENT — ouverture / fermeture
+        // ================================================================
 
-        private void GridPaiements_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void BtnOuvrirModalEncaissement_Click(object sender, RoutedEventArgs e)
         {
-            if (GridPaiements.SelectedItem is Paiement p)
-                CmbCommande.SelectedValue = p.IdCommande;
+            ChargerCommandes();
+
+            if (CmbCommandesNonSoldees.Items.Count == 0)
+            {
+                MessageBox.Show(
+                    "Aucune commande n'est encaissable pour le moment.\n" +
+                    "Toutes les commandes sont soit soldées, soit sans reste à payer.",
+                    "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            ReinitialiserModalEncaissement();
+            OverlayEncaissement.Visibility = Visibility.Visible;
         }
 
-        // ----------------------------------------------------------------
-        // Enregistrer un paiement
-        // ----------------------------------------------------------------
-
-        private void BtnEnregistrer_Click(object sender, RoutedEventArgs e)
+        private void OuvrirModalEncaissementAvecCommande(int idCommande)
         {
-            // ✅ Protection contre double-clic
+            ChargerCommandes();
+
+            // Vérifier si la commande est encore encaissable
+            var commande = _commandeService.ObtenirParId(idCommande);
+            if (commande == null)
+            {
+                MessageBox.Show("Commande introuvable.", "Information",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            decimal reste = commande.ResteAPayer;
+            if (reste <= 0.01m)
+            {
+                MessageBox.Show(
+                    $"La commande CMD #{idCommande} est déjà entièrement soldée.\n" +
+                    $"Montant total : {commande.MontantTotalAvecMateriaux:N0} FCFA — " +
+                    $"encaissé : {commande.MontantEncaisse:N0} FCFA.",
+                    "Commande soldée", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (CmbCommandesNonSoldees.Items.Count == 0)
+            {
+                MessageBox.Show(
+                    "Aucune commande encaissable disponible.",
+                    "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            ReinitialiserModalEncaissement();
+            OverlayEncaissement.Visibility = Visibility.Visible;
+
+            // Présélectionner la commande dans le ComboBox
+            CmbCommandesNonSoldees.SelectedValue = idCommande;
+            CmbCommande_SelectionChanged(null!, null!);
+        }
+
+        private void BtnFermerModalEncaissement_Click(object sender, RoutedEventArgs e)
+        {
+            OverlayEncaissement.Visibility = Visibility.Collapsed;
+            _commandeSelectionnee = null;
+        }
+
+        private void ReinitialiserModalEncaissement()
+        {
+            CmbCommandesNonSoldees.SelectedIndex = -1;
+            TxtClientNom.Text          = "Client : —";
+            TxtResteExact.Text         = "— FCFA";
+            TxtResteApres.Text         = "— FCFA";
+            TxtMontantPaiement.Text    = "";
+            CmbModePaiement.SelectedIndex = 0;
+            _commandeSelectionnee      = null;
+        }
+
+        // ================================================================
+        // MODAL ENCAISSEMENT — sélection commande
+        // ================================================================
+
+        private void CmbCommande_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (CmbCommandesNonSoldees.SelectedValue == null)
+                {
+                    TxtClientNom.Text  = "Client : —";
+                    TxtResteExact.Text = "— FCFA";
+                    TxtResteApres.Text = "— FCFA";
+                    _commandeSelectionnee = null;
+                    return;
+                }
+
+                int idCmd = (int)CmbCommandesNonSoldees.SelectedValue;
+                _commandeSelectionnee = _commandeService.ObtenirParId(idCmd);
+                if (_commandeSelectionnee == null) return;
+
+                string prenom = _commandeSelectionnee.Client?.Prenom ?? "";
+                string nom    = _commandeSelectionnee.Client?.Nom    ?? "";
+                TxtClientNom.Text = "Client : " + prenom + " " + nom;
+
+                decimal totalValide = _paiementService.TotalValideParCommande(idCmd);
+                decimal montantTotal = _commandeSelectionnee.MontantTotalAvecMateriaux;
+                decimal reste        = Math.Max(0m, montantTotal - totalValide);
+
+                TxtResteExact.Text = reste.ToString("N0") + " FCFA";
+
+                // Pré-remplir le montant avec le reste exact
+                TxtMontantPaiement.Text = reste.ToString("N0");
+                ActualiserResteApres();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de la sélection de la commande : " + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void TxtMontantPaiement_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ActualiserResteApres();
+        }
+
+        private void ActualiserResteApres()
+        {
+            if (_commandeSelectionnee == null) { TxtResteApres.Text = "— FCFA"; return; }
+
+            string raw = TxtMontantPaiement.Text.Replace(" ", "").Replace("\u00A0", "");
+            if (!decimal.TryParse(raw, out decimal montant) || montant <= 0)
+            {
+                TxtResteApres.Text = "— FCFA";
+                return;
+            }
+
+            decimal totalValide  = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
+            decimal montantTotal = _commandeSelectionnee.MontantTotalAvecMateriaux;
+            decimal reste        = Math.Max(0m, montantTotal - totalValide);
+            decimal resteApres   = Math.Max(0m, reste - montant);
+
+            TxtResteApres.Text = resteApres.ToString("N0") + " FCFA";
+        }
+
+        // ================================================================
+        // MODAL ENCAISSEMENT — validation (BtnEnregistrer_Click migré)
+        // ================================================================
+
+        private void BtnValiderPaiement_Click(object sender, RoutedEventArgs e)
+        {
             if (_enCoursEnregistrement)
             {
-                MessageBox.Show("Enregistrement en cours, veuillez patienter...",
+                MessageBox.Show("Enregistrement en cours, veuillez patienter…",
                     "Opération en cours", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            
-            _enCoursEnregistrement = true;
-            BtnEnregistrer.IsEnabled = false;
-            
+
+            _enCoursEnregistrement   = true;
+            BtnValiderPaiement.IsEnabled = false;
+
             try
             {
-                // Validations de base
-                if (CmbCommande.SelectedValue == null)
-                { Alerte("Selectionnez une commande."); return; }
+                // ── Validations ──────────────────────────────────────
+                if (CmbCommandesNonSoldees.SelectedValue == null)
+                { Alerte("Sélectionnez une commande."); return; }
 
-                if (!decimal.TryParse(TxtMontant.Text.Replace(" ", ""), out decimal montant) || montant <= 0)
-                { Alerte("Le montant doit etre un nombre positif."); return; }
+                string raw = TxtMontantPaiement.Text.Replace(" ", "").Replace("\u00A0", "");
+                if (!decimal.TryParse(raw, out decimal montant) || montant <= 0)
+                { Alerte("Le montant doit être un nombre positif."); return; }
 
                 if (_commandeSelectionnee == null)
                 { Alerte("Commande introuvable."); return; }
 
                 if (_operateurConnecte == null)
-                { Alerte("Aucun operateur connecte."); return; }
+                { Alerte("Aucun opérateur connecté."); return; }
 
-                // Vérification du mode de paiement
                 if (CmbModePaiement.SelectedItem == null)
-                { Alerte("Selectionnez un mode de paiement."); return; }
+                { Alerte("Sélectionnez un mode de paiement."); return; }
 
-                // Verification solde en temps reel sur le montant total facture
-                // (couture + materiaux) — c'est ce que le client doit rembourser.
-                decimal totalValide = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
-                decimal reste = _commandeSelectionnee.MontantTotalAvecMateriaux - totalValide;
+                // ── Vérification solde en temps réel ─────────────────
+                decimal totalValide  = _paiementService.TotalValideParCommande(_commandeSelectionnee.IdCommande);
+                decimal reste        = _commandeSelectionnee.MontantTotalAvecMateriaux - totalValide;
 
                 if (reste <= 0.01m)
-                { Alerte("Cette commande est deja entierement payee."); return; }
+                { Alerte("Cette commande est déjà entièrement payée."); return; }
 
                 if (montant > reste + 0.01m)
                 {
-                    Alerte($"Le montant saisi ({montant:N0} FCFA) depasse\nle reste a payer ({reste:N0} FCFA).");
+                    Alerte($"Le montant saisi ({montant:N0} FCFA) dépasse\nle reste à payer ({reste:N0} FCFA).");
                     return;
                 }
 
-                // Confirmation avant enregistrement
-                string modeChoisi = CmbModePaiement.SelectedItem is ComboBoxItem item 
-                    ? item.Content?.ToString() ?? "Especes" 
-                    : CmbModePaiement.SelectedItem?.ToString() ?? "Especes";
-                
-                decimal totalFacture = _commandeSelectionnee.MontantTotalAvecMateriaux;
+                // ── Mode de paiement ──────────────────────────────────
+                string modeChoisi = CmbModePaiement.SelectedItem is ComboBoxItem item
+                    ? item.Content?.ToString() ?? "Espèces"
+                    : CmbModePaiement.SelectedItem?.ToString() ?? "Espèces";
+
+                // ── Confirmation ──────────────────────────────────────
+                decimal totalFacture  = _commandeSelectionnee.MontantTotalAvecMateriaux;
                 decimal totalMateriaux = _commandeSelectionnee.TotalMateriaux;
                 string ligneTotal = totalMateriaux > 0
-                    ? $"Total facture : {totalFacture:N0} FCFA (dont {totalMateriaux:N0} materiaux)\n"
+                    ? $"Total facture : {totalFacture:N0} FCFA (dont {totalMateriaux:N0} matériaux)\n"
                     : $"Total facture : {totalFacture:N0} FCFA\n";
 
-                string nomClient = (_commandeSelectionnee.Client?.Nom ?? "") + " " + (_commandeSelectionnee.Client?.Prenom ?? "");
+                string nomClient   = (_commandeSelectionnee.Client?.Prenom ?? "") + " "
+                                   + (_commandeSelectionnee.Client?.Nom    ?? "");
                 string nomOperateur = _operateurConnecte.Prenom + " " + _operateurConnecte.Nom;
 
                 var confirmation = MessageBox.Show(
                     $"Confirmer l'enregistrement du paiement ?\n\n" +
-                    $"Client  : {nomClient}\n" +
+                    $"Client   : {nomClient}\n" +
                     ligneTotal +
-                    $"Montant : {montant:N0} FCFA\n" +
-                    $"Mode    : {modeChoisi}\n" +
-                    $"Reste apres : {(reste - montant):N0} FCFA\n\n" +
-                    $"Operateur : {nomOperateur}",
+                    $"Montant  : {montant:N0} FCFA\n" +
+                    $"Mode     : {modeChoisi}\n" +
+                    $"Reste après : {(reste - montant):N0} FCFA\n\n" +
+                    $"Opérateur : {nomOperateur}",
                     "Confirmation du paiement",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
 
                 if (confirmation != MessageBoxResult.Yes) return;
 
+                // ── Enregistrement via service ────────────────────────
                 var paiement = new Paiement
                 {
                     IdCommande   = _commandeSelectionnee.IdCommande,
@@ -346,35 +460,28 @@ namespace GestionCoutureApp.Views
                     ModePaiement = modeChoisi
                 };
 
-                _paiementService.Ajouter(
-                    paiement,
-                    _operateurConnecte.IdEmploye,
-                    nomOperateur);
+                _paiementService.Ajouter(paiement, _operateurConnecte.IdEmploye, nomOperateur);
 
-                TxtMontant.Text = "";
+                // ── Fermer la modale, rafraîchir ──────────────────────
+                OverlayEncaissement.Visibility = Visibility.Collapsed;
+                _commandeSelectionnee = null;
                 _ = ChargerPaiements();
-                
-                // Rafraîchir avec protection
-                try
-                {
-                    CmbCommande_SelectionChanged(null!, null!);
-                }
-                catch (Exception refreshEx)
-                {
-                    // Ignorer les erreurs de rafraîchissement, le paiement est déjà enregistré
-                    MessageBox.Show("Paiement enregistre mais erreur lors du rafraichissement : " + refreshEx.Message,
-                        "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
+                ChargerCommandes();   // met à jour la liste des encaissables
 
-                MessageBox.Show(
-                    $"Paiement enregistre avec succes !\n\n" +
-                    $"Numero de recu : {paiement.RecuNumero}\n" +
-                    $"Montant        : {paiement.MontantPaye:N0} FCFA\n" +
-                    $"Operateur      : {paiement.NomOperateur}\n" +
-                    $"Date           : {paiement.DatePaiement:dd/MM/yyyy HH:mm}",
-                    "Paiement enregistre",
-                    MessageBoxButton.OK,
+                // ── Proposer l'impression du reçu ─────────────────────
+                var imprimer = MessageBox.Show(
+                    $"Paiement enregistré avec succès !\n\n" +
+                    $"N° Reçu  : {paiement.RecuNumero}\n" +
+                    $"Montant  : {paiement.MontantPaye:N0} FCFA\n" +
+                    $"Mode     : {paiement.ModePaiement}\n" +
+                    $"Opérateur : {paiement.NomOperateur}\n\n" +
+                    $"Voulez-vous imprimer le reçu ?",
+                    "Paiement enregistré",
+                    MessageBoxButton.YesNo,
                     MessageBoxImage.Information);
+
+                if (imprimer == MessageBoxResult.Yes)
+                    OuvrirFenetreRecu(paiement);
             }
             catch (InvalidOperationException ex)
             {
@@ -386,95 +493,26 @@ namespace GestionCoutureApp.Views
             }
             finally
             {
-                // ✅ Toujours réactiver le bouton
-                _enCoursEnregistrement = false;
-                BtnEnregistrer.IsEnabled = true;
+                _enCoursEnregistrement       = false;
+                BtnValiderPaiement.IsEnabled = true;
             }
         }
 
-        // ----------------------------------------------------------------
-        // Annuler un paiement (Boss uniquement, motif obligatoire)
-        // ----------------------------------------------------------------
+        // ================================================================
+        // ACTIONS DE LIGNE — Reçu
+        // ================================================================
 
-        private void BtnAnnuler_Click(object sender, RoutedEventArgs e)
+        private void BtnLigneRecu_Click(object sender, RoutedEventArgs e)
         {
-            if (GridPaiements.SelectedItem is not Paiement paiement)
-            {
-                Alerte("Selectionnez un paiement dans le tableau pour l'annuler.");
-                return;
-            }
-
-            if (paiement.EstAnnule)
-            {
-                Alerte("Ce paiement est deja annule.");
-                return;
-            }
-
-            // Seul le Boss peut annuler
-            if (_operateurConnecte?.Role != "Boss")
-            {
-                Alerte("Seul le Boss peut annuler un paiement.");
-                return;
-            }
-
-            // Fenetre de saisie du motif + confirmation mot de passe
-            string? motif = DemanderMotifAnnulation(paiement);
-            if (motif == null) return; // annulation de l'annulation
-
-            // Confirmation finale
-            var confirmation = MessageBox.Show(
-                $"ATTENTION : Cette action est irreversible !\n\n" +
-                $"Paiement  : {paiement.RecuNumero}\n" +
-                $"Montant   : {paiement.MontantPaye:N0} FCFA\n" +
-                $"Operateur : {paiement.NomOperateur}\n" +
-                $"Motif     : {motif}\n\n" +
-                $"Confirmer l'annulation ?",
-                "Confirmation annulation",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (confirmation != MessageBoxResult.Yes) return;
-
-            try
-            {
-                _paiementService.Annuler(
-                    paiement.IdPaiement,
-                    motif,
-                    _operateurConnecte.IdEmploye,
-                    _operateurConnecte.Prenom + " " + _operateurConnecte.Nom);
-
-                _ = ChargerPaiements();
-                CmbCommande_SelectionChanged(null!, null!);
-
-                MessageBox.Show(
-                    $"Paiement {paiement.RecuNumero} annule.\n" +
-                    $"Le montant de {paiement.MontantPaye:N0} FCFA est desormais\n" +
-                    $"reintegre dans le solde de la commande.",
-                    "Annulation effectuee",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (InvalidOperationException ex)
-            {
-                Alerte("Erreur : " + ex.Message);
-            }
+            if (sender is Button btn && btn.Tag is Paiement paiement)
+                OuvrirFenetreRecu(paiement);
         }
 
-        // ----------------------------------------------------------------
-        // Generer le recu imprimable
-        // ----------------------------------------------------------------
-
-        private void BtnGenererRecu_Click(object sender, RoutedEventArgs e)
+        private void OuvrirFenetreRecu(Paiement paiement)
         {
-            if (GridPaiements.SelectedItem is not Paiement paiement)
-            {
-                Alerte("Selectionnez un paiement dans le tableau.");
-                return;
-            }
-
             if (paiement.EstAnnule)
             {
-                Alerte("Ce paiement est annule. Impossible d'imprimer un recu annule.");
+                Alerte("Ce paiement est annulé. Impossible d'imprimer un reçu annulé.");
                 return;
             }
 
@@ -487,291 +525,214 @@ namespace GestionCoutureApp.Views
 
             if (commande == null) { Alerte("Commande introuvable."); return; }
 
-            // Les mesures sont maintenant portées par chaque pièce (Étape 1b-i).
-            // On les rassemble depuis toutes les pièces pour rétrocompatibilité
-            // avec FenetreRecu qui attend encore une liste plate de Mesure.
+            // Les mesures sont portées par chaque pièce — on les rassemble
+            // pour rétrocompatibilité avec FenetreRecu (liste plate de Mesure).
             var mesures = commande.Pieces.SelectMany(p => p.Mesures).ToList();
 
-            var fenetre = new FenetreRecu(commande, paiement, mesures, paiement.NomOperateur, _receiptService);
+            var fenetre = new FenetreRecu(commande, paiement, mesures,
+                                          paiement.NomOperateur, _receiptService);
             fenetre.Owner = Window.GetWindow(this);
             fenetre.Show();
         }
 
-        // ----------------------------------------------------------------
-        // Fenetre de saisie du motif d'annulation
-        // ----------------------------------------------------------------
+        // ================================================================
+        // ACTIONS DE LIGNE — Annuler (Boss uniquement)
+        // ================================================================
 
-        private string? DemanderMotifAnnulation(Paiement paiement)
+        private void BtnLigneAnnuler_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Window
-            {
-                Title = "Motif d'annulation",
-                Width = 440,
-                SizeToContent = SizeToContent.Height,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize,
-                Background = Brushes.White,
-                Owner = Window.GetWindow(this)
-            };
+            if (sender is not Button btn || btn.Tag is not Paiement paiement) return;
 
-            var panel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+            if (paiement.EstAnnule)
+            { Alerte("Ce paiement est déjà annulé."); return; }
 
-            // Info paiement
-            panel.Children.Add(new TextBlock
-            {
-                Text = $"Paiement : {paiement.RecuNumero}",
-                FontSize = 13,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x5F)),
-                Margin = new Thickness(0, 0, 0, 4)
-            });
-            panel.Children.Add(new TextBlock
-            {
-                Text = $"Montant : {paiement.MontantPaye:N0} FCFA  |  Operateur : {paiement.NomOperateur}",
-                FontSize = 12,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
-                Margin = new Thickness(0, 0, 0, 16)
-            });
+            if (_operateurConnecte?.Role != "Boss")
+            { Alerte("Seul le Boss peut annuler un paiement."); return; }
 
-            // Champ motif
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Motif d'annulation * (obligatoire)",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
-                Margin = new Thickness(0, 0, 0, 5)
-            });
-
-            var txMotif = new TextBox
-            {
-                Height = 80,
-                FontSize = 13,
-                Padding = new Thickness(8),
-                TextWrapping = TextWrapping.Wrap,
-                AcceptsReturn = true,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Margin = new Thickness(0, 0, 0, 6)
-            };
-            panel.Children.Add(txMotif);
-
-            var msgErreur = new TextBlock
-            {
-                Text = "",
-                FontSize = 12,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
-                Margin = new Thickness(0, 0, 0, 10)
-            };
-            panel.Children.Add(msgErreur);
-
-            // Mot de passe Boss
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Mot de passe Boss (confirmation)",
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
-                Margin = new Thickness(0, 0, 0, 5)
-            });
-
-            var pwBox = new PasswordBox
-            {
-                Height = 38,
-                FontSize = 13,
-                Padding = new Thickness(10, 0, 10, 0),
-                VerticalContentAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 16)
-            };
-            panel.Children.Add(pwBox);
-
-            panel.Children.Add(new Separator
-            {
-                Background = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
-                Margin = new Thickness(0, 0, 0, 14)
-            });
-
-            // Boutons
-            var btnPanel = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right
-            };
-
-            var btnConfirmer = new Button
-            {
-                Content = "Confirmer",
-                Width = 120,
-                Height = 38,
-                FontSize = 13,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
-                BorderThickness = new Thickness(0),
-                Margin = new Thickness(0, 0, 10, 0),
-                Cursor = Cursors.Hand
-            };
-
-            var btnAnnulerDialog = new Button
-            {
-                Content = "Annuler",
-                Width = 100,
-                Height = 38,
-                FontSize = 13,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
-                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
-                BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
-                Cursor = Cursors.Hand
-            };
-
-            btnConfirmer.Click += (s, ev) =>
-            {
-                if (string.IsNullOrWhiteSpace(txMotif.Text))
-                {
-                    msgErreur.Text = "Le motif est obligatoire.";
-                    txMotif.Focus();
-                    return;
-                }
-                if (txMotif.Text.Trim().Length < 10)
-                {
-                    msgErreur.Text = "Le motif doit contenir au moins 10 caracteres.";
-                    txMotif.Focus();
-                    return;
-                }
-
-                // Verification mot de passe Boss
-                string mdpSaisi = pwBox.Password.Trim();
-                if (string.IsNullOrEmpty(mdpSaisi))
-                {
-                    msgErreur.Text = "Le mot de passe Boss est obligatoire.";
-                    pwBox.Focus();
-                    return;
-                }
-
-                // Avec un hachage salé, on ne peut plus comparer les hash directement en SQL :
-                // on charge les comptes Boss puis on vérifie le mot de passe en mémoire.
-                var boss = _context.Employes
-                    .Where(emp => emp.Role == "Boss" && emp.Statut == "Actif")
-                    .AsEnumerable()
-                    .FirstOrDefault(emp =>
-                        GestionCoutureApp.Helpers.PasswordHasher.EstAncienFormatSha256(emp.MotDePasse)
-                            ? emp.MotDePasse == GestionCoutureApp.Helpers.PasswordHasher.HasherAncienSha256(mdpSaisi)
-                            : GestionCoutureApp.Helpers.PasswordHasher.Verifier(mdpSaisi, emp.MotDePasse));
-
-                if (boss == null)
-                {
-                    msgErreur.Text = "Mot de passe Boss incorrect.";
-                    pwBox.Clear();
-                    pwBox.Focus();
-                    return;
-                }
-
-                dialog.Tag = txMotif.Text.Trim();
-                dialog.DialogResult = true;
-                dialog.Close();
-            };
-
-            btnAnnulerDialog.Click += (s, ev) =>
-            {
-                dialog.DialogResult = false;
-                dialog.Close();
-            };
-
-            btnPanel.Children.Add(btnConfirmer);
-            btnPanel.Children.Add(btnAnnulerDialog);
-            panel.Children.Add(btnPanel);
-            dialog.Content = panel;
-
-            bool? result = dialog.ShowDialog();
-            if (result == true && dialog.Tag is string motif)
-                return motif;
-
-            return null;
+            // Ouvrir la modale d'annulation
+            _paiementAnnulationEnCours = paiement;
+            TxtInfoAnnulation.Text =
+                $"Paiement : {paiement.RecuNumero}\n" +
+                $"Montant  : {paiement.MontantPaye:N0} FCFA\n" +
+                $"Opérateur : {paiement.NomOperateur}\n" +
+                $"Date     : {paiement.DatePaiement:dd/MM/yyyy HH:mm}";
+            TxtMotifAnnulation.Text   = "";
+            PwdBossAnnulation.Clear();
+            TxtErreurMotif.Text       = "";
+            TxtErreurMdp.Text         = "";
+            OverlayAnnulation.Visibility = Visibility.Visible;
         }
 
-        // ----------------------------------------------------------------
-        // ✅ CORRECTIF AUDIT #1 : Gestion des changements de commande
-        // ----------------------------------------------------------------
+        // ================================================================
+        // MODAL ANNULATION — fermeture
+        // ================================================================
 
-        /// <summary>
-        /// Appelé automatiquement lorsqu'une commande est modifiée ailleurs
-        /// (ex: ajout de pièce depuis CommandesView).
-        /// Rafraîchit l'affichage si c'est la commande actuellement sélectionnée.
-        /// </summary>
+        private void BtnFermerModalAnnulation_Click(object sender, RoutedEventArgs e)
+        {
+            OverlayAnnulation.Visibility  = Visibility.Collapsed;
+            _paiementAnnulationEnCours    = null;
+        }
+
+        // ================================================================
+        // MODAL ANNULATION — confirmation (DemanderMotifAnnulation migré)
+        // ================================================================
+
+        private void BtnConfirmerAnnulation_Click(object sender, RoutedEventArgs e)
+        {
+            // ── Validation motif ──────────────────────────────────────
+            TxtErreurMotif.Text = "";
+            TxtErreurMdp.Text   = "";
+
+            string motif = TxtMotifAnnulation.Text.Trim();
+            if (string.IsNullOrWhiteSpace(motif))
+            {
+                TxtErreurMotif.Text = "Le motif est obligatoire.";
+                TxtMotifAnnulation.Focus();
+                return;
+            }
+            if (motif.Length < 10)
+            {
+                TxtErreurMotif.Text = "Le motif doit contenir au moins 10 caractères.";
+                TxtMotifAnnulation.Focus();
+                return;
+            }
+
+            // ── Validation mot de passe Boss ──────────────────────────
+            string mdpSaisi = PwdBossAnnulation.Password.Trim();
+            if (string.IsNullOrEmpty(mdpSaisi))
+            {
+                TxtErreurMdp.Text = "Le mot de passe Boss est obligatoire.";
+                PwdBossAnnulation.Focus();
+                return;
+            }
+
+            // Vérification avec hashage sécurisé (même logique que DemanderMotifAnnulation)
+            var boss = _context.Employes
+                .Where(emp => emp.Role == "Boss" && emp.Statut == "Actif")
+                .AsEnumerable()
+                .FirstOrDefault(emp =>
+                    PasswordHasher.EstAncienFormatSha256(emp.MotDePasse)
+                        ? emp.MotDePasse == PasswordHasher.HasherAncienSha256(mdpSaisi)
+                        : PasswordHasher.Verifier(mdpSaisi, emp.MotDePasse));
+
+            if (boss == null)
+            {
+                TxtErreurMdp.Text = "Mot de passe Boss incorrect.";
+                PwdBossAnnulation.Clear();
+                PwdBossAnnulation.Focus();
+                return;
+            }
+
+            if (_paiementAnnulationEnCours == null) return;
+
+            // ── Confirmation finale irréversible ──────────────────────
+            var confirmation = MessageBox.Show(
+                $"ATTENTION : Cette action est irréversible !\n\n" +
+                $"Paiement  : {_paiementAnnulationEnCours.RecuNumero}\n" +
+                $"Montant   : {_paiementAnnulationEnCours.MontantPaye:N0} FCFA\n" +
+                $"Opérateur : {_paiementAnnulationEnCours.NomOperateur}\n" +
+                $"Motif     : {motif}\n\n" +
+                $"Confirmer l'annulation ?",
+                "Confirmation annulation",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirmation != MessageBoxResult.Yes) return;
+
+            try
+            {
+                _paiementService.Annuler(
+                    _paiementAnnulationEnCours.IdPaiement,
+                    motif,
+                    _operateurConnecte!.IdEmploye,
+                    _operateurConnecte.Prenom + " " + _operateurConnecte.Nom);
+
+                OverlayAnnulation.Visibility  = Visibility.Collapsed;
+                _paiementAnnulationEnCours    = null;
+                _ = ChargerPaiements();
+
+                MessageBox.Show(
+                    $"Paiement annulé.\n" +
+                    $"Le montant de {_paiementAnnulationEnCours?.MontantPaye.ToString("N0") ?? ""} FCFA est désormais\n" +
+                    $"réintégré dans le solde de la commande.",
+                    "Annulation effectuée",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Alerte("Erreur : " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Alerte("Erreur inattendue : " + ex.Message);
+            }
+        }
+
+        // ================================================================
+        // TEMPS RÉEL — OnCommandeChanged
+        // ================================================================
+
         private void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
         {
-            // Ne rien faire si aucune commande sélectionnée ou si c'est une autre commande
-            if (_commandeSelectionnee == null || _commandeSelectionnee.IdCommande != e.IdCommande)
-                return;
-
-            // Rafraîchir sur le thread UI
             Dispatcher.Invoke(() =>
             {
-                // Recharger la commande depuis la base
-                _commandeSelectionnee = _commandeService.ObtenirParId(e.IdCommande);
-
-                if (_commandeSelectionnee == null)
-                {
-                    // La commande a été supprimée
-                    TxtInfoMontant.Text = "—";
-                    TxtInfoReste.Text = "—";
-                    TxtInfoClient.Text = "Commande supprimée";
-                    return;
-                }
-
-                // Mettre à jour l'affichage
-                TxtInfoMontant.Text = _commandeSelectionnee.MontantTotalAvecMateriaux.ToString("N0") + " FCFA";
-                TxtInfoReste.Text = _commandeSelectionnee.ResteAPayer.ToString("N0") + " FCFA";
-                
-                decimal dejaEncaisse = _commandeSelectionnee.Paiements
-                    .Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
-                TxtInfoDejaPaye.Text = $"Deja paye : {dejaEncaisse:N0} FCFA";
-
-                // Couleur du reste à payer
-                if (_commandeSelectionnee.ResteAPayer <= 0.01m)
-                {
-                    TxtInfoReste.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
-                    TxtInfoReste.Text += " ✓";
-                }
-                else
-                {
-                    TxtInfoReste.Foreground = new SolidColorBrush(Color.FromRgb(0xF9, 0x73, 0x16));
-                }
-
-                // Afficher un toast informatif temporaire
-                var originalClient = TxtInfoClient.Text;
-                TxtInfoClient.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
-                TxtInfoClient.Text = $"⚡ {e.TypeChangement}";
-
-                // Retour au texte normal après 3 secondes
-                var timer = new System.Windows.Threading.DispatcherTimer 
-                { 
-                    Interval = TimeSpan.FromSeconds(3) 
-                };
-                timer.Tick += (s, _) =>
-                {
-                    TxtInfoClient.Text = originalClient;
-                    TxtInfoClient.Foreground = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A));
-                    timer.Stop();
-                };
-                timer.Start();
-
-                // Recharger aussi la liste des commandes (ComboBox) et paiements
-                ChargerCommandes();
+                // Toujours rafraîchir le tableau
                 _ = ChargerPaiements();
+
+                // Si la modale d'encaissement est ouverte et concerne cette commande
+                if (OverlayEncaissement.Visibility == Visibility.Visible
+                    && _commandeSelectionnee?.IdCommande == e.IdCommande)
+                {
+                    var commandeMAJ = _commandeService.ObtenirParId(e.IdCommande);
+
+                    if (commandeMAJ == null)
+                    {
+                        // Commande supprimée — fermer la modale avec message
+                        OverlayEncaissement.Visibility = Visibility.Collapsed;
+                        _commandeSelectionnee = null;
+                        MessageBox.Show(
+                            "La commande sélectionnée a été supprimée.\nLa fenêtre d'encaissement a été fermée.",
+                            "Commande supprimée", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Recalculer reste / montant
+                    _commandeSelectionnee = commandeMAJ;
+                    decimal totalValide  = _paiementService.TotalValideParCommande(e.IdCommande);
+                    decimal montantTotal = commandeMAJ.MontantTotalAvecMateriaux;
+                    decimal reste        = Math.Max(0m, montantTotal - totalValide);
+
+                    TxtResteExact.Text = reste.ToString("N0") + " FCFA";
+
+                    if (reste <= 0.01m)
+                    {
+                        // Commande soldée pendant que la modale était ouverte
+                        OverlayEncaissement.Visibility = Visibility.Collapsed;
+                        _commandeSelectionnee = null;
+                        MessageBox.Show(
+                            "Cette commande vient d'être soldée.\nLa fenêtre d'encaissement a été fermée.",
+                            "Commande soldée", MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+
+                    ActualiserResteApres();
+                }
+
+                // Rafraîchir aussi la liste des commandes encaissables si la modale est ouverte
+                if (OverlayEncaissement.Visibility == Visibility.Visible)
+                    ChargerCommandes();
             });
         }
 
-        // ----------------------------------------------------------------
-        // Helpers
-        // ----------------------------------------------------------------
+        // ================================================================
+        // HELPERS
+        // ================================================================
 
-        private void Alerte(string message)
-        {
+        private void Alerte(string message) =>
             MessageBox.Show(message, "Attention", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
 
-        // ✅ Validation des montants décimaux
+        /// <summary>Validation saisie numérique décimale — même logique que l'existant.</summary>
         private void TxtMontant_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
             try
@@ -780,9 +741,7 @@ namespace GestionCoutureApp.Views
             }
             catch
             {
-                // Empêcher le crash en cas d'erreur de validation
                 e.Handled = true;
-                // Ne pas afficher d'erreur à l'utilisateur pour ne pas perturber la saisie
             }
         }
     }

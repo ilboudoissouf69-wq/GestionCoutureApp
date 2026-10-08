@@ -67,7 +67,9 @@ namespace GestionCoutureApp.Services
             
             var query = context.Paiements
                 .Include(p => p.Commande)
-                .ThenInclude(c => c!.Client)
+                    .ThenInclude(c => c!.Client)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces)
                 .OrderByDescending(p => p.DatePaiement);
             
             var totalCount = await query.CountAsync();
@@ -82,6 +84,56 @@ namespace GestionCoutureApp.Services
                 TotalCount = totalCount,
                 Page = page,
                 PageSize = pageSize
+            };
+        }
+
+        // ✅ SURCHARGE ADDITIVE : recherche + filtre côté base, tri DatePaiement desc conservé
+        public async Task<PagedResult<Paiement>> ObtenirPageLightAsync(
+            int page, int pageSize, string? recherche, StatutFiltrePaiement filtre)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            var query = context.Paiements
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Client)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces)
+                .AsQueryable();
+
+            // Filtre statut
+            query = filtre switch
+            {
+                StatutFiltrePaiement.Valides  => query.Where(p => !p.EstAnnule),
+                StatutFiltrePaiement.Annules  => query.Where(p => p.EstAnnule),
+                _                             => query   // Tous
+            };
+
+            // Recherche texte (côté base via EF/SQLite)
+            if (!string.IsNullOrWhiteSpace(recherche))
+            {
+                string r = recherche.Trim();
+                query = query.Where(p =>
+                    p.RecuNumero.Contains(r) ||
+                    p.NomOperateur.Contains(r) ||
+                    (p.Commande != null && p.Commande.Client != null && (
+                        p.Commande.Client.Nom.Contains(r) ||
+                        p.Commande.Client.Prenom.Contains(r))));
+            }
+
+            query = query.OrderByDescending(p => p.DatePaiement);
+
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PagedResult<Paiement>
+            {
+                Items     = items,
+                TotalCount = totalCount,
+                Page      = page,
+                PageSize  = pageSize
             };
         }
 
