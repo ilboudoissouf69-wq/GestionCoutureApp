@@ -90,6 +90,8 @@ namespace GestionCoutureApp.Services
             var query = context.Commandes
                 .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
                 .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
                 .OrderByDescending(c => c.DateDebut);
@@ -756,6 +758,8 @@ namespace GestionCoutureApp.Services
             var query = context.Commandes
                 .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
                 .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
                 .Where(c => c.Client != null && (

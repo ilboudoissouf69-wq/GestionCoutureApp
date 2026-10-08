@@ -30,6 +30,19 @@ namespace GestionCoutureApp.Views
         // ✅ Protection contre double-clic
         private bool _enCoursEnregistrement = false;
 
+        /// <summary>
+        /// Surcharge : ouvre PaiementsView et présélectionne la commande indiquée.
+        /// La sélection est effectuée dans Loaded pour laisser CmbCommande s'initialiser.
+        /// </summary>
+        public PaiementsView(int idCommandePreselectionnee) : this()
+        {
+            Loaded += (s, e) =>
+            {
+                CmbCommande.SelectedValue = idCommandePreselectionnee;
+                CmbCommande_SelectionChanged(null!, null!);
+            };
+        }
+
         public PaiementsView()
         {
             InitializeComponent();

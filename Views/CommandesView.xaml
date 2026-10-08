@@ -10,86 +10,55 @@
     </Page.Resources>
 
     <!-- ================================================================
-         Layout principal : liste gauche (40%) | panneau droite (60%)
+         Layout racine : Grid.  Row 0 = contenu principal (tableau + barre)
+                                Row 1 = OVERLAY MODAL (Visibility.Collapsed par défaut)
+         Trick WPF : la Grid empile ses enfants par défaut dans la même cellule
+         quand on ne précise pas de RowDefinition séparé pour l'overlay ;
+         on met l'overlay dans Row 0 avec ZIndex=99 et il couvre tout.
     ================================================================ -->
-    <Grid Margin="28,24,28,28">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2.2*"/>
-            <ColumnDefinition Width="16"/>
-            <ColumnDefinition Width="3*"/>
-        </Grid.ColumnDefinitions>
+    <Grid>
 
-        <!-- ============================================================
-             COLONNE GAUCHE — liste des commandes existantes
-        ============================================================ -->
-        <Grid Grid.Column="0">
+        <!-- ════════════════════════════════════════════════════════════
+             CONTENU PRINCIPAL
+        ════════════════════════════════════════════════════════════ -->
+        <Grid x:Name="ContenuPrincipal" Margin="28,24,28,28">
             <Grid.RowDefinitions>
+                <!-- Titre + barre d'outils -->
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <!-- Tableau pleine largeur -->
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Titre -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                <TextBlock Text="Gestion des Commandes"
-                           FontSize="22" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
-                <Border Height="3" Width="48" CornerRadius="2"
-                        Background="{StaticResource AccentBrush}" HorizontalAlignment="Left" Margin="0,6,0,0"/>
-            </StackPanel>
+            <!-- ── Barre titre + actions ─────────────────────────────── -->
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- Recherche -->
-            <TextBox Grid.Row="1"
-                     x:Name="TxtRecherche"
-                     Style="{StaticResource ModernTextBox}"
-                     Margin="0,0,0,6"
-                     TextChanged="TxtRecherche_TextChanged"/>
+                <!-- Titre -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📋" FontSize="22" VerticalAlignment="Center"
+                                   Margin="0,0,10,0"/>
+                        <TextBlock Text="Gestion des Commandes"
+                                   FontSize="22" FontWeight="Bold"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Commandes multi-pièces, fiches de mesures, échéances et fiches de coupe atelier"
+                               FontSize="12" Foreground="#94A3B8" Margin="0,4,0,0"/>
+                </StackPanel>
 
-            <!-- Filtres rapides statut + couturier + compteur retard -->
-            <Border Grid.Row="2"
-                    Background="White"
-                    CornerRadius="6"
-                    Padding="8,6"
-                    Margin="0,0,0,8"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="8"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="8"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Filtre par statut -->
-                    <ComboBox Grid.Column="0"
-                              x:Name="CmbFiltreStatut"
-                              Width="110" Height="28"
-                              FontSize="11"
-                              SelectionChanged="CmbFiltreStatut_SelectionChanged">
-                        <ComboBoxItem Content="Tous les statuts" Tag="" IsSelected="True"/>
-                        <ComboBoxItem Content="À faire" Tag="A faire"/>
-                        <ComboBoxItem Content="En cours" Tag="En cours"/>
-                        <ComboBoxItem Content="Terminée" Tag="Terminee"/>
-                        <ComboBoxItem Content="Livrée" Tag="Livree"/>
-                    </ComboBox>
-
-                    <!-- Filtre par couturier -->
-                    <ComboBox Grid.Column="2"
-                              x:Name="CmbFiltreCouturier"
-                              Height="28"
-                              FontSize="11"
-                              DisplayMemberPath="Prenom"
-                              SelectedValuePath="IdEmploye"
-                              SelectionChanged="CmbFiltreCouturier_SelectionChanged"/>
+                <!-- Bouton nouvelle commande + filtre retard -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            VerticalAlignment="Center" HorizontalAlignment="Right">
 
                     <!-- Compteur retard cliquable -->
-                    <Button Grid.Column="4"
-                            x:Name="BtnCompteurRetard"
-                            Height="28" Padding="8,0"
-                            FontSize="11" FontWeight="SemiBold"
-                            Cursor="Hand"
+                    <Button x:Name="BtnCompteurRetard"
+                            Height="36" Padding="12,0"
+                            FontSize="12" FontWeight="SemiBold"
+                            Cursor="Hand" Margin="0,0,10,0"
                             Click="BtnCompteurRetard_Click"
                             ToolTip="Afficher uniquement les commandes en retard">
                         <Button.Style>
@@ -104,8 +73,9 @@
                                             <Border Background="{TemplateBinding Background}"
                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
                                             </Border>
                                         </ControlTemplate>
                                     </Setter.Value>
@@ -119,1406 +89,1041 @@
                         </Button.Style>
                         <TextBlock x:Name="TxtCompteurRetard" Text="🔴 0 retard"/>
                     </Button>
-                </Grid>
-            </Border>
 
-            <!-- Tableau commandes -->
-            <Border Grid.Row="3"
-                    Style="{StaticResource Card}"
-                    Padding="0">
-                <StackPanel>
-                    <!-- Indicateur de chargement -->
-                    <Border x:Name="LoadingIndicator" 
-                            Background="#F8F9FA" 
-                            Padding="12" 
-                            Visibility="Collapsed">
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="⏳" FontSize="14" Margin="0,0,8,0"/>
-                            <TextBlock Text="Chargement..." FontSize="12" Foreground="#6B7280" VerticalAlignment="Center"/>
+                    <!-- Bouton Nouvelle Commande — orange -->
+                    <Button x:Name="BtnOuvrirModalCommande"
+                            Height="36" Padding="16,0"
+                            FontSize="13" FontWeight="Bold"
+                            Cursor="Hand"
+                            Click="BtnOuvrirModalCommande_Click">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="#F97316"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#EA6C0A"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="+" FontSize="18" FontWeight="Bold"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Nouvelle Commande" VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Border>
-                    
-                    <DataGrid x:Name="GridCommandes"
-                              Style="{StaticResource ModernGrid}"
-                              SelectionChanged="GridCommandes_SelectionChanged"
-                              AutoGenerateColumns="False"
-                              VirtualizingStackPanel.IsVirtualizing="True"
-                              VirtualizingStackPanel.VirtualizationMode="Recycling"
-                              ScrollViewer.CanContentScroll="True">
-                    <!-- Ligne légèrement rosée si commande en retard -->
-                    <DataGrid.RowStyle>
-                        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
-                                    <Setter Property="Background" Value="#FFF5F5"/>
-                                    <Setter Property="ToolTip" Value="⚠️ Cette commande est en retard"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </DataGrid.RowStyle>
-                    <DataGrid.Columns>
-                        <!-- Photo : fixe petite -->
-                        <DataGridTemplateColumn Header="Photo" Width="46" MinWidth="46">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Border CornerRadius="4" Background="#F2ECE8"
-                                            Width="32" Height="32" Margin="4,2">
-                                        <Image Source="{Binding Pieces[0].CheminPhoto,
-                                               Converter={StaticResource ImagePathConverter}}"
-                                               Stretch="UniformToFill"/>
-                                    </Border>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
-                        <!-- Client : prend tout l'espace disponible -->
-                        <DataGridTextColumn Header="Client"
-                                            Binding="{Binding Client.Nom}"
-                                            Width="*"
-                                            MinWidth="80">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock"
-                                       BasedOn="{StaticResource DataGridCellText}"/>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <!-- Pièces : court -->
-                        <DataGridTextColumn Header="Pièces"
-                                            Binding="{Binding Pieces.Count}"
-                                            Width="55"
-                                            MinWidth="50">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock"
-                                       BasedOn="{StaticResource DataGridCellText}"/>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <!-- Statut : largeur fixe lisible -->
-                        <DataGridTextColumn Header="Statut"
-                                            Binding="{Binding StatutGlobalAffiche}"
-                                            Width="95"
-                                            MinWidth="80">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock"
-                                       BasedOn="{StaticResource DataGridCellText}"/>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <!-- Total : largeur auto -->
-                        <DataGridTextColumn Header="Total (FCFA)"
-                                            Binding="{Binding MontantTotalCalcule, StringFormat={}{0:N0}}"
-                                            Width="Auto"
-                                            MinWidth="75">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock"
-                                       BasedOn="{StaticResource DataGridCellText}">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-
-                        <!-- RDV : court, rouge si en retard -->
-                        <DataGridTemplateColumn Header="RDV" Width="60" MinWidth="55">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding DateFin, StringFormat={}{0:dd/MM}}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"
-                                               Margin="2,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
-                                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                                                <Setter Property="FontWeight" Value="Normal"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
-                                                        <Setter Property="Foreground" Value="#DC2626"/>
-                                                        <Setter Property="FontWeight" Value="Bold"/>
-                                                        <Setter Property="ToolTip" Value="⚠️ En retard !"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
-                        <!-- Paiement : Impayé / Acompte / Soldé avec couleur -->
-                        <DataGridTemplateColumn Header="Paiement" Width="72" MinWidth="68">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Border CornerRadius="8" Padding="5,2"
-                                            HorizontalAlignment="Center" Margin="2,2">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Background" Value="#FEF2F2"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding StatutPaiement}" Value="Acompte">
-                                                        <Setter Property="Background" Value="#FFFBEB"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding StatutPaiement}" Value="Soldé">
-                                                        <Setter Property="Background" Value="#F0FDF4"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <TextBlock Text="{Binding StatutPaiement}"
-                                                   FontSize="10" FontWeight="SemiBold">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="#DC2626"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding StatutPaiement}" Value="Acompte">
-                                                            <Setter Property="Foreground" Value="#92400E"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding StatutPaiement}" Value="Soldé">
-                                                            <Setter Property="Foreground" Value="#065F46"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </Border>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
-                        <!-- WhatsApp : icône fixe -->
-                        <DataGridTemplateColumn Header="💬" Width="42" MinWidth="42">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Button Content="💬"
-                                            Width="28" Height="26"
-                                            FontSize="13"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Cursor="Hand"
-                                            HorizontalAlignment="Center"
-                                            ToolTip="Notifier le client sur WhatsApp"
-                                            Click="BtnWhatsAppCommande_Click">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Opacity" Value="0.45"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding StatutGlobalAffiche}" Value="Terminée">
-                                                        <Setter Property="Opacity" Value="1"/>
-                                                        <Setter Property="ToolTip" Value="✅ Commande prête — Notifier le client"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
-                
-                <!-- ═══════════════════════════════ PAGINATION ═══════════════════════ -->
-                <Border Background="#FAF5F2" Padding="16,12" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <!-- Info pagination -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtPaginationInfo" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" FontWeight="Medium"/>
-                        </StackPanel>
-                        
-                        <!-- Boutons de navigation -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button x:Name="BtnPagePrecedente" Content="←" Width="36" Height="32" 
-                                    Margin="0,0,8,0" Click="BtnPagePrecedente_Click"
-                                    Style="{StaticResource BtnGhost}" IsEnabled="False" FontSize="14"/>
-                            <Button x:Name="BtnPageSuivante" Content="→" Width="36" Height="32"
-                                    Click="BtnPageSuivante_Click"
-                                    Style="{StaticResource BtnGhost}" IsEnabled="False" FontSize="14"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+                    </Button>
                 </StackPanel>
-            </Border>
-        </Grid>
+            </Grid>
 
-        <!-- ============================================================
-             COLONNE DROITE — détails de la commande en cours
-        ============================================================ -->
-        <Border Grid.Column="2"
-                Style="{StaticResource Card}"
-                Padding="0"
-                VerticalAlignment="Stretch">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <!-- En-tête sombre -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- Bandeau résumé pièces (NOUVEAU) -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- Corps scrollable -->
-                    <RowDefinition Height="*"/>
-                    <!-- Pied : actions globales -->
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <!-- ── Tableau principal ──────────────────────────────────── -->
+            <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- barre recherche/filtres -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- indicateur chargement -->
+                        <RowDefinition Height="*"/>
+                        <!-- DataGrid -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- pagination -->
+                    </Grid.RowDefinitions>
 
-                <!-- ── En-tête panneau ── -->
-                <Border Grid.Row="0"
-                        CornerRadius="10,10,0,0"
-                        Padding="16,12"
-                        Background="#1A1A1A">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <!-- ── Barre recherche + filtres ── -->
+                    <Border Grid.Row="0" Background="White"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="16,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0"
-                                   Text="Détails de la commande"
-                                   FontSize="14" FontWeight="Bold"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"/>
-
-                        <!-- Boutons WhatsApp dans l'en-tête -->
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-
-                            <!-- Notifier commande prête -->
-                            <Button x:Name="BtnWhatsAppPrete"
-                                    Height="30" Padding="10,0,10,0"
-                                    FontSize="11" FontWeight="SemiBold"
-                                    Background="#25D366"
-                                    Foreground="White"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    Margin="0,0,6,0"
-                                    Visibility="Collapsed"
-                                    ToolTip="Envoyer WhatsApp : commande prête"
-                                    Click="BtnWhatsAppPrete_Click">
-                                <Button.Content>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="💬" FontSize="12"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,4,0"/>
-                                        <TextBlock Text="Prête !"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button.Content>
-                            </Button>
-
-                            <!-- Rappel RDV -->
-                            <Button x:Name="BtnWhatsAppRdv"
-                                    Height="30" Padding="10,0,10,0"
-                                    FontSize="11" FontWeight="SemiBold"
-                                    Background="#075E54"
-                                    Foreground="White"
-                                    BorderThickness="0"
-                                    Cursor="Hand"
-                                    Visibility="Collapsed"
-                                    ToolTip="Envoyer WhatsApp : rappel de RDV"
-                                    Click="BtnWhatsAppRdv_Click">
-                                <Button.Content>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⏰" FontSize="12"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,4,0"/>
-                                        <TextBlock Text="RDV"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button.Content>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- ════════════════════════════════════════════════════
-                     BANDEAU RÉSUMÉ PIÈCES (Row 1)
-                     Visible dès qu'une commande est sélectionnée.
-                     Affiche : nb total de pièces · chips par statut · couturiers.
-                ════════════════════════════════════════════════════ -->
-                <Border x:Name="BandeauResume"
-                        Grid.Row="1"
-                        Background="#FAF5F2"
-                        BorderBrush="{StaticResource BorderBrush}"
-                        BorderThickness="0,0,0,1"
-                        Padding="18,10"
-                        Visibility="Collapsed">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- Nb total pièces -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                    VerticalAlignment="Center" Margin="0,0,14,0">
-                            <TextBlock x:Name="TxtResumeTotalPieces"
-                                       Text="0"
-                                       FontSize="22" FontWeight="Black"
-                                       Foreground="#1A1A1A"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock Text=" pièce(s)"
-                                       FontSize="12" Foreground="#6B7280"
-                                       VerticalAlignment="Bottom" Margin="3,0,0,2"/>
-                        </StackPanel>
-
-                        <!-- Séparateur -->
-                        <Border Grid.Column="1" Width="1" Background="#D1C9C4"
-                                Margin="0,4,14,4"/>
-
-                        <!-- Chips statuts -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal"
-                                    VerticalAlignment="Center" Margin="0,0,14,0">
-
-                            <!-- Chip Terminée -->
-                            <Border x:Name="ChipTerminee"
-                                    Background="#D1FAE5" CornerRadius="10"
-                                    Padding="8,3" Margin="0,0,6,0"
-                                    Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse Width="8" Height="8" Fill="#22C55E"
-                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock x:Name="TxtResumeTerminee"
-                                               FontSize="11" FontWeight="Bold"
-                                               Foreground="#065F46"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Chip En cours -->
-                            <Border x:Name="ChipEnCours"
-                                    Background="#FEF3C7" CornerRadius="10"
-                                    Padding="8,3" Margin="0,0,6,0"
-                                    Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse Width="8" Height="8" Fill="#F59E0B"
-                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock x:Name="TxtResumeEnCours"
-                                               FontSize="11" FontWeight="Bold"
-                                               Foreground="#92400E"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Chip À faire -->
-                            <Border x:Name="ChipAfaire"
-                                    Background="#E5E7EB" CornerRadius="10"
-                                    Padding="8,3" Margin="0,0,6,0"
-                                    Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse Width="8" Height="8" Fill="#9CA3AF"
-                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock x:Name="TxtResumeAfaire"
-                                               FontSize="11" FontWeight="Bold"
-                                               Foreground="#374151"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Chip Livrée -->
-                            <Border x:Name="ChipLivree"
-                                    Background="#DBEAFE" CornerRadius="10"
-                                    Padding="8,3"
-                                    Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse Width="8" Height="8" Fill="#3B82F6"
-                                             VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock x:Name="TxtResumeLivree"
-                                               FontSize="11" FontWeight="Bold"
-                                               Foreground="#1E40AF"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-
-                        <!-- Séparateur -->
-                        <Border Grid.Column="3" Width="1" Background="#D1C9C4"
-                                Margin="0,4,14,4"/>
-
-                        <!-- Couturiers impliqués -->
-                        <Border Grid.Column="4"
-                                Background="#F3F4F6"
-                                CornerRadius="6"
-                                Padding="10,4"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Left">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="👤 "
-                                           FontSize="12"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock x:Name="TxtResumeCouturiers"
-                                           FontSize="11"
-                                           Foreground="#374151"
+                            <!-- Recherche — par n° commande ou nom client -->
+                            <Grid Grid.Column="0">
+                                <TextBox x:Name="TxtRecherche"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Height="34"
+                                         TextChanged="TxtRecherche_TextChanged"/>
+                                <TextBlock Text="🔍  Rechercher par #commande ou nom…"
+                                           FontSize="11" Foreground="#94A3B8"
                                            VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           MaxWidth="260"/>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </Border>
+                                           Margin="12,0,0,0"
+                                           IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=TxtRecherche}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
 
-                <!-- ── Corps scrollable ── -->
-                <ScrollViewer Grid.Row="2"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled"
-                              Padding="20,16,20,8">
-                    <StackPanel>
+                            <!-- Filtres alignés à droite : Statut + Couturier -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                        VerticalAlignment="Center">
 
-                        <!-- ════════════════════════════════════════════
-                             ZONE 1 — EN-TÊTE COMMANDE
-                        ════════════════════════════════════════════ -->
-                        <Border Background="#F8FAFC"
-                                CornerRadius="8"
-                                Padding="16,12"
-                                Margin="0,0,0,16"
-                                BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="📌  EN-TÊTE COMMANDE"
-                                           FontSize="11" FontWeight="Bold"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           Margin="0,0,0,12"/>
+                                <!-- Filtre statut avec label -->
+                                <TextBlock Text="▼ Statut :"
+                                           FontSize="11" Foreground="#64748B"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <ComboBox x:Name="CmbFiltreStatut"
+                                          Width="130" Height="32" FontSize="11"
+                                          SelectionChanged="CmbFiltreStatut_SelectionChanged"
+                                          Margin="0,0,20,0">
+                                    <ComboBoxItem Content="Tous les statuts" Tag="" IsSelected="True"/>
+                                    <ComboBoxItem Content="À faire" Tag="A faire"/>
+                                    <ComboBoxItem Content="En cours" Tag="En cours"/>
+                                    <ComboBoxItem Content="Terminée" Tag="Terminee"/>
+                                    <ComboBoxItem Content="Livrée" Tag="Livree"/>
+                                </ComboBox>
 
-                                <!-- Client -->
-                                <TextBlock Text="Client *"
-                                           Style="{StaticResource FieldLabel}"/>
-                                <ComboBox x:Name="CmbClient"
-                                          Style="{StaticResource ModernComboBox}"
-                                          SelectedValuePath="IdClient"
-                                          Margin="0,0,0,10">
+                                <!-- Filtre couturier avec label -->
+                                <TextBlock Text="Couturier :"
+                                           FontSize="11" Foreground="#64748B"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <ComboBox x:Name="CmbFiltreCouturier"
+                                          Width="150" Height="32" FontSize="11"
+                                          SelectedValuePath="IdEmploye"
+                                          SelectionChanged="CmbFiltreCouturier_SelectionChanged">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock>
                                                 <TextBlock.Text>
                                                     <MultiBinding StringFormat="{}{0} {1}">
-                                                        <Binding Path="Nom"/>
                                                         <Binding Path="Prenom"/>
+                                                        <Binding Path="Nom"/>
                                                     </MultiBinding>
                                                 </TextBlock.Text>
                                             </TextBlock>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-
-                                <!-- Rendez-vous : date + heure -->
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="10"/>
-                                        <ColumnDefinition Width="110"/>
-                                        <ColumnDefinition Width="10"/>
-                                        <ColumnDefinition Width="110"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Date de rendez-vous *"
-                                                   Style="{StaticResource FieldLabel}"/>
-                                        <DatePicker x:Name="DateFin"
-                                                    Height="36" FontSize="13"
-                                                    BorderBrush="{StaticResource BorderBrush}"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2">
-                                        <TextBlock Text="Dépôt (HH:mm)"
-                                                   Style="{StaticResource FieldLabel}"/>
-                                        <TextBox x:Name="TxtHeureDebut"
-                                                 Style="{StaticResource ModernTextBox}"
-                                                 IsReadOnly="True"
-                                                 Background="#F2ECE8"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="4">
-                                        <TextBlock Text="Retrait (HH:mm)"
-                                                   Style="{StaticResource FieldLabel}"/>
-                                        <TextBox x:Name="TxtHeureFin"
-                                                 Style="{StaticResource ModernTextBox}"/>
-                                    </StackPanel>
-                                </Grid>
                             </StackPanel>
-                        </Border>
+                        </Grid>
+                    </Border>
 
-                        <!-- ════════════════════════════════════════════
-                             ZONE 2 — PANIER DE PIÈCES
-                        ════════════════════════════════════════════ -->
-                        <Border Background="#F8FAFC"
-                                CornerRadius="8"
-                                Padding="16,12"
-                                Margin="0,0,0,16"
-                                BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="🛒  PANIER DE PIÈCES"
-                                           FontSize="11" FontWeight="Bold"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           Margin="0,0,0,10"/>
+                    <!-- ── Indicateur de chargement ── -->
+                    <Border x:Name="LoadingIndicator"
+                            Grid.Row="1"
+                            Background="#F8F9FA"
+                            Padding="12"
+                            Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="⏳" FontSize="14" Margin="0,0,8,0"/>
+                            <TextBlock Text="Chargement..." FontSize="12"
+                                       Foreground="#6B7280" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
-                                <!-- Tableau des pièces -->
-                                <DataGrid x:Name="ListePieces"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False"
-                                          IsReadOnly="True"
-                                          HeadersVisibility="Column"
-                                          SelectionMode="Single"
-                                          GridLinesVisibility="Horizontal"
-                                          HorizontalGridLinesBrush="#E5E0DC"
-                                          Background="White"
-                                          BorderBrush="{StaticResource BorderBrush}"
-                                          BorderThickness="1"
-                                          RowBackground="White"
-                                          AlternatingRowBackground="#FDFAF8"
-                                          MinHeight="80"
-                                          Margin="0,0,0,10">
-                                    <DataGrid.Resources>
-                                        <Style TargetType="DataGridColumnHeader">
-                                            <Setter Property="Background" Value="#F8FAFC"/>
-                                            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
-                                            <Setter Property="FontSize" Value="11"/>
-                                            <Setter Property="FontWeight" Value="SemiBold"/>
-                                            <Setter Property="Padding" Value="10,8"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
+                    <!-- ── DataGrid pleine largeur ── -->
+                    <DataGrid x:Name="GridCommandes"
+                              Grid.Row="2"
+                              Style="{StaticResource ModernGrid}"
+                              AutoGenerateColumns="False"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True"
+                              MouseDoubleClick="GridCommandes_MouseDoubleClick">
+
+                        <!-- Ligne légèrement rosée si commande en retard -->
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow"
+                                   BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                        <Setter Property="Background" Value="#FFF5F5"/>
+                                        <Setter Property="ToolTip"
+                                                Value="⚠️ Cette commande est en retard"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+
+                        <DataGrid.Columns>
+
+                            <!-- ═══ COMMANDE (CMD #N + date) ═══ -->
+                            <DataGridTemplateColumn Header="COMMANDE" Width="100" MinWidth="95">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="10,7">
+                                            <TextBlock FontSize="12" FontWeight="Bold"
+                                                       Foreground="#0F172A">
+                                                <TextBlock.Text>
+                                                    <Binding Path="IdCommande"
+                                                             StringFormat="{}CMD #{0}"/>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <TextBlock FontSize="10" Foreground="#64748B"
+                                                       Text="{Binding DateDebut,
+                                                              StringFormat={}{0:dd/MM/yyyy}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ═══ CLIENT ═══ -->
+                            <DataGridTemplateColumn Header="CLIENT" Width="140" MinWidth="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="10,7">
+                                            <TextBlock FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="#0F172A"
+                                                       TextTrimming="CharacterEllipsis">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0} {1}">
+                                                        <Binding Path="Client.Nom"/>
+                                                        <Binding Path="Client.Prenom"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                            <TextBlock FontSize="10" Foreground="#94A3B8"
+                                                       Text="{Binding Client.Telephone}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ═══ PIÈCES & COUTURIER ═══
+                                 Chaque pièce sur sa propre ligne : TypeVetement (Couturier) + badge statut -->
+                            <DataGridTemplateColumn Header="PIÈCES &amp; COUTURIER" Width="*" MinWidth="160">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ItemsControl ItemsSource="{Binding Pieces}"
+                                                      Margin="8,4">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Margin="0,2,0,2">
+                                                        <!-- Nom du vêtement -->
+                                                        <TextBlock FontSize="11" FontWeight="SemiBold"
+                                                                   Foreground="#1E293B"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="100"
+                                                                   Text="{Binding TypeVetement}"/>
+                                                        <!-- Couturier entre parenthèses -->
+                                                        <TextBlock FontSize="10" Foreground="#64748B"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="4,0,6,0"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="80">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding StringFormat="{}({0})">
+                                                                    <Binding Path="Couturier.Prenom"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                        <!-- Badge statut pièce -->
+                                                        <Border CornerRadius="8" Padding="6,1"
+                                                                VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="#F1F5F9"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Statut}" Value="En cours">
+                                                                            <Setter Property="Background" Value="#FEF3C7"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Statut}" Value="Terminee">
+                                                                            <Setter Property="Background" Value="#D1FAE5"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Statut}" Value="Livree">
+                                                                            <Setter Property="Background" Value="#DBEAFE"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="{Binding StatutAffiche}"
+                                                                       FontSize="10" FontWeight="SemiBold">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="#475569"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Statut}" Value="En cours">
+                                                                                <Setter Property="Foreground" Value="#92400E"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Statut}" Value="Terminee">
+                                                                                <Setter Property="Foreground" Value="#065F46"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding Statut}" Value="Livree">
+                                                                                <Setter Property="Foreground" Value="#1E40AF"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ═══ LIVRAISON (date + heure retrait) ═══ -->
+                            <DataGridTemplateColumn Header="LIVRAISON" Width="90" MinWidth="85">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="10,7">
+                                            <!-- Date — rouge+gras si en retard -->
+                                            <TextBlock Text="{Binding DateFin, StringFormat={}{0:dd/MM/yyyy}}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock"
+                                                           BasedOn="{StaticResource DataGridCellText}">
+                                                        <Setter Property="Foreground"
+                                                                Value="{StaticResource TextPrimaryBrush}"/>
+                                                        <Setter Property="FontWeight" Value="Normal"/>
+                                                        <Setter Property="FontSize" Value="12"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding EstEnRetard}"
+                                                                         Value="True">
+                                                                <Setter Property="Foreground" Value="#DC2626"/>
+                                                                <Setter Property="FontWeight" Value="Bold"/>
+                                                                <Setter Property="ToolTip"
+                                                                        Value="⚠️ En retard !"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <!-- Heure retrait -->
+                                            <TextBlock FontSize="10" Foreground="#64748B"
+                                                       Text="{Binding HeureFin,
+                                                              StringFormat={}à {0:hh\\:mm}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ═══ STATUT GLOBAL (badge pilule) ═══ -->
+                            <DataGridTemplateColumn Header="STATUT" Width="100" MinWidth="90">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="12" Padding="10,4"
+                                                HorizontalAlignment="Left"
+                                                Margin="8,0" VerticalAlignment="Center">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#F1F5F9"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding StatutGlobalAffiche}"
+                                                                     Value="En cours">
+                                                            <Setter Property="Background" Value="#FEF3C7"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding StatutGlobalAffiche}"
+                                                                     Value="Terminée">
+                                                            <Setter Property="Background" Value="#D1FAE5"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding StatutGlobalAffiche}"
+                                                                     Value="Livrée">
+                                                            <Setter Property="Background" Value="#DBEAFE"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding StatutGlobalAffiche}"
+                                                       FontSize="11" FontWeight="SemiBold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#475569"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding StatutGlobalAffiche}"
+                                                                         Value="En cours">
+                                                                <Setter Property="Foreground" Value="#92400E"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatutGlobalAffiche}"
+                                                                         Value="Terminée">
+                                                                <Setter Property="Foreground" Value="#065F46"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatutGlobalAffiche}"
+                                                                         Value="Livrée">
+                                                                <Setter Property="Foreground" Value="#1E40AF"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ═══ FACTURE & SOLDE ═══ -->
+                            <DataGridTemplateColumn Header="FACTURE &amp; SOLDE" Width="140" MinWidth="125">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="10,7">
+                                            <!-- Montant total en gras -->
+                                            <TextBlock FontSize="12" FontWeight="Bold"
+                                                       Foreground="#0F172A"
+                                                       Text="{Binding MontantTotalAvecMateriaux,
+                                                              StringFormat={}{0:N0} FCFA}"/>
+                                            <!-- Reste à payer ou Soldé -->
+                                            <TextBlock FontSize="10" FontWeight="SemiBold"
+                                                       Margin="0,2,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <!-- Impayé par défaut → rouge -->
+                                                        <Setter Property="Foreground" Value="#DC2626"/>
+                                                        <Setter Property="Text"
+                                                                Value="{Binding ResteAPayer,
+                                                                        StringFormat={}Reste : {0:N0} FCFA}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding StatutPaiement}"
+                                                                         Value="Soldé">
+                                                                <Setter Property="Foreground" Value="#059669"/>
+                                                                <Setter Property="Text" Value="Soldé ✓"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ═══ ACTIONS (6 icônes) ═══ -->
+                            <DataGridTemplateColumn Header="ACTIONS" Width="195" MinWidth="195">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <DataTemplate.Resources>
+                                            <!-- Style icône action : fond visible au hover -->
+                                            <Style x:Key="BtnAction" TargetType="Button">
+                                                <Setter Property="Width"           Value="28"/>
+                                                <Setter Property="Height"          Value="26"/>
+                                                <Setter Property="FontSize"        Value="13"/>
+                                                <Setter Property="Background"      Value="Transparent"/>
+                                                <Setter Property="BorderThickness" Value="0"/>
+                                                <Setter Property="Cursor"          Value="Hand"/>
+                                                <Setter Property="Margin"          Value="1,0"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="bg"
+                                                                    Background="{TemplateBinding Background}"
+                                                                    CornerRadius="5"
+                                                                    Padding="2,2">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                  VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="bg" Property="Background" Value="#E2E8F0"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsPressed" Value="True">
+                                                                    <Setter TargetName="bg" Property="Background" Value="#CBD5E1"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </DataTemplate.Resources>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="0">
+
+                                            <!-- ✂️ Fiche Atelier -->
+                                            <Button Style="{StaticResource BtnAction}"
+                                                    Content="✂️"
+                                                    ToolTip="Fiche Atelier"
+                                                    Click="BtnActionFicheAtelier_Click"/>
+
+                                            <!-- 🖨️ Reçu -->
+                                            <Button Style="{StaticResource BtnAction}"
+                                                    Content="🖨️"
+                                                    ToolTip="Imprimer le reçu"
+                                                    Click="BtnActionRecu_Click"/>
+
+                                            <!-- ✏️ Éditer -->
+                                            <Button Style="{StaticResource BtnAction}"
+                                                    Content="✏️"
+                                                    ToolTip="Modifier la commande"
+                                                    Click="BtnActionEditer_Click"/>
+
+                                            <!-- 💳 Paiement -->
+                                            <Button Style="{StaticResource BtnAction}"
+                                                    Content="💳"
+                                                    ToolTip="Enregistrer un paiement"
+                                                    Click="BtnActionPaiement_Click"/>
+
+                                            <!-- 💬 WhatsApp -->
+                                            <Button Style="{StaticResource BtnAction}"
+                                                    Content="💬"
+                                                    ToolTip="Notifier le client sur WhatsApp"
+                                                    Click="BtnActionWhatsApp_Click"/>
+
+                                            <!-- 🗑️ Supprimer -->
+                                            <Button Style="{StaticResource BtnAction}"
+                                                    Content="🗑️"
+                                                    ToolTip="Supprimer cette commande"
+                                                    Click="BtnActionSupprimer_Click"/>
+
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- ── Pagination ── -->
+                    <Border Grid.Row="3" Background="#FAF5F2" Padding="16,12"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,1,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       x:Name="TxtPaginationInfo"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center"/>
+
+                            <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                        HorizontalAlignment="Right">
+                                <Button x:Name="BtnPagePrecedente" Content="←"
+                                        Width="36" Height="32" Margin="0,0,8,0"
+                                        Click="BtnPagePrecedente_Click"
+                                        Style="{StaticResource BtnGhost}"
+                                        IsEnabled="False" FontSize="14"/>
+                                <Button x:Name="BtnPageSuivante" Content="→"
+                                        Width="36" Height="32"
+                                        Click="BtnPageSuivante_Click"
+                                        Style="{StaticResource BtnGhost}"
+                                        IsEnabled="False" FontSize="14"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+        </Grid>
+        <!-- /ContenuPrincipal -->
+
+        <!-- ════════════════════════════════════════════════════════════
+             OVERLAY MODAL — "Nouvelle / Modifier Commande"
+             Occupe toute la Grid racine (ZIndex=99)
+             Visibility.Collapsed par défaut, Visible quand ouvert
+        ════════════════════════════════════════════════════════════ -->
+        <Grid x:Name="OverlayModalCommande"
+              Visibility="Collapsed"
+              Panel.ZIndex="99"
+              Background="#80000000">
+
+            <!-- Fond semi-opaque cliquable pour fermer -->
+            <Rectangle Fill="Transparent"
+                       MouseLeftButtonDown="OverlayFond_MouseLeftButtonDown"/>
+
+            <!-- Panneau centré -->
+            <Border Background="White"
+                    CornerRadius="14"
+                    Width="780"
+                    MaxHeight="880"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Margin="20">
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <!-- En-tête sombre -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Corps scrollable -->
+                        <RowDefinition Height="*"/>
+                        <!-- Pied : acompte + valider -->
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- ── En-tête modale ── -->
+                    <Border Grid.Row="0"
+                            CornerRadius="14,14,0,0"
+                            Padding="24,18">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#0F172A" Offset="0"/>
+                                <GradientStop Color="#1E293B" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtTitreModal"
+                                           Text="Nouvelle Commande"
+                                           FontSize="18" FontWeight="Bold"
+                                           Foreground="White"/>
+                                <TextBlock x:Name="TxtSousTitreModal"
+                                           Text="Remplissez les informations de la commande"
+                                           FontSize="12" Foreground="#94A3B8"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <!-- Bouton fermer -->
+                            <Button Grid.Column="1"
+                                    Content="✕"
+                                    Width="32" Height="32"
+                                    FontSize="14"
+                                    Foreground="#94A3B8"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Top"
+                                    Click="BtnFermerModal_Click"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- ── Corps scrollable ── -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="24,20,24,12">
+                        <StackPanel>
+
+                            <!-- ═══════════════════════════════════════
+                                 EN-TÊTE COMMANDE
+                            ═══════════════════════════════════════ -->
+                            <Border Background="#F8FAFC" CornerRadius="8"
+                                    Padding="16,12" Margin="0,0,0,16"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="📌  EN-TÊTE COMMANDE"
+                                               FontSize="11" FontWeight="Bold"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,0,0,12"/>
+
+                                    <!-- Client -->
+                                    <TextBlock Text="Client *" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="CmbModalClient"
+                                              Style="{StaticResource ModernComboBox}"
+                                              SelectedValuePath="IdClient"
+                                              Margin="0,0,0,10">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock>
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0} {1}">
+                                                            <Binding Path="Nom"/>
+                                                            <Binding Path="Prenom"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+
+                                    <!-- Date + heure -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="130"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Date de rendez-vous *"
+                                                       Style="{StaticResource FieldLabel}"/>
+                                            <DatePicker x:Name="DpModalDateFin"
+                                                        Height="36" FontSize="13"
+                                                        BorderBrush="{StaticResource BorderBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Dépôt (HH:mm)"
+                                                       Style="{StaticResource FieldLabel}"/>
+                                            <!-- TxtHeureDebut = heure dépôt, lecture seule -->
+                                            <TextBox x:Name="TxtHeureDebut"
+                                                     Style="{StaticResource ModernTextBox}"
+                                                     IsReadOnly="True"
+                                                     Background="#F2ECE8"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="Retrait (HH:mm)"
+                                                       Style="{StaticResource FieldLabel}"/>
+                                            <TextBox x:Name="TxtModalHeure"
+                                                     Style="{StaticResource ModernTextBox}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ═══════════════════════════════════════
+                                 VÊTEMENTS & PIÈCES
+                            ═══════════════════════════════════════ -->
+                            <Border Background="#F8FAFC" CornerRadius="8"
+                                    Padding="16,12" Margin="0,0,0,16"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1">
+                                <StackPanel>
+
+                                    <!-- En-tête section pièces + bouton Forcer statut (Boss, édition) -->
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="🧵  VÊTEMENTS &amp; PIÈCES DE LA COMMANDE"
+                                                   FontSize="11" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   VerticalAlignment="Center"/>
+
+                                        <!-- Bouton Forcer statut — Boss uniquement, mode édition -->
+                                        <Button Grid.Column="1"
+                                                x:Name="BtnForcerStatut"
+                                                Content="⚡ Forcer statut (toutes les pièces)"
+                                                Height="28" Padding="10,0"
+                                                FontSize="11" FontWeight="SemiBold"
+                                                Foreground="White" BorderThickness="0"
+                                                Cursor="Hand" Visibility="Collapsed"
+                                                Click="BtnForcerStatut_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="#7C3AED"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}"
+                                                                        CornerRadius="6"
+                                                                        Padding="{TemplateBinding Padding}">
+                                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                                      VerticalAlignment="Center"/>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#6D28D9"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+
+                                    <!-- Panneau dynamique des cartes de pièces -->
+                                    <StackPanel x:Name="PanneauCartesPieces"
+                                                Margin="0,0,0,10"/>
+
+                                    <!-- Bouton ajouter une pièce -->
+                                    <Button x:Name="BtnAjouterPiece"
+                                            Content="➕  Ajouter une pièce"
+                                            Height="36" Padding="14,0"
+                                            FontSize="12" FontWeight="SemiBold"
+                                            HorizontalAlignment="Left"
+                                            Cursor="Hand"
+                                            Click="BtnAjouterPieceModal_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#F1F5F9"/>
+                                                <Setter Property="Foreground" Value="#475569"/>
+                                                <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                                                <Setter Property="BorderThickness" Value="1"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                                    CornerRadius="6"
+                                                                    Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                  VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#E2E8F0"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- ── Pied modale : acompte + boutons ── -->
+                    <Border Grid.Row="2"
+                            Background="#F8FAFC"
+                            CornerRadius="0,0,14,14"
+                            Padding="24,16"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="0,1,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <!-- Bloc acompte -->
+                                <ColumnDefinition Width="*"/>
+                                <!-- Boutons -->
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Bloc acompte immédiat -->
+                            <StackPanel Grid.Column="0"
+                                        x:Name="PanneauAcompte"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+
+                                <TextBlock Text="Acompte immédiat :"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Foreground="#0F172A"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"/>
+
+                                <TextBox x:Name="TxtModalAcompte"
+                                         Width="120" Height="36"
+                                         FontSize="13"
+                                         Padding="10,0"
+                                         VerticalContentAlignment="Center"
+                                         Text="0"
+                                         Style="{StaticResource ModernTextBox}"
+                                         PreviewTextInput="TxtModalAcompte_PreviewTextInput"/>
+
+                                <TextBlock Text="FCFA" FontSize="12"
+                                           Foreground="#64748B"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,16,0"/>
+
+                                <ComboBox x:Name="CmbModalModePaiement"
+                                          Width="120" Height="36"
+                                          FontSize="12">
+                                    <ComboBoxItem Content="Espèces" IsSelected="True"/>
+                                    <ComboBoxItem Content="Mobile Money"/>
+                                    <ComboBoxItem Content="Virement"/>
+                                    <ComboBoxItem Content="Chèque"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Boutons Annuler / Valider -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+
+                                <Button Content="Annuler"
+                                        Width="100" Height="36"
+                                        FontSize="13"
+                                        Cursor="Hand" Margin="0,0,10,0"
+                                        Click="BtnFermerModal_Click">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#F1F5F9"/>
+                                            <Setter Property="Foreground" Value="#475569"/>
+                                            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="8"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                              VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
                                         </Style>
-                                        <Style TargetType="DataGridRow">
-                                            <Setter Property="Cursor" Value="Hand"/>
-                                            <EventSetter Event="PreviewMouseLeftButtonUp"
-                                                         Handler="PieceItem_MouseLeftButtonUp"/>
+                                    </Button.Style>
+                                </Button>
+
+                                <Button x:Name="BtnValiderNouvelleCommande"
+                                        Height="36" Padding="20,0"
+                                        FontSize="13" FontWeight="Bold"
+                                        Cursor="Hand"
+                                        Click="BtnValiderNouvelleCommande_Click">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#0F172A"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="8"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                              VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
                                             <Style.Triggers>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Background" Value="#FFF0EB"/>
-                                                    <Setter Property="DetailsVisibility" Value="Visible"/>
-                                                </Trigger>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#FDF5F2"/>
+                                                    <Setter Property="Background" Value="#1E293B"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </DataGrid.Resources>
-
-                                    <!-- Détails matériaux affichés sous la ligne sélectionnée -->
-                                    <DataGrid.RowDetailsTemplate>
-                                        <DataTemplate>
-                                            <Border Background="#FAFAF9"
-                                                    BorderBrush="#DDD6CF"
-                                                    BorderThickness="0,0,0,1"
-                                                    Padding="12,8,12,10">
-                                                <StackPanel>
-                                                    <!-- En-tête matériaux -->
-                                                    <Grid Margin="0,0,0,6">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0"
-                                                                   Text="🧵  Matériaux &amp; Suppléments"
-                                                                   FontSize="11" FontWeight="Bold"
-                                                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                        <Button Grid.Column="1"
-                                                                Content="✏️  Éditer cette pièce"
-                                                                FontSize="11" FontWeight="SemiBold"
-                                                                Height="26" Padding="10,0"
-                                                                Background="#CC0000"
-                                                                Foreground="White"
-                                                                BorderThickness="0"
-                                                                Cursor="Hand"
-                                                                Click="BtnEditerPiece_Click"/>
-                                                    </Grid>
-
-                                                    <!-- Liste matériaux (si présents) -->
-                                                    <ItemsControl ItemsSource="{Binding MaterielSupplements}">
-                                                        <ItemsControl.Style>
-                                                            <Style TargetType="ItemsControl">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding MaterielSupplements.Count}" Value="0">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </ItemsControl.Style>
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Grid Margin="0,2,0,2">
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="*"/>
-                                                                        <ColumnDefinition Width="120"/>
-                                                                        <ColumnDefinition Width="90"/>
-                                                                    </Grid.ColumnDefinitions>
-                                                                    <TextBlock Grid.Column="0"
-                                                                               Text="{Binding Designation}"
-                                                                               FontSize="11"
-                                                                               Foreground="#374151"
-                                                                               VerticalAlignment="Center"/>
-                                                                    <TextBlock Grid.Column="1"
-                                                                               FontSize="11"
-                                                                               Foreground="#6B7280"
-                                                                               HorizontalAlignment="Center"
-                                                                               VerticalAlignment="Center">
-                                                                        <TextBlock.Text>
-                                                                            <MultiBinding StringFormat="{}{0} × {1:N0} F">
-                                                                                <Binding Path="Quantite"/>
-                                                                                <Binding Path="PrixUnitaire"/>
-                                                                            </MultiBinding>
-                                                                        </TextBlock.Text>
-                                                                    </TextBlock>
-                                                                    <Border Grid.Column="2"
-                                                                            Background="#FEF3C7"
-                                                                            CornerRadius="3"
-                                                                            Padding="6,2"
-                                                                            HorizontalAlignment="Right">
-                                                                        <TextBlock Text="{Binding MontantAffiche}"
-                                                                                   FontSize="11" FontWeight="Bold"
-                                                                                   Foreground="{StaticResource AccentBrush}"/>
-                                                                    </Border>
-                                                                </Grid>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-
-                                                    <!-- Message si aucun matériau -->
-                                                    <TextBlock FontSize="11"
-                                                               FontStyle="Italic"
-                                                               Foreground="#9CA3AF"
-                                                               Margin="0,2,0,0">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding MaterielSupplements.Count}" Value="0">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                        <Setter Property="Text" Value="Aucun matériau pour cette pièce — cliquez Éditer pour en ajouter."/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </DataGrid.RowDetailsTemplate>
-
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Type vêtement"
-                                                            Binding="{Binding TypeVetement}"
-                                                            Width="*"
-                                                            MinWidth="80">
-                                            <DataGridTextColumn.ElementStyle>
-                                                <Style TargetType="TextBlock"
-                                                       BasedOn="{StaticResource DataGridCellText}"/>
-                                            </DataGridTextColumn.ElementStyle>
-                                        </DataGridTextColumn>
-                                        <DataGridTextColumn Header="Couturier"
-                                                            Binding="{Binding Couturier.Prenom}"
-                                                            Width="Auto"
-                                                            MinWidth="75">
-                                            <DataGridTextColumn.ElementStyle>
-                                                <Style TargetType="TextBlock"
-                                                       BasedOn="{StaticResource DataGridCellText}"/>
-                                            </DataGridTextColumn.ElementStyle>
-                                        </DataGridTextColumn>
-                                        <DataGridTextColumn Header="Statut"
-                                                            Binding="{Binding StatutAffiche}"
-                                                            Width="Auto"
-                                                            MinWidth="70">
-                                            <DataGridTextColumn.ElementStyle>
-                                                <Style TargetType="TextBlock"
-                                                       BasedOn="{StaticResource DataGridCellText}"/>
-                                            </DataGridTextColumn.ElementStyle>
-                                        </DataGridTextColumn>
-                                        <DataGridTextColumn Header="Prix (FCFA)"
-                                                            Binding="{Binding MontantCouture, StringFormat={}{0:N0}}"
-                                                            Width="Auto"
-                                                            MinWidth="80">
-                                            <DataGridTextColumn.ElementStyle>
-                                                <Style TargetType="TextBlock"
-                                                       BasedOn="{StaticResource DataGridCellText}">
-                                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                                </Style>
-                                            </DataGridTextColumn.ElementStyle>
-                                        </DataGridTextColumn>
-                                        <DataGridTemplateColumn Header="Actions" Width="90" MinWidth="90">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <StackPanel Orientation="Horizontal"
-                                                                HorizontalAlignment="Center">
-                                                        <Button Content="📋"
-                                                                Width="26" Height="24"
-                                                                FontSize="12"
-                                                                ToolTip="Dupliquer cette pièce"
-                                                                Background="Transparent"
-                                                                BorderThickness="0"
-                                                                Cursor="Hand"
-                                                                Margin="1"
-                                                                Click="BtnDupliquerPiece_Click"/>
-                                                        <Button Content="✏️"
-                                                                Width="26" Height="24"
-                                                                FontSize="12"
-                                                                ToolTip="Modifier cette pièce et ses matériaux"
-                                                                Background="Transparent"
-                                                                BorderThickness="0"
-                                                                Cursor="Hand"
-                                                                Margin="1"
-                                                                Click="BtnEditerPiece_Click"/>
-                                                        <Button Content="🗑️"
-                                                                Width="26" Height="24"
-                                                                FontSize="12"
-                                                                ToolTip="Supprimer cette pièce"
-                                                                Background="Transparent"
-                                                                BorderThickness="0"
-                                                                Cursor="Hand"
-                                                                Margin="1"
-                                                                x:Name="BtnSupprimerPieceLigne"
-                                                                Click="BtnSupprimerPieceLigne_Click"/>
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-
-                                <!-- Total + bouton ajouter -->
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Border Grid.Column="0"
-                                            Background="#1A1A1A"
-                                            CornerRadius="6"
-                                            Padding="14,8">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="TOTAL COMMANDE : "
-                                                       FontSize="12" FontWeight="Bold"
-                                                       Foreground="#B0A8A4"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="TxtTotalPieces"
-                                                       Text="0 FCFA"
-                                                       FontSize="16" FontWeight="Bold"
-                                                       Foreground="White"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Button Grid.Column="1"
-                                            x:Name="BtnAjouterPiece"
-                                            Content="➕  Ajouter une pièce"
-                                            Height="38"
-                                            Padding="14,0"
-                                            FontSize="12"
-                                            FontWeight="SemiBold"
-                                            Foreground="White"
-                                            Background="#CC0000"
-                                            BorderThickness="0"
-                                            Cursor="Hand"
-                                            Margin="10,0,0,0"
-                                            Click="BtnAjouterPiece_Click"/>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- ════════════════════════════════════════════
-                             ZONE 3 — FORMULAIRE PIÈCE (caché par défaut,
-                             visible à l'édition / ajout d'une pièce)
-                        ════════════════════════════════════════════ -->
-                        <Border Background="White"
-                                CornerRadius="8"
-                                Padding="16,14"
-                                Margin="0,0,0,6"
-                                BorderBrush="#CC0000"
-                                BorderThickness="1.5">
-                            <StackPanel>
-
-                                <!-- Titre formulaire pièce -->
-                                <TextBlock x:Name="LblDetailPiece"
-                                           Text="Nouvelle pièce"
-                                           FontSize="13" FontWeight="Bold"
-                                           Foreground="#CC0000"
-                                           Margin="0,0,0,12"
-                                           Visibility="Collapsed"/>
-                                <Separator x:Name="SepDetailPiece"
-                                           Background="#F0EBE7"
-                                           Margin="0,0,0,12"
-                                           Visibility="Collapsed"/>
-
-                                <!-- Réutilisation mesures antérieures -->
-                                <TextBlock x:Name="LblReutilisationMesures"
-                                           Text="Reprendre les mesures d'une commande précédente"
-                                           Style="{StaticResource FieldLabel}"
-                                           Visibility="Collapsed"/>
-                                <ComboBox x:Name="CmbMesuresAnterieures"
-                                          Style="{StaticResource ModernComboBox}"
-                                          Margin="0,0,0,12"
-                                          Visibility="Collapsed"
-                                          SelectionChanged="CmbMesuresAnterieures_SelectionChanged">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock>
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="CMD-{0}  ({1})  •  {2}">
-                                                        <Binding Path="IdCommande"/>
-                                                        <Binding Path="Commande.DateFin" StringFormat="dd/MM/yy"/>
-                                                        <Binding Path="StatutAffiche"/>
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-
-                                <!-- Type de vêtement -->
-                                <TextBlock x:Name="LblTypeVetement"
-                                           Text="Type de vêtement *"
-                                           Style="{StaticResource FieldLabel}"
-                                           Visibility="Collapsed"/>
-                                <ComboBox x:Name="CmbTypeVetement"
-                                          Style="{StaticResource ModernComboBox}"
-                                          Margin="0,0,0,10"
-                                          DisplayMemberPath="DisplayText"
-                                          Visibility="Collapsed"
-                                          SelectionChanged="CmbTypeVetement_SelectionChanged"/>
-
-                                <!-- Couturier -->
-                                <TextBlock x:Name="LblCouturier"
-                                           Text="Couturier attribué"
-                                           Style="{StaticResource FieldLabel}"
-                                           Visibility="Collapsed"/>
-                                <ComboBox x:Name="CmbCouturier"
-                                          Style="{StaticResource ModernComboBox}"
-                                          Margin="0,0,0,10"
-                                          SelectedValuePath="IdEmploye"
-                                          Visibility="Collapsed">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <!-- Prenom contient déjà "(Boss)" si applicable -->
-                                            <TextBlock Text="{Binding Prenom}"/>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-
-                                <!-- Prix -->
-                                <StackPanel x:Name="PanelPrix"
-                                            Margin="0,0,0,10"
-                                            Visibility="Collapsed">
-                                    <TextBlock x:Name="TxtPrixBase"
-                                               Text="Prix de base : -"
-                                               FontSize="12"
-                                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <TextBlock Text="Ajustement : "
-                                                   FontSize="12"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="CmbAjustement"
-                                                  Width="110" Height="32" FontSize="12"
-                                                  SelectionChanged="CmbAjustement_SelectionChanged"/>
-                                    </StackPanel>
-                                    <TextBlock x:Name="TxtPrixTotal"
-                                               Text="Prix total : -"
-                                               FontSize="15" FontWeight="Bold"
-                                               Foreground="{StaticResource PrimaryBrush}"
-                                               Margin="0,6,0,0"/>
-                                </StackPanel>
-
-                                <!-- Description -->
-                                <TextBlock x:Name="LblDescription"
-                                           Text="Description / Consignes"
-                                           Style="{StaticResource FieldLabel}"
-                                           Visibility="Collapsed"/>
-                                <ComboBox x:Name="CmbDescription"
-                                          IsEditable="True"
-                                          IsTextSearchEnabled="True"
-                                          Height="36" FontSize="13"
-                                          DisplayMemberPath="Texte"
-                                          Margin="0,0,0,10"
-                                          Visibility="Collapsed"/>
-
-                                <!-- Montant -->
-                                <TextBlock x:Name="LblMontant"
-                                           Text="Montant couture (FCFA) *"
-                                           Style="{StaticResource FieldLabel}"
-                                           Visibility="Collapsed"/>
-                                <TextBox x:Name="TxtMontant"
-                                         Style="{StaticResource ModernTextBox}"
-                                         Margin="0,0,0,10"
-                                         Visibility="Collapsed"
-                                         PreviewTextInput="TxtMontant_PreviewTextInput"
-                                         DataObject.Pasting="TxtMontant_Pasting" />
-
-                                <!-- Statut -->
-                                <TextBlock x:Name="LblStatut"
-                                           Text="Statut de la pièce"
-                                           Style="{StaticResource FieldLabel}"
-                                           Visibility="Collapsed"/>
-                                <ComboBox x:Name="CmbStatut"
-                                          Style="{StaticResource ModernComboBox}"
-                                          Margin="0,0,0,12"
-                                          SelectedIndex="0"
-                                          Visibility="Collapsed">
-                                    <ComboBoxItem Content="A faire"/>
-                                    <ComboBoxItem Content="En cours"/>
-                                    <ComboBoxItem Content="Terminee"/>
-                                    <ComboBoxItem Content="Livree"/>
-                                </ComboBox>
-
-                                <!-- Mesures dynamiques -->
-                                <Separator x:Name="SepMesures"
-                                           Background="#F0EBE7"
-                                           Margin="0,0,0,10"
-                                           Visibility="Collapsed"/>
-                                <TextBlock x:Name="TxtIndicationMesures"
-                                           Text="Sélectionnez un type de vêtement"
-                                           FontSize="12"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           Margin="0,0,0,6"
-                                           Visibility="Collapsed"/>
-                                <StackPanel x:Name="PanelMesuresDynamiques"
-                                            Margin="0,0,0,12"/>
-
-                                <!-- Photo -->
-                                <Separator Background="#F0EBE7" Margin="0,0,0,10"
-                                           x:Name="SepPhoto" Visibility="Collapsed"/>
-                                <TextBlock x:Name="LblPhoto"
-                                           Text="Photo du tissu / modèle"
-                                           FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource PrimaryBrush}"
-                                           Margin="0,0,0,8"
-                                           Visibility="Collapsed"/>
-                                <StackPanel x:Name="PanelBoutonsPhoto"
-                                            Orientation="Horizontal"
-                                            Margin="0,0,0,8"
-                                            Visibility="Collapsed">
-                                    <Button x:Name="BtnImporterPhoto"
-                                            Content="📁  Importer"
-                                            Style="{StaticResource BtnNavy}"
-                                            Height="32" Padding="12,0"
-                                            Click="BtnImporterPhoto_Click"
-                                            Margin="0,0,8,0"/>
-                                    <Button x:Name="BtnPrendrePhoto"
-                                            Content="📷  Webcam"
-                                            Style="{StaticResource BtnPrimary}"
-                                            Height="32" Padding="12,0"
-                                            Click="BtnPrendrePhoto_Click"/>
-                                </StackPanel>
-                                <Border x:Name="PanelPhoto"
-                                        Background="#FBF8F6"
-                                        BorderBrush="{StaticResource BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Height="120"
-                                        Margin="0,0,0,12"
-                                        Visibility="Collapsed">
-                                    <Grid>
-                                        <Image x:Name="ImgPhoto"
-                                               Stretch="Uniform" Margin="8"/>
-                                        <TextBlock x:Name="TxtPhotoPlaceholder"
-                                                   Text="Aucune photo sélectionnée"
-                                                   FontSize="12"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                                   HorizontalAlignment="Center"
+                                    </Button.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="✓  " FontSize="14"
                                                    VerticalAlignment="Center"/>
-                                        <Button x:Name="BtnSupprimerPhoto"
-                                                Content="✕"
-                                                Width="24" Height="24"
-                                                FontSize="11" FontWeight="Bold"
-                                                Foreground="White"
-                                                Background="{StaticResource DangerBrush}"
-                                                BorderThickness="0"
-                                                Cursor="Hand"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Top"
-                                                Margin="0,6,6,0"
-                                                Visibility="Collapsed"
-                                                Click="BtnSupprimerPhoto_Click">
-                                            <Button.Template>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            CornerRadius="12">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Button.Template>
-                                        </Button>
-                                    </Grid>
-                                </Border>
-
-                                <!-- ════════════════════════════════════════
-                                     SECTION MATÉRIAUX / SUPPLÉMENTS
-                                     Rattachés à la pièce, exclus de la commission
-                                ════════════════════════════════════════ -->
-                                <Separator x:Name="SepMateriaux"
-                                           Background="#E8E0DC"
-                                           Margin="0,4,0,14"
-                                           Visibility="Collapsed"/>
-
-                                <Border x:Name="PanelMateriaux"
-                                        Visibility="Collapsed"
-                                        Background="#FAFAF9"
-                                        BorderBrush="#DDD6CF"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Padding="14,12"
-                                        Margin="0,0,0,14">
-                                    <StackPanel>
-
-                                        <!-- En-tête section matériaux -->
-                                        <Grid Margin="0,0,0,10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                                <TextBlock Text="🧵"
-                                                           FontSize="14"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,6,0"/>
-                                                <StackPanel>
-                                                    <TextBlock x:Name="LblMateriaux"
-                                                               Text="Matériaux &amp; Suppléments"
-                                                               FontSize="13" FontWeight="Bold"
-                                                               Foreground="{StaticResource PrimaryBrush}"/>
-                                                    <TextBlock Text="Facturés au client — exclus de la commission couturier"
-                                                               FontSize="10"
-                                                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                            <!-- Total matériaux -->
-                                            <Border Grid.Column="1"
-                                                    Background="#1A1A1A"
-                                                    CornerRadius="4"
-                                                    Padding="10,4">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="Total mat. : "
-                                                               FontSize="10" FontWeight="Bold"
-                                                               Foreground="#A0A0A0"
-                                                               VerticalAlignment="Center"/>
-                                                    <TextBlock x:Name="TxtTotalMateriaux"
-                                                               Text="0 FCFA"
-                                                               FontSize="12" FontWeight="Bold"
-                                                               Foreground="White"
-                                                               VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </Border>
-                                        </Grid>
-
-                                        <!-- Liste des matériaux existants -->
-                                        <Border x:Name="PanelListeMateriaux"
-                                                Visibility="Collapsed"
-                                                Margin="0,0,0,10">
-                                            <ItemsControl x:Name="ListeMateriaux">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Background="White"
-                                                                BorderBrush="#E8E2DC"
-                                                                BorderThickness="1"
-                                                                CornerRadius="6"
-                                                                Padding="12,8"
-                                                                Margin="0,0,0,5">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                    <ColumnDefinition Width="110"/>
-                                                                    <ColumnDefinition Width="100"/>
-                                                                    <ColumnDefinition Width="30"/>
-                                                                </Grid.ColumnDefinitions>
-
-                                                                <!-- Désignation -->
-                                                                <TextBlock Grid.Column="0"
-                                                                           Text="{Binding Designation}"
-                                                                           FontSize="12" FontWeight="SemiBold"
-                                                                           Foreground="{StaticResource PrimaryBrush}"
-                                                                           VerticalAlignment="Center"/>
-
-                                                                <!-- Qté × prix -->
-                                                                <TextBlock Grid.Column="1"
-                                                                           FontSize="11"
-                                                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                                                           VerticalAlignment="Center"
-                                                                           HorizontalAlignment="Center">
-                                                                    <TextBlock.Text>
-                                                                        <MultiBinding StringFormat="{}{0} × {1:N0} F">
-                                                                            <Binding Path="Quantite"/>
-                                                                            <Binding Path="PrixUnitaire"/>
-                                                                        </MultiBinding>
-                                                                    </TextBlock.Text>
-                                                                </TextBlock>
-
-                                                                <!-- Montant total ligne -->
-                                                                <Border Grid.Column="2"
-                                                                        Background="#FEF3C7"
-                                                                        CornerRadius="4"
-                                                                        Padding="8,3"
-                                                                        HorizontalAlignment="Right">
-                                                                    <TextBlock Text="{Binding MontantAffiche}"
-                                                                               FontSize="12" FontWeight="Bold"
-                                                                               Foreground="{StaticResource AccentBrush}"/>
-                                                                </Border>
-
-                                                                <!-- Supprimer -->
-                                                                <Button Grid.Column="3"
-                                                                        Content="✕"
-                                                                        Width="24" Height="24"
-                                                                        FontSize="11" FontWeight="Bold"
-                                                                        Background="Transparent"
-                                                                        BorderThickness="0"
-                                                                        Foreground="#AAAAAA"
-                                                                        Cursor="Hand"
-                                                                        ToolTip="Supprimer ce matériau"
-                                                                        Tag="{Binding IdMateriel}"
-                                                                        Click="BtnSupprimerMateriau_Click"/>
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </Border>
-
-                                        <!-- Message vide -->
-                                        <TextBlock x:Name="TxtAucunMateriau"
-                                                   Text="Aucun matériau ajouté pour cette pièce."
-                                                   FontSize="11"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                                   FontStyle="Italic"
-                                                   Margin="0,0,0,10"
-                                                   Visibility="Visible"/>
-
-                                        <!-- Séparateur avant formulaire -->
-                                        <Separator x:Name="SepAvantFormulaireMat"
-                                                   Background="#E8E0DC"
-                                                   Margin="0,2,0,10"
-                                                   Visibility="Collapsed"/>
-
-                                        <!-- Formulaire d'ajout inline -->
-                                        <Border x:Name="PanelAjoutMateriau"
-                                                Background="#F0ECE8"
-                                                BorderBrush="#D4C8BE"
-                                                BorderThickness="1"
-                                                CornerRadius="6"
-                                                Padding="12,10"
-                                                Margin="0,0,0,8"
-                                                Visibility="Collapsed">
-                                            <StackPanel>
-                                                <TextBlock Text="Nouveau matériau"
-                                                           FontSize="11" FontWeight="Bold"
-                                                           Foreground="#6B5B4E"
-                                                           Margin="0,0,0,10"/>
-
-                                                <!-- Désignation (pleine largeur) -->
-                                                <TextBlock Text="Désignation *"
-                                                           Style="{StaticResource FieldLabel}"/>
-                                                <TextBox x:Name="TxtMatDesignation"
-                                                         Style="{StaticResource ModernTextBox}"
-                                                         Margin="0,0,0,8"
-                                                         PreviewTextInput="TxtMatDesignation_PreviewTextInput"
-                                                         MaxLength="200"/>
-
-                                                <!-- Quantité + Prix sur la même ligne -->
-                                                <Grid Margin="0,0,0,10">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="12"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <StackPanel Grid.Column="0">
-                                                        <TextBlock Text="Quantité"
-                                                                   Style="{StaticResource FieldLabel}"/>
-                                                        <TextBox x:Name="TxtMatQuantite"
-                                                                 Style="{StaticResource ModernTextBox}"
-                                                                 Text="1"/>
-                                                    </StackPanel>
-                                                    <StackPanel Grid.Column="2">
-                                                        <TextBlock Text="Prix unitaire (FCFA)"
-                                                                   Style="{StaticResource FieldLabel}"/>
-                                                        <TextBox x:Name="TxtMatPrix"
-                                                                 Style="{StaticResource ModernTextBox}"/>
-                                                    </StackPanel>
-                                                </Grid>
-
-                                                <!-- Boutons formulaire -->
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Button Content="✔  Ajouter"
-                                                            Style="{StaticResource BtnSuccess}"
-                                                            Height="34" Padding="14,0"
-                                                            FontSize="12"
-                                                            Click="BtnConfirmerMateriau_Click"
-                                                            Margin="0,0,8,0"/>
-                                                    <Button Content="Annuler"
-                                                            Style="{StaticResource BtnGhost}"
-                                                            Height="34" Padding="12,0"
-                                                            FontSize="12"
-                                                            Click="BtnAnnulerFormulaireMateriau_Click"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-
-                                        <!-- Bouton ouvrir formulaire (caché quand formulaire ouvert) -->
-                                        <Button x:Name="BtnAjouterMateriau"
-                                                Height="34"
-                                                FontSize="11" FontWeight="SemiBold"
-                                                Background="Transparent"
-                                                BorderBrush="#C4B8AE"
-                                                BorderThickness="1"
-                                                Foreground="#6B5B4E"
-                                                Cursor="Hand"
-                                                Click="BtnAjouterMateriau_Click">
-                                            <Button.Content>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="＋" FontSize="14"
-                                                               VerticalAlignment="Center"
-                                                               Margin="0,0,6,0"/>
-                                                    <TextBlock Text="Ajouter un matériau / supplément"
-                                                               VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </Button.Content>
-                                        </Button>
-
+                                        <TextBlock x:Name="TxtBtnValider"
+                                                   Text="Valider la Commande"
+                                                   VerticalAlignment="Center"/>
                                     </StackPanel>
-                                </Border>
-
-                                <!-- Bouton Valider pièce -->
-                                <Button x:Name="BtnSauvegarderPiece"
-                                        Content="💾  Valider et ajouter au panier"
-                                        Style="{StaticResource BtnSuccess}"
-                                        Height="40" FontSize="13" FontWeight="Bold"
-                                        Margin="0,4,0,0"
-                                        Visibility="Collapsed"
-                                        Click="BtnSauvegarderPiece_Click"/>
-
-                                <!-- Boutons actions pièce existante -->
-                                <StackPanel x:Name="PanelActionsPiece"
-                                            Orientation="Horizontal"
-                                            Margin="0,8,0,0"
-                                            Visibility="Collapsed">
-                                    <Button x:Name="BtnDupliquerPiece"
-                                            Content="📋  Dupliquer"
-                                            Style="{StaticResource BtnNavy}"
-                                            Height="34" Padding="12,0"
-                                            Margin="0,0,8,0"
-                                            Click="BtnDupliquerPiece_Click"/>
-                                    <Button x:Name="BtnSupprimerPiece"
-                                            Content="🗑️  Supprimer la pièce"
-                                            Style="{StaticResource BtnDanger}"
-                                            Height="34" Padding="12,0"
-                                            Visibility="Collapsed"
-                                            Click="BtnSupprimerPiece_Click"/>
-                                    <Button x:Name="BtnForcerStatut"
-                                            Content="⚡  Forcer statut"
-                                            Style="{StaticResource BtnGhost}"
-                                            Height="34" Padding="12,0"
-                                            Margin="8,0,0,0"
-                                            Visibility="Collapsed"
-                                            Click="BtnForcerStatut_Click"/>
-                                </StackPanel>
-
+                                </Button>
                             </StackPanel>
-                        </Border>
+                        </Grid>
+                    </Border>
 
-                    </StackPanel>
-                </ScrollViewer>
+                </Grid>
+            </Border>
+            <!-- /panneau centré -->
 
-                <!-- ── Pied : actions globales commande ── -->
-                <Border Grid.Row="3"
-                        Padding="20,12"
-                        BorderBrush="{StaticResource BorderBrush}"
-                        BorderThickness="0,1,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+        </Grid>
+        <!-- /OverlayModalCommande -->
 
-                        <!-- Créer -->
-                        <Button Grid.Column="0"
-                                x:Name="BtnCreer"
-                                Content="✚  Créer"
-                                Style="{StaticResource BtnSuccess}"
-                                Height="36" Padding="14,0"
-                                Click="BtnCreer_Click"/>
+        <!-- ════════════════════════════════════════════════════════════
+             CONTRÔLES LEGACY (hors-écran) — conservés pour compatibilité
+             code-behind existant qui les référence par x:Name.
+             Placés dans un Grid 0×0 invisible.
+        ════════════════════════════════════════════════════════════ -->
+        <Grid Width="0" Height="0" Visibility="Collapsed">
+            <!-- Contrôles existants dans le panneau droite, maintenant
+                 dans la modale ou dans le code dynamique des cartes.
+                 On les garde ici pour que le code-behind compile sans
+                 changement sur les méthodes non refactorisées. -->
 
-                        <!-- Modifier -->
-                        <Button Grid.Column="1"
-                                x:Name="BtnModifier"
-                                Content="✏  Modifier"
-                                Style="{StaticResource BtnNavy}"
-                                Height="36" Padding="14,0"
-                                Margin="8,0,0,0"
-                                Click="BtnModifier_Click"/>
+            <!-- En-tête commande (anciens noms) -->
+            <ComboBox x:Name="CmbClient" SelectedValuePath="IdClient"/>
+            <DatePicker x:Name="DateFin"/>
+            <TextBox x:Name="TxtHeureFin"/>
 
-                        <!-- Vider -->
-                        <Button Grid.Column="3"
-                                x:Name="BtnVider"
-                                Content="Vider"
-                                Style="{StaticResource BtnGhost}"
-                                Height="36" Padding="14,0"
-                                Click="BtnVider_Click"/>
+            <!-- Pièce (formulaire ancienne version) -->
+            <ComboBox x:Name="CmbTypeVetement" SelectedValuePath="IdTypeVetement"/>
+            <ComboBox x:Name="CmbCouturier" SelectedValuePath="IdEmploye"/>
+            <ComboBox x:Name="CmbAjustement"/>
+            <TextBox x:Name="TxtMontant"/>
+            <ComboBox x:Name="CmbStatut"/>
+            <ComboBox x:Name="CmbDescription"/>
+            <StackPanel x:Name="PanelMesuresDynamiques"/>
+            <TextBlock x:Name="TxtIndicationMesures"/>
+            <Image x:Name="ImgPhoto"/>
+            <TextBlock x:Name="TxtPhotoPlaceholder"/>
+            <Button x:Name="BtnSupprimerPhoto" Click="BtnSupprimerPhoto_Click"/>
+            <Button x:Name="BtnPrendrePhoto" Click="BtnPrendrePhoto_Click"/>
+            <Button x:Name="BtnImporterPhoto" Click="BtnImporterPhoto_Click"/>
 
-                        <!-- Supprimer -->
-                        <Button Grid.Column="5"
-                                x:Name="BtnSupprimer"
-                                Content="🗑  Supprimer"
-                                Style="{StaticResource BtnDanger}"
-                                Height="36" Padding="14,0"
-                                Click="BtnSupprimer_Click"/>
+            <!-- Panier pièces (panneau droite ancien) -->
+            <DataGrid x:Name="ListePieces"/>
+            <DataGrid x:Name="ListeMateriaux"/>
+            <TextBox x:Name="TxtMatDesignation"
+                     PreviewTextInput="TxtMatDesignation_PreviewTextInput"/>
+            <TextBox x:Name="TxtMatQuantite"/>
+            <TextBox x:Name="TxtMatPrix"/>
+            <Button x:Name="BtnAjouterMateriau" Click="BtnAjouterMateriau_Click"/>
+            <Button x:Name="BtnConfirmerMateriau" Click="BtnConfirmerMateriau_Click"/>
+            <Button x:Name="BtnAnnulerFormulaireMateriau"
+                    Click="BtnAnnulerFormulaireMateriau_Click"/>
+            <Button x:Name="BtnSupprimerMateriau" Click="BtnSupprimerMateriau_Click"/>
+            <StackPanel x:Name="PanelAjoutMateriau"/>
+            <Separator x:Name="SepAvantFormulaireMat"/>
+            <StackPanel x:Name="PanelListeMateriaux"/>
+            <TextBlock x:Name="TxtAucunMateriau"/>
+            <TextBlock x:Name="TxtTotalMateriaux"/>
+            <StackPanel x:Name="PanelMateriaux"/>
+            <StackPanel x:Name="PanelBoutonsPhoto"/>
+            <StackPanel x:Name="PanelPhoto"/>
+            <TextBlock x:Name="TxtTotalPieces"/>
+            <Button x:Name="BtnSupprimerPiece" Click="BtnSupprimerPiece_Click"/>
+            <Button x:Name="BtnSauvegarderPiece" Click="BtnSauvegarderPiece_Click"/>
+            <Button x:Name="BtnCreer" Click="BtnCreer_Click"/>
+            <Button x:Name="BtnModifier" Click="BtnModifier_Click"/>
+            <Button x:Name="BtnSupprimer" Click="BtnSupprimer_Click"/>
+            <Button x:Name="BtnVider" Click="BtnVider_Click"/>
 
-                        <!-- WhatsApp Notifier — visible uniquement si commande sélectionnée -->
-                        <Button Grid.Column="7"
-                                x:Name="BtnWhatsAppPied"
-                                Height="36" Padding="12,0,12,0"
-                                FontSize="12" FontWeight="SemiBold"
-                                Background="#25D366"
-                                Foreground="White"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Visibility="Collapsed"
-                                ToolTip="Notifier le client sur WhatsApp"
-                                Click="BtnWhatsAppPied_Click">
-                            <Button.Content>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="💬" FontSize="14"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,5,0"/>
-                                    <TextBlock x:Name="TxtWhatsAppPiedLabel"
-                                               Text="Notifier"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button.Content>
-                        </Button>
+            <!-- WhatsApp panel droite -->
+            <Button x:Name="BtnWhatsAppPrete" Click="BtnWhatsAppPrete_Click"/>
+            <Button x:Name="BtnWhatsAppRdv" Click="BtnWhatsAppRdv_Click"/>
+            <Button x:Name="BtnWhatsAppPied" Click="BtnWhatsAppPied_Click"/>
+            <Button x:Name="BtnFicheAtelier" Click="BtnFicheAtelier_Click"/>
+            <TextBlock x:Name="TxtWhatsAppPiedLabel"/>
 
-                        <!-- Fiche Atelier — réimprimable à tout moment -->
-                        <Button Grid.Column="9"
-                                x:Name="BtnFicheAtelier"
-                                Height="36" Padding="12,0,12,0"
-                                FontSize="12" FontWeight="SemiBold"
-                                Background="#8B4513"
-                                Foreground="White"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Visibility="Collapsed"
-                                ToolTip="Imprimer la fiche atelier (ticket interne avec mesures)"
-                                Click="BtnFicheAtelier_Click">
-                            <Button.Content>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🏷" FontSize="13"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,5,0"/>
-                                    <TextBlock Text="Fiche atelier"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button.Content>
-                        </Button>
-                    </Grid>
-                </Border>
-            </Grid>
-        </Border>
+            <!-- Divers -->
+            <StackPanel x:Name="PanelActionsPiece"/>
+            <TextBlock x:Name="LblDetailPiece"/>
+            <Separator x:Name="SepDetailPiece"/>
+            <TextBlock x:Name="LblTypeVetement"/>
+            <TextBlock x:Name="LblCouturier"/>
+            <StackPanel x:Name="PanelPrix"/>
+            <TextBlock x:Name="TxtPrixBase"/>
+            <TextBlock x:Name="TxtPrixTotal"/>
+            <TextBlock x:Name="LblDescription"/>
+            <TextBlock x:Name="LblMontant"/>
+            <TextBlock x:Name="LblStatut"/>
+            <Separator x:Name="SepMesures"/>
+            <TextBlock x:Name="LblPhoto"/>
+            <Separator x:Name="SepPhoto"/>
+            <TextBlock x:Name="LblReutilisationMesures"/>
+            <ComboBox x:Name="CmbMesuresAnterieures"
+                      SelectionChanged="CmbMesuresAnterieures_SelectionChanged"/>
+
+            <!-- Bandeau résumé (panel droite) -->
+            <Border x:Name="BandeauResume"/>
+            <TextBlock x:Name="TxtResumeTotalPieces"/>
+            <Border x:Name="ChipTerminee"/>
+            <TextBlock x:Name="TxtResumeTerminee"/>
+            <Border x:Name="ChipEnCours"/>
+            <TextBlock x:Name="TxtResumeEnCours"/>
+            <Border x:Name="ChipAfaire"/>
+            <TextBlock x:Name="TxtResumeAfaire"/>
+            <Border x:Name="ChipLivree"/>
+            <TextBlock x:Name="TxtResumeLivree"/>
+            <TextBlock x:Name="TxtResumeCouturiers"/>
+
+            <!-- TxtMontant valide le collage -->
+            <TextBox x:Name="TxtMontantPasting"
+                     DataObject.Pasting="TxtMontant_Pasting"/>
+        </Grid>
+
     </Grid>
 </Page>
-

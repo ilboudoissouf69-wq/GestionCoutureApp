@@ -162,6 +162,12 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
+        // Activation de bouton nav depuis une page fille (ex. CommandesView → Paiements)
+        // ------------------------------------------------------------------
+        public void ActiverBoutonPaiements()  => SetBoutonActif(BtnPaiements);
+        public void ActiverBoutonCommandes()  => SetBoutonActif(BtnCommandes);
+
+        // ------------------------------------------------------------------
         private bool RoleAutorise(params string[] rolesAutorises)
         {
             if (rolesAutorises.Contains(_employeConnecte.Role)) return true;
