@@ -88,8 +88,10 @@ namespace GestionCoutureApp.Views
             _operateurConnecte = _authService.UtilisateurConnecte;
 
             if (_operateurConnecte != null)
-                TxtOperateurConnecte.Text =
-                    "Opérateur : " + _operateurConnecte.Prenom + " " + _operateurConnecte.Nom;
+            {
+                // TxtOperateurConnecte supprimé dans le nouveau design
+                // Le nom est affiché ailleurs si nécessaire
+            }
 
             // Timer de délai recherche (300 ms, single-shot)
             _rechercheTimer = new System.Windows.Threading.DispatcherTimer
@@ -129,6 +131,10 @@ namespace GestionCoutureApp.Views
 
         private async Task ChargerPaiements()
         {
+            // Guard : appelé parfois par WPF avant la fin du constructeur
+            // (ex: FiltreStatut_Changed déclenché par IsChecked=True sur RbValides).
+            if (_rechercheTimer == null) return;
+
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
@@ -195,6 +201,8 @@ namespace GestionCoutureApp.Views
 
         private async void FiltreStatut_Changed(object sender, RoutedEventArgs e)
         {
+            // Guard : peut être déclenché par InitializeComponent avant que les contrôles soient prêts
+            if (_rechercheTimer == null) return;
             _currentPage = 1;
             await ChargerPaiements();
         }
