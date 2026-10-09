@@ -378,7 +378,7 @@
                            Margin="14,0,0,0"
                            FontSize="12"
                            Foreground="#94A3B8">
-                    <TextBlock.Text>🔍  Rechercher par nom du client, n° commande (ex. CMD-4), couturier ou motif…</TextBlock.Text>
+                    <TextBlock.Text>🔍  Rechercher par nom du client, n° commande (ex. 4 ou CMD-4), couturier ou motif…</TextBlock.Text>
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -1168,29 +1168,34 @@
                     </DataGrid.Columns>
                 </DataGrid>
 
-                <!-- ── ÉTAT VIDE (affiché par MettreAJourBadges via Visibility) ── -->
+                <!-- ── ÉTAT VIDE (affiché par MettreAJourEtatVide via Visibility) ── -->
                 <Border x:Name="PanneauVide"
                         Background="White"
                         CornerRadius="12"
                         Visibility="Collapsed"
                         HorizontalAlignment="Stretch"
-                        VerticalAlignment="Center">
+                        VerticalAlignment="Stretch"
+                        MinHeight="220">
                     <StackPanel HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Margin="0,48">
+                                Margin="24,36">
                         <TextBlock Text="🔄"
-                                   FontSize="48"
+                                   FontSize="44"
                                    HorizontalAlignment="Center"
-                                   Margin="0,0,0,12"/>
+                                   Margin="0,0,0,10"/>
                         <TextBlock x:Name="TxtEtatVide"
                                    Text="Aucun retour enregistré"
-                                   FontSize="16" FontWeight="SemiBold"
+                                   FontSize="15" FontWeight="SemiBold"
                                    Foreground="{StaticResource RetSlateDark}"
-                                   HorizontalAlignment="Center"/>
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"/>
                         <TextBlock Text="Signalez un retour via le bouton « + Signaler un Retour »"
                                    FontSize="12"
                                    Foreground="{StaticResource RetSlateMuted}"
                                    HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
                                    Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>

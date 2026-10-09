@@ -95,6 +95,8 @@ namespace GestionCoutureApp.Views
             {
                 liste = liste.Where(r =>
                     r.ClientAffiche.ToLower().Contains(motCle) ||
+                    r.IdCommande.ToString().Contains(motCle) ||               // recherche par n° commande ex: "4" ou "CMD-4"
+                    ("cmd-" + r.IdCommande).Contains(motCle) ||               // ex: "cmd-4"
                     (r.PieceCommande?.TypeVetement.ToLower().Contains(motCle) ?? false) ||
                     r.DescriptionProbleme.ToLower().Contains(motCle) ||
                     (r.Couturier != null &&
