@@ -90,6 +90,17 @@ namespace GestionCoutureApp.Models
         public DateTime? DateTerminee { get; set; }
         public int? IdOperateurTerminee { get; set; }
 
+        /// <summary>
+        /// True si la date de livraison de la commande parente est dépassée
+        /// ET que cette pièce est encore active (A faire ou En cours).
+        /// Identique au filtre virtuel "Retard" de ObtenirPagePiecesAsync.
+        /// </summary>
+        [NotMapped]
+        public bool EstEnRetard =>
+            Commande != null &&
+            Commande.DateFin < DateTime.Now &&
+            (Statut == "A faire" || Statut == "En cours");
+
         [NotMapped]
         public string StatutAffiche => Statut switch
         {

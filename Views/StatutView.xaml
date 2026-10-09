@@ -1,159 +1,231 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Page x:Class="GestionCoutureApp.Views.StatutView"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{StaticResource BackgroundBrush}">
 
     <!-- ================================================================
-         STATUT VIEW V2 — une ligne par COMMANDE, dépliable par pièce.
+         STATUT VIEW V3 — Kanban 4 colonnes par pièce.
          Boss / Secrétaire : lecture + modification statut.
          Couturier : consultation uniquement.
     ================================================================ -->
-    <Grid Margin="28,24,28,28">
+
+    <Page.Resources>
+        <!-- Ambre primaire local — NE PAS redéfinir AccentBrush (global dynamique) -->
+        <SolidColorBrush x:Key="PrimaryAmber" Color="#D97706"/>
+        <!-- Ardoise foncée locale -->
+        <SolidColorBrush x:Key="SlateDark"  Color="#0F172A"/>
+        <SolidColorBrush x:Key="SlateMuted" Color="#64748B"/>
+        <!-- Bordure Kanban — renommée pour ne pas masquer la clé globale BorderColor (Color) -->
+        <SolidColorBrush x:Key="KanbanBorderBrush" Color="#E2E8F0"/>
+
+        <!-- Style commun des en-têtes de colonne Kanban -->
+        <Style x:Key="KanbanColumnHeader" TargetType="Border">
+            <Setter Property="CornerRadius"    Value="10,10,0,0"/>
+            <Setter Property="Padding"         Value="14,10"/>
+            <Setter Property="BorderThickness" Value="0,0,0,2"/>
+        </Style>
+
+        <!-- Style carte Kanban -->
+        <Style x:Key="KanbanCard" TargetType="Border">
+            <Setter Property="Background"      Value="White"/>
+            <Setter Property="CornerRadius"    Value="8"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource KanbanBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin"          Value="0,0,0,8"/>
+        </Style>
+
+        <!-- Bouton icône transparent -->
+        <Style x:Key="BtnIcon" TargetType="Button">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Padding"         Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#F1F5F9"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bg" Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
+    <Grid Margin="20,16,20,16">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>  <!-- Titre -->
+            <RowDefinition Height="Auto"/>  <!-- Filtres + recherche -->
+            <RowDefinition Height="Auto"/>  <!-- LoadingIndicator -->
+            <RowDefinition Height="*"/>     <!-- Kanban -->
+            <RowDefinition Height="Auto"/>  <!-- Pied de page -->
         </Grid.RowDefinitions>
 
-        <!-- ── Titre ── -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,18">
-            <TextBlock Text="Suivi des commandes"
+        <!-- ── Titre ────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="Suivi des pièces — Kanban"
                        FontSize="22" FontWeight="Bold"
-                       Foreground="{StaticResource PrimaryBrush}"/>
+                       Foreground="{StaticResource SlateDark}"/>
             <Border Height="3" Width="44" CornerRadius="2"
-                    Background="{StaticResource AccentBrush}"
-                    HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                    Background="{StaticResource PrimaryAmber}"
+                    HorizontalAlignment="Left" Margin="0,5,0,0"/>
         </StackPanel>
 
-        <!-- ── Barre de filtres rapides ── -->
+        <!-- ── Barre filtres + recherche + filtre couturier ─────────── -->
         <Border Grid.Row="1"
                 Background="White"
                 CornerRadius="10"
-                Padding="14,10"
-                Margin="0,0,0,12"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="1">
-            <Grid>
+                BorderBrush="{StaticResource KanbanBorderBrush}"
+                BorderThickness="1"
+                Margin="0,0,0,10">
+            <Grid Margin="14,8,14,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Filtres onglet-style -->
-                <WrapPanel Grid.Column="0" Orientation="Horizontal">
+                <!-- Pills de filtre -->
+                <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
 
                     <Button x:Name="BtnFiltreRetard"
-                            Content="⚠ En retard"
-                            Height="32" Padding="14,0"
-                            FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4" Cursor="Hand"
+                            Content="&#x26A0; En retard"
+                            Height="30" Padding="12,0"
+                            FontSize="11" FontWeight="SemiBold"
+                            Margin="0,3,6,3" Cursor="Hand"
                             Click="BtnFiltre_Click" Tag="Retard">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#FEE2E2" BorderBrush="#FCA5A5"
-                                        BorderThickness="1.5" CornerRadius="16"
+                                <Border x:Name="bg" Background="#FEE2E2" BorderBrush="#FCA5A5"
+                                        BorderThickness="1.5" CornerRadius="14"
                                         Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Background" Value="#FECACA"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <Button.Foreground><SolidColorBrush Color="#B91C1C"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreAfaire"
-                            Content="⬜ À faire"
-                            Height="32" Padding="14,0"
-                            FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4" Cursor="Hand"
+                            Content="&#x25A1; A faire"
+                            Height="30" Padding="12,0"
+                            FontSize="11" FontWeight="SemiBold"
+                            Margin="0,3,6,3" Cursor="Hand"
                             Click="BtnFiltre_Click" Tag="A faire">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#F1F5F9" BorderBrush="{StaticResource BorderBrush}"
-                                        BorderThickness="1.5" CornerRadius="16"
+                                <Border x:Name="bg" Background="#F1F5F9"
+                                        BorderBrush="{StaticResource KanbanBorderBrush}"
+                                        BorderThickness="1.5" CornerRadius="14"
                                         Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Background" Value="#E2E8F0"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <Button.Foreground><SolidColorBrush Color="#475569"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreEnCours"
-                            Content="🟡 En cours"
-                            Height="32" Padding="14,0"
-                            FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4" Cursor="Hand"
+                            Content="&#x1F7E1; En cours"
+                            Height="30" Padding="12,0"
+                            FontSize="11" FontWeight="SemiBold"
+                            Margin="0,3,6,3" Cursor="Hand"
                             Click="BtnFiltre_Click" Tag="En cours">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#FEF3C7" BorderBrush="#FDE68A"
-                                        BorderThickness="1.5" CornerRadius="16"
+                                <Border x:Name="bg" Background="#FEF3C7" BorderBrush="#FDE68A"
+                                        BorderThickness="1.5" CornerRadius="14"
                                         Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Background" Value="#FDE68A"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <Button.Foreground><SolidColorBrush Color="#92400E"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreTerminee"
-                            Content="🟢 Terminée"
-                            Height="32" Padding="14,0"
-                            FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4" Cursor="Hand"
+                            Content="&#x1F7E2; Terminee"
+                            Height="30" Padding="12,0"
+                            FontSize="11" FontWeight="SemiBold"
+                            Margin="0,3,6,3" Cursor="Hand"
                             Click="BtnFiltre_Click" Tag="Terminee">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#DCFCE7" BorderBrush="#86EFAC"
-                                        BorderThickness="1.5" CornerRadius="16"
+                                <Border x:Name="bg" Background="#DCFCE7" BorderBrush="#86EFAC"
+                                        BorderThickness="1.5" CornerRadius="14"
                                         Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Background" Value="#BBF7D0"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <Button.Foreground><SolidColorBrush Color="#15803D"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreLivree"
-                            Content="🔵 Livrée"
-                            Height="32" Padding="14,0"
-                            FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4" Cursor="Hand"
+                            Content="&#x1F535; Livree"
+                            Height="30" Padding="12,0"
+                            FontSize="11" FontWeight="SemiBold"
+                            Margin="0,3,6,3" Cursor="Hand"
                             Click="BtnFiltre_Click" Tag="Livree">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#DBEAFE" BorderBrush="#93C5FD"
-                                        BorderThickness="1.5" CornerRadius="16"
+                                <Border x:Name="bg" Background="#DBEAFE" BorderBrush="#93C5FD"
+                                        BorderThickness="1.5" CornerRadius="14"
                                         Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Background" Value="#BFDBFE"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <Button.Foreground><SolidColorBrush Color="#1D4ED8"/></Button.Foreground>
                     </Button>
 
                     <Button x:Name="BtnFiltreAll"
-                            Content="☰ Tous"
-                            Height="32" Padding="14,0"
-                            FontSize="12" FontWeight="SemiBold"
-                            Margin="0,0,6,4" Cursor="Hand"
+                            Content="&#x2630; Tous"
+                            Height="30" Padding="12,0"
+                            FontSize="11" FontWeight="SemiBold"
+                            Margin="0,3,6,3" Cursor="Hand"
                             Click="BtnFiltre_Click" Tag="">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="bg" Background="#0F172A"
-                                        CornerRadius="16"
+                                        CornerRadius="14"
                                         Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -166,390 +238,777 @@
                     </Button>
                 </WrapPanel>
 
+                <!-- Filtre couturier — masqué si role Couturier (géré code-behind) -->
+                <ComboBox Grid.Column="1"
+                          x:Name="CmbFiltreCouturier"
+                          Style="{StaticResource ModernComboBox}"
+                          Width="180" Height="34"
+                          Margin="8,0,8,0"
+                          DisplayMemberPath="Prenom"
+                          SelectedValuePath="IdEmploye"
+                          SelectionChanged="CmbFiltreCouturier_SelectionChanged"
+                          ToolTip="Filtrer par couturier"/>
+
                 <!-- Recherche -->
                 <TextBox Grid.Column="2"
                          x:Name="TxtRecherche"
                          Style="{StaticResource ModernTextBox}"
-                         Width="220"
+                         Width="200" Height="34"
+                         ToolTip="Rechercher un client ou un type de v&#234;tement"
                          TextChanged="TxtRecherche_TextChanged"/>
             </Grid>
         </Border>
 
-        <!-- ── Indicateur chargement ── -->
+        <!-- ── Indicateur chargement ─────────────────────────────────── -->
         <Border Grid.Row="2"
                 x:Name="LoadingIndicator"
                 Background="#FFFBF5"
-                Padding="14"
+                Padding="14,8"
                 Visibility="Collapsed"
                 CornerRadius="8"
-                BorderBrush="{StaticResource AccentBrush}"
+                BorderBrush="{StaticResource PrimaryAmber}"
                 BorderThickness="1"
                 Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="⏳" FontSize="14" Margin="0,0,8,0"/>
+                <TextBlock Text="&#x23F3;" FontSize="14" Margin="0,0,8,0"/>
                 <TextBlock Text="Chargement..." FontSize="12"
-                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Foreground="{StaticResource SlateMuted}"
                            VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
 
-        <!-- ── Tableau principal — une ligne par COMMANDE, dépliable ── -->
-        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
-            <DataGrid x:Name="GridCommandes"
-                      Style="{StaticResource ModernGrid}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      SelectionMode="Single"
-                      RowDetailsVisibilityMode="VisibleWhenSelected"
-                      VirtualizingStackPanel.IsVirtualizing="True"
-                      VirtualizingStackPanel.VirtualizationMode="Recycling"
-                      ScrollViewer.CanContentScroll="True">
+        <!-- ── Grille Kanban 4 colonnes ──────────────────────────────── -->
+        <ScrollViewer Grid.Row="3"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled">
+            <Grid x:Name="GrilleKanban" Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280" MinWidth="240"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="280" MinWidth="240"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="280" MinWidth="240"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="280" MinWidth="240"/>
+                </Grid.ColumnDefinitions>
 
-                <!-- ── Colonnes de la ligne commande ── -->
-                <DataGrid.Columns>
+                <!-- ════════════════════════════════════════════
+                     COLONNE 1 — A FAIRE
+                ════════════════════════════════════════════ -->
+                <Border Grid.Column="0" CornerRadius="10"
+                        BorderBrush="{StaticResource KanbanBorderBrush}"
+                        BorderThickness="1" Background="#FAFAFA">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                    <!-- N° commande -->
-                    <DataGridTextColumn Header="N°"
-                                        Binding="{Binding IdCommande}"
-                                        Width="48" MinWidth="40">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
-                                <Setter Property="FontWeight" Value="Bold"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <!-- Client -->
-                    <DataGridTextColumn Header="Client"
-                                        Binding="{Binding Client.Nom}"
-                                        Width="*" MinWidth="100">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <!-- Vêtements résumés -->
-                    <DataGridTextColumn Header="Vêtement(s)"
-                                        Binding="{Binding TypeVetementAffiche}"
-                                        Width="*" MinWidth="100">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <!-- Statut global (badge coloré) -->
-                    <DataGridTemplateColumn Header="Statut" Width="140" MinWidth="120">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Border CornerRadius="10" Padding="8,3"
-                                        HorizontalAlignment="Left" Margin="4,2">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="#E5E7EB"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="En cours">
-                                                    <Setter Property="Background" Value="#FEF3C7"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee">
-                                                    <Setter Property="Background" Value="#D1FAE5"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree">
-                                                    <Setter Property="Background" Value="#DBEAFE"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee partiellement">
-                                                    <Setter Property="Background" Value="#D1FAE5"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree partiellement">
-                                                    <Setter Property="Background" Value="#DBEAFE"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <TextBlock Text="{Binding StatutGlobalAffiche}"
-                                               FontSize="11" FontWeight="Bold">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="#374151"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="En cours">
-                                                        <Setter Property="Foreground" Value="#92400E"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee">
-                                                        <Setter Property="Foreground" Value="#065F46"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree">
-                                                        <Setter Property="Foreground" Value="#1E40AF"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee partiellement">
-                                                        <Setter Property="Foreground" Value="#065F46"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree partiellement">
-                                                        <Setter Property="Foreground" Value="#1E40AF"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </Border>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <!-- Date RDV — rouge si en retard -->
-                    <DataGridTemplateColumn Header="RDV" Width="90" MinWidth="80">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding DateFin, StringFormat={}{0:dd/MM/yy}}"
-                                           FontSize="12" FontWeight="SemiBold"
-                                           VerticalAlignment="Center"
-                                           HorizontalAlignment="Center"
-                                           Margin="4,0"
-                                           x:Name="TxtDate"/>
-                                <DataTemplate.Triggers>
-                                    <!-- Rouge si DateFin dépassée ET commande pas terminée/livrée -->
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding EstEnRetard}" Value="True"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter TargetName="TxtDate" Property="Foreground" Value="#DC2626"/>
-                                        <Setter TargetName="TxtDate" Property="FontWeight" Value="Bold"/>
-                                    </MultiDataTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <!-- Reste à payer -->
-                    <DataGridTemplateColumn Header="Reste dû (FCFA)" Width="110" MinWidth="100">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding ResteAPayer, StringFormat={}{0:N0}}"
-                                           FontSize="12" FontWeight="SemiBold"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center"
-                                           Margin="4,0">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="#DC2626"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ResteAPayer}" Value="0">
-                                                    <Setter Property="Foreground" Value="#22C55E"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <!-- Couturier(s) -->
-                    <DataGridTextColumn Header="Couturier(s)"
-                                        Binding="{Binding CouturiersAffiche}"
-                                        Width="*" MinWidth="80">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <!-- Boutons : Passer à… + WhatsApp -->
-                    <DataGridTemplateColumn Header="Actions" Width="160" MinWidth="150">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
+                        <!-- En-tête colonne -->
+                        <Border Grid.Row="0" Style="{StaticResource KanbanColumnHeader}"
+                                Background="#F1F5F9" BorderBrush="#CBD5E1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
                                 <StackPanel Orientation="Horizontal">
-
-                                    <!-- Menu déroulant "Passer à…" — Boss et Secrétaire seulement -->
-                                    <!-- La visibilité est gérée en code-behind via la propriété
-                                         BtnForcerVisibility injectée par le code -->
-                                    <Button x:Name="BtnPasserA"
-                                            Content="Passer à…"
-                                            Height="28" Padding="8,0"
-                                            FontSize="11"
-                                            Cursor="Hand"
-                                            Margin="0,0,4,0"
-                                            Click="BtnPasserA_Click"
-                                            Tag="{Binding IdCommande}">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="bg"
-                                                        Background="{StaticResource AccentBrush}"
-                                                        CornerRadius="6"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bg" Property="Background"
-                                                                Value="{StaticResource AccentHoverBrush}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                        <Button.Foreground>
-                                            <SolidColorBrush Color="White"/>
-                                        </Button.Foreground>
-                                    </Button>
-
-                                    <!-- Bouton WhatsApp -->
-                                    <Button Content="💬"
-                                            Width="30" Height="28"
-                                            FontSize="14"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Cursor="Hand"
-                                            HorizontalAlignment="Center"
-                                            ToolTip="Contacter le client sur WhatsApp"
-                                            Click="BtnWhatsApp_Click">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Opacity" Value="0.55"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Terminee">
-                                                        <Setter Property="Opacity" Value="1"/>
-                                                        <Setter Property="ToolTip" Value="✅ Commande prête — Notifier le client"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding StatutGlobal}" Value="Livree">
-                                                        <Setter Property="Opacity" Value="0.75"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
+                                    <Ellipse Width="10" Height="10" Fill="#94A3B8" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="A faire" FontSize="13" FontWeight="Bold"
+                                               Foreground="{StaticResource SlateDark}" VerticalAlignment="Center"/>
                                 </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                                <Border Grid.Column="1" Background="#E2E8F0" CornerRadius="10"
+                                        Padding="8,2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtCompteurAfaire" Text="0"
+                                               FontSize="11" FontWeight="Bold" Foreground="#475569"/>
+                                </Border>
+                            </Grid>
+                        </Border>
 
-                </DataGrid.Columns>
-
-                <!-- ── Détail dépliable : pièces de la commande ── -->
-                <DataGrid.RowDetailsTemplate>
-                    <DataTemplate>
-                        <Border Background="#F8FAFC"
-                                BorderBrush="#E2E8F0"
-                                BorderThickness="0,1,0,1"
-                                Padding="24,12,24,12">
+                        <!-- Liste cartes -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Padding="8,8,8,8">
                             <StackPanel>
-                                <TextBlock Text="Pièces de la commande :"
-                                           FontSize="12" FontWeight="SemiBold"
-                                           Foreground="#374151"
-                                           Margin="0,0,0,8"/>
-
-                                <!-- Liste des pièces -->
-                                <ItemsControl x:Name="ListePieces"
-                                              ItemsSource="{Binding Pieces}">
+                                <ItemsControl x:Name="ListeAfaire">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Background="White"
-                                                    CornerRadius="6"
-                                                    BorderBrush="#E5E7EB"
-                                                    BorderThickness="1"
-                                                    Padding="12,8"
-                                                    Margin="0,0,0,6">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
+                                            <Border Style="{StaticResource KanbanCard}">
+                                                <Grid Margin="12,10,12,10">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
 
-                                                    <!-- Infos pièce -->
-                                                    <StackPanel Grid.Column="0">
-                                                        <TextBlock FontSize="12" FontWeight="SemiBold"
-                                                                   Foreground="#111827">
-                                                            <Run Text="Pièce #"/>
+                                                    <!-- Ligne 1 : N° commande + badge statut + boutons -->
+                                                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontSize="11" FontWeight="Bold"
+                                                                   Foreground="{StaticResource SlateMuted}"
+                                                                   VerticalAlignment="Center">
+                                                            <Run Text="CMD #"/>
+                                                            <Run Text="{Binding IdCommande}"/>
+                                                            <Run Text=" — P#"/>
                                                             <Run Text="{Binding IdPieceCommande}"/>
-                                                            <Run Text=" — "/>
-                                                            <Run Text="{Binding TypeVetement}"/>
                                                         </TextBlock>
-                                                        <TextBlock FontSize="11" Foreground="#6B7280" Margin="0,2,0,0">
-                                                            <Run Text="Couturier : "/>
-                                                            <Run Text="{Binding Couturier.Prenom, TargetNullValue='—'}"/>
-                                                            <Run Text=" "/>
-                                                            <Run Text="{Binding Couturier.Nom, TargetNullValue=''}"/>
-                                                        </TextBlock>
-                                                    </StackPanel>
-
-                                                    <!-- Badge statut pièce -->
-                                                    <Border Grid.Column="1"
-                                                            CornerRadius="8" Padding="8,3"
-                                                            VerticalAlignment="Center"
-                                                            Margin="8,0">
-                                                        <Border.Style>
-                                                            <Style TargetType="Border">
-                                                                <Setter Property="Background" Value="#E5E7EB"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Statut}" Value="En cours">
-                                                                        <Setter Property="Background" Value="#FEF3C7"/>
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Statut}" Value="Terminee">
-                                                                        <Setter Property="Background" Value="#D1FAE5"/>
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding Statut}" Value="Livree">
-                                                                        <Setter Property="Background" Value="#DBEAFE"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Border.Style>
-                                                        <TextBlock Text="{Binding StatutAffiche}"
-                                                                   FontSize="11" FontWeight="Bold">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
-                                                                    <Setter Property="Foreground" Value="#374151"/>
+                                                        <!-- Badge En retard -->
+                                                        <Border Grid.Column="1"
+                                                                Background="#FEE2E2" CornerRadius="6" Padding="5,1"
+                                                                VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
                                                                     <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding Statut}" Value="En cours">
-                                                                            <Setter Property="Foreground" Value="#92400E"/>
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding Statut}" Value="Terminee">
-                                                                            <Setter Property="Foreground" Value="#065F46"/>
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding Statut}" Value="Livree">
-                                                                            <Setter Property="Foreground" Value="#1E40AF"/>
+                                                                        <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
-                                                    </Border>
+                                                            </Border.Style>
+                                                            <TextBlock Text="&#x26A0; Retard" FontSize="10"
+                                                                       FontWeight="Bold" Foreground="#B91C1C"/>
+                                                        </Border>
+                                                    </Grid>
 
-                                                    <!-- ComboBox changement statut pièce
-                                                         (visible Boss/Secrétaire, géré code-behind) -->
-                                                    <ComboBox Grid.Column="2"
-                                                              x:Name="CmbStatutPiece"
-                                                              Width="130" Height="28"
-                                                              FontSize="11"
-                                                              SelectedValue="{Binding Statut, Mode=OneWay}"
-                                                              SelectionChanged="CmbStatutPiece_SelectionChanged"
-                                                              Tag="{Binding IdPieceCommande}"
-                                                              VerticalAlignment="Center"
-                                                              Margin="0,0,0,0">
-                                                        <ComboBoxItem Content="À faire" Tag="A faire"/>
-                                                        <ComboBoxItem Content="En cours" Tag="En cours"/>
-                                                        <ComboBoxItem Content="Terminée" Tag="Terminee"/>
-                                                        <ComboBoxItem Content="Livrée" Tag="Livree"/>
-                                                    </ComboBox>
+                                                    <!-- Ligne 2 : Client + type vêtement -->
+                                                    <TextBlock Grid.Row="1" FontSize="13" FontWeight="SemiBold"
+                                                               Foreground="#111827" TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,0,2">
+                                                        <Run Text="{Binding Commande.Client.Prenom, TargetNullValue='', FallbackValue=''}"/>
+                                                        <Run Text=" "/>
+                                                        <Run Text="{Binding Commande.Client.Nom, TargetNullValue='Client inconnu', FallbackValue='Client inconnu'}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Row="2" FontSize="12" Foreground="{StaticResource SlateMuted}"
+                                                               TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                                                               Text="{Binding TypeVetement}"/>
+
+                                                    <!-- Ligne 3 : Description (tronquée + tooltip) -->
+                                                    <TextBlock Grid.Row="3" FontSize="11" Foreground="#6B7280"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                                               Margin="0,0,0,4"
+                                                               Text="{Binding DescriptionPrecision}"
+                                                               ToolTip="{Binding DescriptionPrecision}"/>
+
+                                                    <!-- Ligne 4 : Couturier + RDV + actions -->
+                                                    <Grid Grid.Row="4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                            <!-- Couturier assigné -->
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                                <TextBlock FontSize="11" Foreground="{StaticResource SlateMuted}"
+                                                                           VerticalAlignment="Center">
+                                                                    <Run Text="{Binding Couturier.Prenom, TargetNullValue='Non assign&#233;', FallbackValue='Non assign&#233;'}"/>
+                                                                    <Run Text=" "/>
+                                                                    <Run Text="{Binding Couturier.Nom, TargetNullValue='', FallbackValue=''}"/>
+                                                                </TextBlock>
+                                                                <!-- Badge ⚠ si pas de couturier -->
+                                                                <Border Background="#FEF3C7" CornerRadius="4" Padding="4,1"
+                                                                        Margin="4,0,0,0" VerticalAlignment="Center">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IdCouturier}" Value="{x:Null}">
+                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="&#x26A0; A attribuer" FontSize="10"
+                                                                               FontWeight="Bold" Foreground="#92400E"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <!-- Date RDV -->
+                                                            <TextBlock FontSize="11" Margin="0,0,0,0">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="{StaticResource SlateMuted}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                                                                <Setter Property="Foreground" Value="#DC2626"/>
+                                                                                <Setter Property="FontWeight" Value="Bold"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                                <Run Text="RDV : "/>
+                                                                <Run Text="{Binding Commande.DateFin, StringFormat={}{0:dd/MM/yy}, TargetNullValue='--/--/--'}"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+
+                                                        <!-- Boutons action -->
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                    VerticalAlignment="Center" Margin="4,0,0,0">
+                                                            <!-- Avancer statut -->
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x25B6;" FontSize="12"
+                                                                    Foreground="{StaticResource PrimaryAmber}"
+                                                                    ToolTip="A faire &#x2192; En cours"
+                                                                    Click="BtnAvancerStatut_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <!-- Menu ⋯ -->
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x22EF;" FontSize="16"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Changer le statut (cette pi&#232;ce ou toute la commande)"
+                                                                    Click="BtnPasserA_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <!-- WhatsApp -->
+                                                            <Button Content="&#x1F4AC;" FontSize="13"
+                                                                    ToolTip="Contacter le client sur WhatsApp"
+                                                                    Click="BtnWhatsApp_Click"
+                                                                    Tag="{Binding}">
+                                                                <Button.Style>
+                                                                    <Style TargetType="Button" BasedOn="{StaticResource BtnIcon}">
+                                                                        <Setter Property="Opacity" Value="0.55"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                                                                <Setter Property="Opacity" Value="1"/>
+                                                                                <Setter Property="ToolTip" Value="&#x26A0; En retard &#x2014; Rappel RDV"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Button.Style>
+                                                            </Button>
+                                                            <!-- Fiche atelier -->
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x1F5C2;" FontSize="13"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Ouvrir la fiche atelier"
+                                                                    Click="BtnFicheAtelier_Click"
+                                                                    Tag="{Binding}"/>
+                                                        </StackPanel>
+                                                    </Grid>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <!-- État vide -->
+                                <TextBlock x:Name="TxtVideAfaire"
+                                           Text="Aucune pi&#232;ce &#xE0; faire"
+                                           FontSize="12" Foreground="#94A3B8"
+                                           HorizontalAlignment="Center" Margin="0,20,0,0"
+                                           Visibility="Collapsed"/>
                             </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Spacer -->
+                <GridSplitter Grid.Column="1" Width="0" IsEnabled="False"/>
+
+                <!-- ════════════════════════════════════════════
+                     COLONNE 2 — EN COURS
+                ════════════════════════════════════════════ -->
+                <Border Grid.Column="2" CornerRadius="10"
+                        BorderBrush="{StaticResource KanbanBorderBrush}"
+                        BorderThickness="1" Background="#FAFAFA">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource KanbanColumnHeader}"
+                                Background="#FEF3C7" BorderBrush="#FDE68A">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="10" Height="10" Fill="#F59E0B" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="En cours" FontSize="13" FontWeight="Bold"
+                                               Foreground="#92400E" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Border Grid.Column="1" Background="#FDE68A" CornerRadius="10"
+                                        Padding="8,2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtCompteurEnCours" Text="0"
+                                               FontSize="11" FontWeight="Bold" Foreground="#92400E"/>
+                                </Border>
+                            </Grid>
                         </Border>
-                    </DataTemplate>
-                </DataGrid.RowDetailsTemplate>
 
-            </DataGrid>
-        </Border>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Padding="8,8,8,8">
+                            <StackPanel>
+                                <ItemsControl x:Name="ListeEnCours">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource KanbanCard}"
+                                                    BorderBrush="#FDE68A">
+                                                <Grid Margin="12,10,12,10">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
 
-        <!-- ── Pied : pagination + compteur ── -->
+                                                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontSize="11" FontWeight="Bold"
+                                                                   Foreground="{StaticResource SlateMuted}"
+                                                                   VerticalAlignment="Center">
+                                                            <Run Text="CMD #"/>
+                                                            <Run Text="{Binding IdCommande}"/>
+                                                            <Run Text=" — P#"/>
+                                                            <Run Text="{Binding IdPieceCommande}"/>
+                                                        </TextBlock>
+                                                        <Border Grid.Column="1"
+                                                                Background="#FEE2E2" CornerRadius="6" Padding="5,1"
+                                                                VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="&#x26A0; Retard" FontSize="10"
+                                                                       FontWeight="Bold" Foreground="#B91C1C"/>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <TextBlock Grid.Row="1" FontSize="13" FontWeight="SemiBold"
+                                                               Foreground="#111827" TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,0,2">
+                                                        <Run Text="{Binding Commande.Client.Prenom, TargetNullValue='', FallbackValue=''}"/>
+                                                        <Run Text=" "/>
+                                                        <Run Text="{Binding Commande.Client.Nom, TargetNullValue='Client inconnu', FallbackValue='Client inconnu'}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Row="2" FontSize="12" Foreground="{StaticResource SlateMuted}"
+                                                               TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                                                               Text="{Binding TypeVetement}"/>
+                                                    <TextBlock Grid.Row="3" FontSize="11" Foreground="#6B7280"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                                               Margin="0,0,0,4"
+                                                               Text="{Binding DescriptionPrecision}"
+                                                               ToolTip="{Binding DescriptionPrecision}"/>
+
+                                                    <Grid Grid.Row="4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                                <TextBlock FontSize="11" Foreground="{StaticResource SlateMuted}"
+                                                                           VerticalAlignment="Center">
+                                                                    <Run Text="{Binding Couturier.Prenom, TargetNullValue='Non assign&#233;', FallbackValue='Non assign&#233;'}"/>
+                                                                    <Run Text=" "/>
+                                                                    <Run Text="{Binding Couturier.Nom, TargetNullValue='', FallbackValue=''}"/>
+                                                                </TextBlock>
+                                                                <Border Background="#FEF3C7" CornerRadius="4" Padding="4,1"
+                                                                        Margin="4,0,0,0" VerticalAlignment="Center">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IdCouturier}" Value="{x:Null}">
+                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="&#x26A0; A attribuer" FontSize="10"
+                                                                               FontWeight="Bold" Foreground="#92400E"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock FontSize="11">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="{StaticResource SlateMuted}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                                                                <Setter Property="Foreground" Value="#DC2626"/>
+                                                                                <Setter Property="FontWeight" Value="Bold"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                                <Run Text="RDV : "/>
+                                                                <Run Text="{Binding Commande.DateFin, StringFormat={}{0:dd/MM/yy}, TargetNullValue='--/--/--'}"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                    VerticalAlignment="Center" Margin="4,0,0,0">
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x25B6;" FontSize="12"
+                                                                    Foreground="{StaticResource PrimaryAmber}"
+                                                                    ToolTip="En cours &#x2192; Terminee"
+                                                                    Click="BtnAvancerStatut_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x22EF;" FontSize="16"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Changer le statut"
+                                                                    Click="BtnPasserA_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Content="&#x1F4AC;" FontSize="13"
+                                                                    ToolTip="Contacter le client sur WhatsApp"
+                                                                    Click="BtnWhatsApp_Click"
+                                                                    Tag="{Binding}">
+                                                                <Button.Style>
+                                                                    <Style TargetType="Button" BasedOn="{StaticResource BtnIcon}">
+                                                                        <Setter Property="Opacity" Value="0.55"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding EstEnRetard}" Value="True">
+                                                                                <Setter Property="Opacity" Value="1"/>
+                                                                                <Setter Property="ToolTip" Value="&#x26A0; En retard &#x2014; Rappel RDV"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Button.Style>
+                                                            </Button>
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x1F5C2;" FontSize="13"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Ouvrir la fiche atelier"
+                                                                    Click="BtnFicheAtelier_Click"
+                                                                    Tag="{Binding}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="TxtVideEnCours"
+                                           Text="Aucune pi&#232;ce en cours"
+                                           FontSize="12" Foreground="#94A3B8"
+                                           HorizontalAlignment="Center" Margin="0,20,0,0"
+                                           Visibility="Collapsed"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <GridSplitter Grid.Column="3" Width="0" IsEnabled="False"/>
+
+                <!-- ════════════════════════════════════════════
+                     COLONNE 3 — TERMINEE
+                ════════════════════════════════════════════ -->
+                <Border Grid.Column="4" CornerRadius="10"
+                        BorderBrush="{StaticResource KanbanBorderBrush}"
+                        BorderThickness="1" Background="#FAFAFA">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource KanbanColumnHeader}"
+                                Background="#DCFCE7" BorderBrush="#86EFAC">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="10" Height="10" Fill="#22C55E" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Terminee" FontSize="13" FontWeight="Bold"
+                                               Foreground="#15803D" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Border Grid.Column="1" Background="#BBF7D0" CornerRadius="10"
+                                        Padding="8,2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtCompteurTerminee" Text="0"
+                                               FontSize="11" FontWeight="Bold" Foreground="#15803D"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Padding="8,8,8,8">
+                            <StackPanel>
+                                <ItemsControl x:Name="ListeTerminee">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource KanbanCard}"
+                                                    BorderBrush="#86EFAC">
+                                                <Grid Margin="12,10,12,10">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontSize="11" FontWeight="Bold"
+                                                                   Foreground="{StaticResource SlateMuted}"
+                                                                   VerticalAlignment="Center">
+                                                            <Run Text="CMD #"/>
+                                                            <Run Text="{Binding IdCommande}"/>
+                                                            <Run Text=" — P#"/>
+                                                            <Run Text="{Binding IdPieceCommande}"/>
+                                                        </TextBlock>
+                                                        <!-- Badge "Prête" visible sur cette colonne -->
+                                                        <Border Grid.Column="1"
+                                                                Background="#DCFCE7" CornerRadius="6" Padding="5,1"
+                                                                VerticalAlignment="Center">
+                                                            <TextBlock Text="&#x2705; Pr&#234;te" FontSize="10"
+                                                                       FontWeight="Bold" Foreground="#15803D"/>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <TextBlock Grid.Row="1" FontSize="13" FontWeight="SemiBold"
+                                                               Foreground="#111827" TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,0,2">
+                                                        <Run Text="{Binding Commande.Client.Prenom, TargetNullValue='', FallbackValue=''}"/>
+                                                        <Run Text=" "/>
+                                                        <Run Text="{Binding Commande.Client.Nom, TargetNullValue='Client inconnu', FallbackValue='Client inconnu'}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Row="2" FontSize="12" Foreground="{StaticResource SlateMuted}"
+                                                               TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                                                               Text="{Binding TypeVetement}"/>
+                                                    <TextBlock Grid.Row="3" FontSize="11" Foreground="#6B7280"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                                               Margin="0,0,0,4"
+                                                               Text="{Binding DescriptionPrecision}"
+                                                               ToolTip="{Binding DescriptionPrecision}"/>
+
+                                                    <Grid Grid.Row="4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                                <TextBlock FontSize="11" Foreground="{StaticResource SlateMuted}"
+                                                                           VerticalAlignment="Center">
+                                                                    <Run Text="{Binding Couturier.Prenom, TargetNullValue='Non assign&#233;', FallbackValue='Non assign&#233;'}"/>
+                                                                    <Run Text=" "/>
+                                                                    <Run Text="{Binding Couturier.Nom, TargetNullValue='', FallbackValue=''}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                            <TextBlock FontSize="11" Foreground="{StaticResource SlateMuted}">
+                                                                <Run Text="RDV : "/>
+                                                                <Run Text="{Binding Commande.DateFin, StringFormat={}{0:dd/MM/yy}, TargetNullValue='--/--/--'}"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                    VerticalAlignment="Center" Margin="4,0,0,0">
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x25B6;" FontSize="12"
+                                                                    Foreground="{StaticResource PrimaryAmber}"
+                                                                    ToolTip="Terminee &#x2192; Livree"
+                                                                    Click="BtnAvancerStatut_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x22EF;" FontSize="16"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Changer le statut"
+                                                                    Click="BtnPasserA_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Content="&#x1F4AC;" FontSize="13"
+                                                                    ToolTip="&#x2705; Pi&#232;ce pr&#234;te &#x2014; Notifier le client"
+                                                                    Opacity="1"
+                                                                    Click="BtnWhatsApp_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x1F5C2;" FontSize="13"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Ouvrir la fiche atelier"
+                                                                    Click="BtnFicheAtelier_Click"
+                                                                    Tag="{Binding}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="TxtVideTerminee"
+                                           Text="Aucune pi&#232;ce terminee"
+                                           FontSize="12" Foreground="#94A3B8"
+                                           HorizontalAlignment="Center" Margin="0,20,0,0"
+                                           Visibility="Collapsed"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <GridSplitter Grid.Column="5" Width="0" IsEnabled="False"/>
+
+                <!-- ════════════════════════════════════════════
+                     COLONNE 4 — LIVREE
+                ════════════════════════════════════════════ -->
+                <Border Grid.Column="6" CornerRadius="10"
+                        BorderBrush="{StaticResource KanbanBorderBrush}"
+                        BorderThickness="1" Background="#FAFAFA">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource KanbanColumnHeader}"
+                                Background="#DBEAFE" BorderBrush="#93C5FD">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="10" Height="10" Fill="#3B82F6" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Livree" FontSize="13" FontWeight="Bold"
+                                               Foreground="#1D4ED8" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Border Grid.Column="1" Background="#BFDBFE" CornerRadius="10"
+                                        Padding="8,2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtCompteurLivree" Text="0"
+                                               FontSize="11" FontWeight="Bold" Foreground="#1D4ED8"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Padding="8,8,8,8">
+                            <StackPanel>
+                                <ItemsControl x:Name="ListeLivree">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource KanbanCard}"
+                                                    BorderBrush="#93C5FD">
+                                                <Grid Margin="12,10,12,10">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontSize="11" FontWeight="Bold"
+                                                                   Foreground="{StaticResource SlateMuted}"
+                                                                   VerticalAlignment="Center">
+                                                            <Run Text="CMD #"/>
+                                                            <Run Text="{Binding IdCommande}"/>
+                                                            <Run Text=" — P#"/>
+                                                            <Run Text="{Binding IdPieceCommande}"/>
+                                                        </TextBlock>
+                                                        <Border Grid.Column="1"
+                                                                Background="#DBEAFE" CornerRadius="6" Padding="5,1"
+                                                                VerticalAlignment="Center">
+                                                            <TextBlock Text="&#x1F4E6; Livr&#233;e" FontSize="10"
+                                                                       FontWeight="Bold" Foreground="#1D4ED8"/>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <TextBlock Grid.Row="1" FontSize="13" FontWeight="SemiBold"
+                                                               Foreground="#111827" TextTrimming="CharacterEllipsis"
+                                                               Margin="0,0,0,2">
+                                                        <Run Text="{Binding Commande.Client.Prenom, TargetNullValue='', FallbackValue=''}"/>
+                                                        <Run Text=" "/>
+                                                        <Run Text="{Binding Commande.Client.Nom, TargetNullValue='Client inconnu', FallbackValue='Client inconnu'}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Row="2" FontSize="12" Foreground="{StaticResource SlateMuted}"
+                                                               TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                                                               Text="{Binding TypeVetement}"/>
+                                                    <TextBlock Grid.Row="3" FontSize="11" Foreground="#6B7280"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                                               Margin="0,0,0,4"
+                                                               Text="{Binding DescriptionPrecision}"
+                                                               ToolTip="{Binding DescriptionPrecision}"/>
+
+                                                    <Grid Grid.Row="4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                                <TextBlock FontSize="11" Foreground="{StaticResource SlateMuted}"
+                                                                           VerticalAlignment="Center">
+                                                                    <Run Text="{Binding Couturier.Prenom, TargetNullValue='Non assign&#233;', FallbackValue='Non assign&#233;'}"/>
+                                                                    <Run Text=" "/>
+                                                                    <Run Text="{Binding Couturier.Nom, TargetNullValue='', FallbackValue=''}"/>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                            <TextBlock FontSize="11" Foreground="{StaticResource SlateMuted}">
+                                                                <Run Text="RDV : "/>
+                                                                <Run Text="{Binding Commande.DateFin, StringFormat={}{0:dd/MM/yy}, TargetNullValue='--/--/--'}"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                    VerticalAlignment="Center" Margin="4,0,0,0">
+                                                            <!-- Livree = statut final, pas de bouton avancer -->
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x22EF;" FontSize="16"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Changer le statut"
+                                                                    Click="BtnPasserA_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Content="&#x1F4AC;" FontSize="13"
+                                                                    ToolTip="Contacter le client"
+                                                                    Opacity="0.55"
+                                                                    Click="BtnWhatsApp_Click"
+                                                                    Tag="{Binding}"/>
+                                                            <Button Style="{StaticResource BtnIcon}"
+                                                                    Content="&#x1F5C2;" FontSize="13"
+                                                                    Foreground="{StaticResource SlateMuted}"
+                                                                    ToolTip="Ouvrir la fiche atelier"
+                                                                    Click="BtnFicheAtelier_Click"
+                                                                    Tag="{Binding}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="TxtVideLivree"
+                                           Text="Aucune pi&#232;ce livr&#233;e"
+                                           FontSize="12" Foreground="#94A3B8"
+                                           HorizontalAlignment="Center" Margin="0,20,0,0"
+                                           Visibility="Collapsed"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+            </Grid>
+        </ScrollViewer>
+
+        <!-- ── Pied de page : pagination ────────────────────────────── -->
         <Border Grid.Row="4"
-                Background="#FAF5F2"
-                Padding="16,12"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,1,0,0">
+                Background="White"
+                Padding="16,10"
+                BorderBrush="{StaticResource KanbanBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Margin="0,6,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -560,25 +1019,94 @@
                 <TextBlock Grid.Column="0"
                            x:Name="TxtPaginationInfo"
                            FontSize="12"
-                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Foreground="{StaticResource SlateMuted}"
                            FontWeight="Medium"
                            VerticalAlignment="Center"/>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button x:Name="BtnPagePrecedente"
-                            Content="←" Width="36" Height="32"
+                            Content="&#x2190;" Width="36" Height="32"
                             Margin="0,0,8,0"
                             Click="BtnPagePrecedente_Click"
                             Style="{StaticResource BtnGhost}"
-                            IsEnabled="False" FontSize="14"/>
+                            IsEnabled="False" FontSize="14"
+                            ToolTip="Page pr&#233;c&#233;dente"/>
                     <Button x:Name="BtnPageSuivante"
-                            Content="→" Width="36" Height="32"
+                            Content="&#x2192;" Width="36" Height="32"
                             Click="BtnPageSuivante_Click"
                             Style="{StaticResource BtnGhost}"
-                            IsEnabled="False" FontSize="14"/>
+                            IsEnabled="False" FontSize="14"
+                            ToolTip="Page suivante"/>
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- ══════════════════════════════════════════════════════════
+             MODAL — Livraison non soldée
+             Overlay semi-transparent + panneau centré
+        ══════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="0" Grid.RowSpan="5"
+              x:Name="ModalLivraisonNonSoldee"
+              Visibility="Collapsed"
+              Panel.ZIndex="100">
+            <!-- Fond semi-opaque -->
+            <Rectangle Fill="#80000000"/>
+            <!-- Panneau centré -->
+            <Border Background="White"
+                    CornerRadius="12"
+                    BorderBrush="{StaticResource KanbanBorderBrush}"
+                    BorderThickness="1"
+                    MaxWidth="440"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center">
+                <Border Padding="28,24,28,24">
+                    <StackPanel>
+                        <!-- Titre -->
+                        <TextBlock Text="Livraison non sold&#233;e"
+                                   FontSize="17" FontWeight="Bold"
+                                   Foreground="{StaticResource SlateDark}"
+                                   Margin="0,0,0,6"/>
+                        <Border Height="2" Background="{StaticResource PrimaryAmber}"
+                                HorizontalAlignment="Left" Width="40" Margin="0,0,0,14"/>
+
+                        <!-- Info solde -->
+                        <TextBlock x:Name="TxtInfoSoldeRestant"
+                                   FontSize="13" Foreground="#374151"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,16"/>
+
+                        <!-- Motif obligatoire -->
+                        <TextBlock Text="Motif de la livraison non sold&#233;e (obligatoire) :"
+                                   FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{StaticResource SlateMuted}"
+                                   Margin="0,0,0,6"/>
+                        <TextBox x:Name="TxtMotifLivraison"
+                                 Style="{StaticResource ModernTextBox}"
+                                 Height="72"
+                                 TextWrapping="Wrap"
+                                 AcceptsReturn="True"
+                                 VerticalContentAlignment="Top"
+                                 Padding="10,8"
+                                 Margin="0,0,0,18"/>
+
+                        <!-- Boutons -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="BtnAnnulerLivraisonNonSoldee"
+                                    Content="Annuler"
+                                    Style="{StaticResource BtnGhost}"
+                                    Height="36" Padding="16,0"
+                                    Margin="0,0,10,0"
+                                    Click="BtnAnnulerLivraisonNonSoldee_Click"/>
+                            <Button x:Name="BtnConfirmerLivraisonNonSoldee"
+                                    Content="Confirmer la livraison"
+                                    Style="{StaticResource BtnPrimary}"
+                                    Height="36" Padding="16,0"
+                                    Click="BtnConfirmerLivraisonNonSoldee_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
+        </Grid>
 
     </Grid>
 </Page>
