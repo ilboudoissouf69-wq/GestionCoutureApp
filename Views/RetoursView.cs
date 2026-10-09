@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using GestionCoutureApp.Data;
@@ -350,44 +351,142 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // ── Fenêtre ──────────────────────────────────────────────────
+            // ── Couleurs locales formulaire (charte Ambre & Ardoise) ──────
+            var slateDark  = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)); // #0F172A
+            var slateBody  = new SolidColorBrush(Color.FromRgb(0x33, 0x41, 0x55)); // #334155
+            var slateMuted = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)); // #64748B
+            var amber      = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)); // #D97706
+            var amberHover = new SolidColorBrush(Color.FromRgb(0xB4, 0x53, 0x09)); // #B45309
+            var amberLight = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)); // #FEF3C7
+            var borderClr  = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)); // #E2E8F0
+            var footerBg   = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC)); // #F8FAFC
+            var whiteBrush = Brushes.White;
+
+            // ── Fenêtre transparente avec Border arrondie ─────────────────
             var fenetre = new Window
             {
                 Title = modeEdition
                     ? $"Retour #{retourExistant!.IdRetour} — Détails & Modification"
                     : "🔄  Nouveau retour — Reprise gratuite",
-                Width = 620,
-                MaxHeight = 800,
+                Width            = 620,
+                MaxHeight        = 860,
+                WindowStyle      = WindowStyle.None,
+                AllowsTransparency = true,
+                Background       = Brushes.Transparent,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize,
-                Background = Brushes.White,
-                SizeToContent = SizeToContent.Height,
-                Owner = Window.GetWindow(this)
+                ResizeMode       = ResizeMode.NoResize,
+                SizeToContent    = SizeToContent.Height,
+                Owner            = Window.GetWindow(this)
             };
 
+            // Fermer avec Echap
+            fenetre.KeyDown += (s, ev) =>
+            {
+                if (ev.Key == System.Windows.Input.Key.Escape)
+                    fenetre.Close();
+            };
+
+            // Enveloppe arrondie principale
+            var enveloppe = new Border
+            {
+                CornerRadius    = new CornerRadius(14),
+                Background      = Brushes.White,
+                BorderBrush     = borderClr,
+                BorderThickness = new Thickness(1),
+                ClipToBounds    = true,
+                Effect          = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color     = Color.FromRgb(0, 0, 0),
+                    Opacity   = 0.18,
+                    BlurRadius = 24,
+                    ShadowDepth = 4
+                }
+            };
+
+            // Grid interne : en-tête | corps scrollable | pied
+            var mainGrid = new Grid();
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // ── EN-TÊTE ardoise ───────────────────────────────────────────
+            var headerBorder = new Border
+            {
+                Background   = slateDark,
+                Padding      = new Thickness(20, 14, 16, 14),
+                CornerRadius = new CornerRadius(14, 14, 0, 0)
+            };
+            headerBorder.MouseLeftButtonDown += (s, ev) =>
+            {
+                if (ev.ButtonState == System.Windows.Input.MouseButtonState.Pressed)
+                    fenetre.DragMove();
+            };
+
+            var headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Pastille icône 🔄
+            var headerIcon = new Border
+            {
+                Background    = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
+                CornerRadius  = new CornerRadius(8),
+                Width = 36, Height = 36
+            };
+            headerIcon.Child = new TextBlock
+            {
+                Text = "🔄", FontSize = 17,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment   = VerticalAlignment.Center
+            };
+            Grid.SetColumn(headerIcon, 0);
+
+            // Titre de la modale
+            var headerTitle = new TextBlock
+            {
+                Text = modeEdition
+                    ? $"Retour #{retourExistant!.IdRetour} — Modification"
+                    : "Nouveau retour — Reprise gratuite",
+                FontSize   = 15, FontWeight = FontWeights.Bold,
+                Foreground = whiteBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(headerTitle, 2);
+
+            // Bouton ✕ fermer (sans valider)
+            var btnFermerEntete = new Button
+            {
+                Content      = "✕",
+                Width        = 30, Height = 30,
+                FontSize     = 14,
+                Foreground   = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                Background   = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor       = System.Windows.Input.Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip      = "Fermer sans enregistrer (Échap)"
+            };
+            btnFermerEntete.Click += (s, ev) => fenetre.Close();
+            Grid.SetColumn(btnFermerEntete, 3);
+
+            headerGrid.Children.Add(headerIcon);
+            headerGrid.Children.Add(headerTitle);
+            headerGrid.Children.Add(btnFermerEntete);
+            headerBorder.Child = headerGrid;
+            Grid.SetRow(headerBorder, 0);
+
+            // ── CORPS SCROLLABLE ──────────────────────────────────────────
             var scroll = new ScrollViewer
             {
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                MaxHeight = 800
+                VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                MaxHeight = 620
             };
+            Grid.SetRow(scroll, 1);
 
-            var root = new StackPanel { Margin = new Thickness(28, 24, 28, 20) };
-
-            // ── Titre ─────────────────────────────────────────────────────
-            root.Children.Add(new TextBlock
-            {
-                Text = modeEdition ? $"Retour #{retourExistant!.IdRetour}" : "Nouveau retour (reprise gratuite)",
-                FontSize = 17, FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
-                Margin = new Thickness(0, 0, 0, 4)
-            });
-            root.Children.Add(new Border
-            {
-                Height = 3, Width = 40, CornerRadius = new CornerRadius(2),
-                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 0, 0, 20)
-            });
+            var root = new StackPanel { Margin = new Thickness(24, 20, 24, 8) };
 
             // ══════════════════════════════════════════════════════════════
             // SECTION 1 — PIÈCE CONCERNÉE
@@ -637,7 +736,7 @@ namespace GestionCoutureApp.Views
                 Height = 36, Padding = new Thickness(16, 0, 16, 0),
                 FontSize = 12, FontWeight = FontWeights.SemiBold,
                 Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                Background = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)), // ambre
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Margin = new Thickness(0, 0, 10, 0)
@@ -649,10 +748,10 @@ namespace GestionCoutureApp.Views
                 Content = "📁  Importer",
                 Height = 36, Padding = new Thickness(14, 0, 14, 0),
                 FontSize = 12,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
-                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x41, 0x55)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC)),
                 BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Margin = new Thickness(0, 0, 10, 0)
             };
@@ -860,12 +959,12 @@ namespace GestionCoutureApp.Views
             // ══════════════════════════════════════════════════════════════
             root.Children.Add(new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xFD, 0xF4)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xBB, 0xF7, 0xD0)),
+                Background      = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)), // amber-100
+                BorderBrush     = new SolidColorBrush(Color.FromRgb(0xFD, 0xE6, 0x8A)), // amber-200
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(14, 10, 14, 10),
-                Margin = new Thickness(0, 4, 0, 20),
+                CornerRadius    = new CornerRadius(8),
+                Padding         = new Thickness(14, 10, 14, 10),
+                Margin          = new Thickness(0, 4, 0, 12),
                 Child = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -873,16 +972,16 @@ namespace GestionCoutureApp.Views
                     {
                         new TextBlock
                         {
-                            Text = "💰  Total à payer : ",
+                            Text = "🔄  Reprise sous garantie — ",
                             FontSize = 13, FontWeight = FontWeights.SemiBold,
-                            Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                            Foreground = new SolidColorBrush(Color.FromRgb(0x92, 0x40, 0x0E)), // amber-800
                             VerticalAlignment = VerticalAlignment.Center
                         },
                         new TextBlock
                         {
-                            Text = "0 FCFA  (Reprise sous garantie — Gratuite)",
-                            FontSize = 13, FontWeight = FontWeights.Bold,
-                            Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                            Text = "0 FCFA  (Gratuite)",
+                            FontSize = 14, FontWeight = FontWeights.Bold,
+                            Foreground = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)), // amber-600
                             VerticalAlignment = VerticalAlignment.Center
                         }
                     }
@@ -892,41 +991,59 @@ namespace GestionCoutureApp.Views
             // ── Message erreur ────────────────────────────────────────────
             var lblErreur = new TextBlock
             {
-                FontSize = 12,
+                FontSize   = 12,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
-                Height = 18, Margin = new Thickness(0, 0, 0, 10)
+                Height     = 18,
+                Margin     = new Thickness(0, 0, 0, 0)
             };
             root.Children.Add(lblErreur);
 
-            // ── Boutons ───────────────────────────────────────────────────
-            var panelBtns = new StackPanel
+            // ── Assemblage corps scrollable ───────────────────────────────
+            scroll.Content = root;
+            Grid.SetRow(scroll, 1);
+
+            // ── PIED DE PAGE gris clair ───────────────────────────────────
+            var footer = new Border
             {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right
+                Background      = footerBg,
+                BorderBrush     = borderClr,
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Padding         = new Thickness(20, 12, 20, 14),
+                CornerRadius    = new CornerRadius(0, 0, 14, 14)
             };
 
+            var panelBtns = new StackPanel
+            {
+                Orientation          = Orientation.Horizontal,
+                HorizontalAlignment  = HorizontalAlignment.Right
+            };
+
+            // Bouton Annuler — blanc avec bordure ardoise
             var btnAnnuler = new Button
             {
-                Content = "❌  Fermer",
-                Width = 110, Height = 38, FontSize = 13,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
-                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                Content         = "✕  Annuler",
+                Width           = 110, Height = 40,
+                FontSize        = 13,
+                Foreground      = slateBody,
+                Background      = Brushes.White,
                 BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Margin = new Thickness(0, 0, 10, 0)
+                BorderBrush     = borderClr,
+                Cursor          = System.Windows.Input.Cursors.Hand,
+                Margin          = new Thickness(0, 0, 10, 0)
             };
             btnAnnuler.Click += (s, ev) => fenetre.Close();
 
+            // Bouton Enregistrer — ambre
             var btnEnregistrer = new Button
             {
-                Content = modeEdition ? "💾  Enregistrer modifications" : "💾  Enregistrer le retour",
-                Height = 38, Padding = new Thickness(16, 0, 16, 0),
-                FontSize = 13, FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                Content         = modeEdition ? "💾  Enregistrer les modifications" : "💾  Enregistrer la Reprise",
+                Height          = 40,
+                Padding         = new Thickness(18, 0, 18, 0),
+                FontSize        = 13, FontWeight = FontWeights.Bold,
+                Foreground      = Brushes.White,
+                Background      = amber,
                 BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand
+                Cursor          = System.Windows.Input.Cursors.Hand
             };
 
             btnEnregistrer.Click += (s, ev) =>
@@ -998,41 +1115,52 @@ namespace GestionCoutureApp.Views
 
             panelBtns.Children.Add(btnAnnuler);
             panelBtns.Children.Add(btnEnregistrer);
-            root.Children.Add(panelBtns);
+            footer.Child = panelBtns;
+            Grid.SetRow(footer, 2);
 
-            scroll.Content = root;
-            fenetre.Content = scroll;
+            // ── Assemblage final ──────────────────────────────────────────
+            mainGrid.Children.Add(headerBorder);
+            mainGrid.Children.Add(scroll);
+            mainGrid.Children.Add(footer);
+            enveloppe.Child = mainGrid;
+            fenetre.Content = enveloppe;
             fenetre.ShowDialog();
         }
 
         // ==================================================================
-        // Helpers UI
+        // Helpers UI — charte Ambre & Ardoise
+        // (utilisés uniquement dans OuvrirFenetreRetour de cette classe)
         // ==================================================================
         private static void AjouterSectionTitre(StackPanel parent, string titre)
         {
-            parent.Children.Add(new Border
+            // Ligne ambre + texte ardoise
+            var panel = new StackPanel { Margin = new Thickness(0, 10, 0, 12) };
+            panel.Children.Add(new TextBlock
             {
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
-                BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(0, 0, 0, 6),
-                Margin = new Thickness(0, 6, 0, 12),
-                Child = new TextBlock
-                {
-                    Text = titre,
-                    FontSize = 11, FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x73, 0x55))
-                }
+                Text       = titre,
+                FontSize   = 11, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)), // slateDark
+                Margin     = new Thickness(0, 0, 0, 5)
             });
+            panel.Children.Add(new Border
+            {
+                Height              = 2,
+                CornerRadius        = new CornerRadius(1),
+                Background          = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)), // amber
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Width               = 36
+            });
+            parent.Children.Add(panel);
         }
 
         private static void AjouterLabel(StackPanel parent, string texte)
         {
             parent.Children.Add(new TextBlock
             {
-                Text = texte,
-                FontSize = 12, FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
-                Margin = new Thickness(0, 0, 0, 4)
+                Text       = texte,
+                FontSize   = 12, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)), // slateDark
+                Margin     = new Thickness(0, 0, 0, 4)
             });
         }
 
@@ -1084,64 +1212,171 @@ namespace GestionCoutureApp.Views
 
         private string? DemanderMotif(string titre)
         {
+            // ── Couleurs locales (charte Ambre & Ardoise) ─────────────────
+            var slateDark  = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A));
+            var slateBody  = new SolidColorBrush(Color.FromRgb(0x33, 0x41, 0x55));
+            var borderClr  = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0));
+            var footerBg   = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC));
+            var amber      = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06));
+
             string? resultat = null;
+
             var dlg = new Window
             {
-                Title = titre, Width = 420,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize,
-                Background = Brushes.White,
-                SizeToContent = SizeToContent.Height,
-                Owner = Window.GetWindow(this)
+                Title                  = titre,
+                Width                  = 440,
+                WindowStyle            = WindowStyle.None,
+                AllowsTransparency     = true,
+                Background             = Brushes.Transparent,
+                WindowStartupLocation  = WindowStartupLocation.CenterOwner,
+                ResizeMode             = ResizeMode.NoResize,
+                SizeToContent          = SizeToContent.Height,
+                Owner                  = Window.GetWindow(this)
             };
-            var sp = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+            dlg.KeyDown += (s, ev) =>
+            {
+                if (ev.Key == System.Windows.Input.Key.Escape)
+                    dlg.Close();
+            };
+
+            // Enveloppe arrondie
+            var env = new Border
+            {
+                CornerRadius    = new CornerRadius(12),
+                Background      = Brushes.White,
+                BorderBrush     = borderClr,
+                BorderThickness = new Thickness(1),
+                ClipToBounds    = true,
+                Effect          = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Color.FromRgb(0, 0, 0), Opacity = 0.15,
+                    BlurRadius = 20, ShadowDepth = 3
+                }
+            };
+
+            var mainG = new Grid();
+            mainG.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            mainG.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            mainG.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // En-tête ardoise
+            var hdr = new Border
+            {
+                Background    = slateDark,
+                Padding       = new Thickness(18, 12, 14, 12),
+                CornerRadius  = new CornerRadius(12, 12, 0, 0)
+            };
+            hdr.MouseLeftButtonDown += (s, ev) =>
+            {
+                if (ev.ButtonState == System.Windows.Input.MouseButtonState.Pressed)
+                    dlg.DragMove();
+            };
+            var hdrRow = new Grid();
+            hdrRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            hdrRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var hdrTitle = new TextBlock
+            {
+                Text = "🚫  " + titre,
+                FontSize = 13, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(hdrTitle, 0);
+            var btnX = new Button
+            {
+                Content = "✕", Width = 28, Height = 28, FontSize = 13,
+                Foreground = Brushes.White, Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            btnX.Click += (s, ev) => { dlg.DialogResult = false; dlg.Close(); };
+            Grid.SetColumn(btnX, 1);
+            hdrRow.Children.Add(hdrTitle);
+            hdrRow.Children.Add(btnX);
+            hdr.Child = hdrRow;
+            Grid.SetRow(hdr, 0);
+
+            // Corps
+            var sp = new StackPanel { Margin = new Thickness(20, 16, 20, 8) };
+
             sp.Children.Add(new TextBlock
             {
-                Text = "Motif :", FontSize = 13,
-                Margin = new Thickness(0, 0, 0, 8)
+                Text = "Motif :", FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Foreground = slateDark, Margin = new Thickness(0, 0, 0, 6)
             });
             var txt = new TextBox
             {
-                Height = 70, FontSize = 13,
-                TextWrapping = TextWrapping.Wrap,
-                AcceptsReturn = true,
+                Height                    = 72, FontSize = 13,
+                TextWrapping              = TextWrapping.Wrap,
+                AcceptsReturn             = true,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Margin = new Thickness(0, 0, 0, 12)
+                Margin                    = new Thickness(0, 0, 0, 8),
+                Padding                   = new Thickness(10, 8, 10, 8),
+                BorderBrush               = borderClr,
+                BorderThickness           = new Thickness(1)
             };
             sp.Children.Add(txt);
+
             var err = new TextBlock
             {
-                Foreground = Brushes.Red,
-                Height = 16, Margin = new Thickness(0, 0, 0, 10)
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                Height = 16, Margin = new Thickness(0, 0, 0, 4)
             };
             sp.Children.Add(err);
-            var row = new StackPanel
+            Grid.SetRow(sp, 1);
+
+            // Pied
+            var foot = new Border
             {
-                Orientation = Orientation.Horizontal,
+                Background      = footerBg,
+                BorderBrush     = borderClr,
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Padding         = new Thickness(18, 10, 18, 12),
+                CornerRadius    = new CornerRadius(0, 0, 12, 12)
+            };
+            var footRow = new StackPanel
+            {
+                Orientation         = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
+            var btnCancel = new Button
+            {
+                Content = "Annuler", Width = 90, Height = 38,
+                FontSize = 13, Foreground = slateBody,
+                Background = Brushes.White,
+                BorderBrush = borderClr, BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+            btnCancel.Click += (s, ev) => { dlg.DialogResult = false; dlg.Close(); };
+
             var btnOk = new Button
             {
-                Content = "Confirmer", Width = 110, Height = 36,
-                FontWeight = FontWeights.Bold, Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                Content = "Confirmer", Width = 110, Height = 38,
+                FontSize = 13, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White, Background = amber,
                 BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Margin = new Thickness(0, 0, 8, 0)
+                Cursor = System.Windows.Input.Cursors.Hand
             };
-            var btnCancel = new Button { Content = "Annuler", Width = 90, Height = 36 };
-            btnOk.Click += (s, e) =>
+            btnOk.Click += (s, ev) =>
             {
-                if (string.IsNullOrWhiteSpace(txt.Text)) { err.Text = "Motif obligatoire."; return; }
+                if (string.IsNullOrWhiteSpace(txt.Text))
+                { err.Text = "Le motif est obligatoire."; return; }
                 resultat = txt.Text.Trim();
                 dlg.DialogResult = true;
                 dlg.Close();
             };
-            btnCancel.Click += (s, e) => { dlg.DialogResult = false; dlg.Close(); };
-            row.Children.Add(btnOk);
-            row.Children.Add(btnCancel);
-            sp.Children.Add(row);
-            dlg.Content = sp;
+
+            footRow.Children.Add(btnCancel);
+            footRow.Children.Add(btnOk);
+            foot.Child = footRow;
+            Grid.SetRow(foot, 2);
+
+            mainG.Children.Add(hdr);
+            mainG.Children.Add(sp);
+            mainG.Children.Add(foot);
+            env.Child = mainG;
+            dlg.Content = env;
             dlg.ShowDialog();
             return resultat;
         }
