@@ -366,13 +366,31 @@
                 <ColumnDefinition Width="180"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Champ recherche — reprend ModernTextBox global pour le placeholder -->
-            <TextBox Grid.Column="0"
-                     x:Name="TxtRecherche"
-                     Style="{StaticResource ModernTextBox}"
-                     Height="40"
-                     Tag="🔍  Rechercher (client, pièce, couturier, motif…)"
-                     TextChanged="TxtRecherche_TextChanged"/>
+            <!-- Champ recherche avec placeholder explicite superposé -->
+            <Grid Grid.Column="0">
+                <TextBox x:Name="TxtRecherche"
+                         Style="{StaticResource ModernTextBox}"
+                         Height="40"
+                         TextChanged="TxtRecherche_TextChanged"/>
+                <!-- Placeholder : visible uniquement si TextBox vide et sans focus -->
+                <TextBlock IsHitTestVisible="False"
+                           VerticalAlignment="Center"
+                           Margin="14,0,0,0"
+                           FontSize="12"
+                           Foreground="#94A3B8">
+                    <TextBlock.Text>🔍  Rechercher par nom du client, n° commande (ex. CMD-4), couturier ou motif…</TextBlock.Text>
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=TxtRecherche}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
 
             <!-- Filtre statut — TEXTES EXACTS attendus par AppliquerFiltre() -->
             <ComboBox Grid.Column="2"
@@ -449,79 +467,100 @@
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"/>
 
-                        <!-- ComboBox avec template explicite pour respecter les couleurs ardoise -->
+                        <!-- ComboBox Période : template complet ardoise/ambre, déroulement fonctionnel -->
                         <ComboBox x:Name="CmbPeriodeQualite"
                                   Width="148" Height="32"
                                   FontSize="11"
                                   SelectionChanged="CmbPeriodeQualite_SelectionChanged">
-
-                            <!-- Style local : fond ardoise, texte clair, flèche ambre -->
                             <ComboBox.Style>
                                 <Style TargetType="ComboBox">
-                                    <Setter Property="Background"   Value="#1E293B"/>
-                                    <Setter Property="Foreground"   Value="#E2E8F0"/>
-                                    <Setter Property="BorderBrush"  Value="#334155"/>
+                                    <Setter Property="Background"      Value="#1E293B"/>
+                                    <Setter Property="Foreground"      Value="#E2E8F0"/>
+                                    <Setter Property="BorderBrush"     Value="#334155"/>
                                     <Setter Property="BorderThickness" Value="1"/>
-                                    <Setter Property="Padding"      Value="10,0"/>
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="ComboBox">
                                                 <Grid>
-                                                    <!-- Fond principal -->
-                                                    <Border x:Name="bd"
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="7">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="26"/>
-                                                            </Grid.ColumnDefinitions>
-                                                            <!-- Valeur sélectionnée -->
-                                                            <ContentPresenter Grid.Column="0"
-                                                                              Content="{TemplateBinding SelectionBoxItem}"
-                                                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                                              Margin="10,0,0,0"
-                                                                              VerticalAlignment="Center"/>
-                                                            <!-- Flèche ambre -->
-                                                            <TextBlock Grid.Column="1"
-                                                                       Text="▾"
-                                                                       FontSize="11"
-                                                                       Foreground="{StaticResource RetAmber}"
-                                                                       HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"/>
-                                                        </Grid>
-                                                    </Border>
-                                                    <!-- Popup de la liste déroulante -->
+                                                    <!-- ToggleButton = toute la surface cliquable -->
+                                                    <ToggleButton x:Name="ToggleBtn"
+                                                                  IsChecked="{Binding IsDropDownOpen,
+                                                                      RelativeSource={RelativeSource TemplatedParent},
+                                                                      Mode=TwoWay}"
+                                                                  Focusable="False"
+                                                                  ClickMode="Press">
+                                                        <ToggleButton.Template>
+                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                <Border x:Name="tgBd"
+                                                                        Background="#1E293B"
+                                                                        BorderBrush="#334155"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="7">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="26"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <!-- Placeholder zone texte -->
+                                                                        <ContentPresenter Grid.Column="0"
+                                                                                          Margin="10,0,0,0"
+                                                                                          VerticalAlignment="Center"/>
+                                                                        <!-- Flèche ambre -->
+                                                                        <TextBlock Grid.Column="1"
+                                                                                   Text="▾"
+                                                                                   FontSize="11"
+                                                                                   Foreground="#D97706"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center"/>
+                                                                    </Grid>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="tgBd" Property="BorderBrush" Value="#D97706"/>
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsChecked" Value="True">
+                                                                        <Setter TargetName="tgBd" Property="BorderBrush" Value="#D97706"/>
+                                                                        <Setter TargetName="tgBd" Property="Background" Value="#0F172A"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </ToggleButton.Template>
+                                                    </ToggleButton>
+
+                                                    <!-- Valeur sélectionnée (par-dessus le ToggleButton) -->
+                                                    <ContentPresenter x:Name="ContentSite"
+                                                                      IsHitTestVisible="False"
+                                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                                      Margin="10,0,26,0"
+                                                                      VerticalAlignment="Center"/>
+
+                                                    <!-- Popup déroulant -->
                                                     <Popup x:Name="PART_Popup"
                                                            IsOpen="{TemplateBinding IsDropDownOpen}"
                                                            AllowsTransparency="True"
                                                            Focusable="False"
-                                                           PopupAnimation="Slide"
-                                                           Placement="Bottom">
+                                                           PopupAnimation="Fade"
+                                                           Placement="Bottom"
+                                                           VerticalOffset="2">
                                                         <Border Background="#1E293B"
-                                                                BorderBrush="#334155"
+                                                                BorderBrush="#D97706"
                                                                 BorderThickness="1"
-                                                                CornerRadius="7"
-                                                                MinWidth="{TemplateBinding ActualWidth}">
+                                                                CornerRadius="8"
+                                                                MinWidth="{TemplateBinding ActualWidth}"
+                                                                Padding="4,4">
+                                                            <Border.Effect>
+                                                                <DropShadowEffect Color="#000000" Opacity="0.30"
+                                                                                  BlurRadius="12" ShadowDepth="3"/>
+                                                            </Border.Effect>
                                                             <ScrollViewer MaxHeight="200"
-                                                                          VerticalScrollBarVisibility="Auto">
+                                                                          VerticalScrollBarVisibility="Auto"
+                                                                          HorizontalScrollBarVisibility="Disabled">
                                                                 <ItemsPresenter/>
                                                             </ScrollViewer>
                                                         </Border>
                                                     </Popup>
                                                 </Grid>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bd" Property="BorderBrush"
-                                                                Value="{StaticResource RetAmber}"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsDropDownOpen" Value="True">
-                                                        <Setter TargetName="bd" Property="BorderBrush"
-                                                                Value="{StaticResource RetAmber}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Setter.Value>
                                     </Setter>
@@ -531,10 +570,11 @@
                             <!-- Style des items de la liste déroulante -->
                             <ComboBox.Resources>
                                 <Style TargetType="ComboBoxItem">
-                                    <Setter Property="Foreground"   Value="#E2E8F0"/>
-                                    <Setter Property="Background"   Value="Transparent"/>
-                                    <Setter Property="Padding"      Value="10,6"/>
-                                    <Setter Property="FontSize"     Value="11"/>
+                                    <Setter Property="Foreground"  Value="#E2E8F0"/>
+                                    <Setter Property="Background"  Value="Transparent"/>
+                                    <Setter Property="Padding"     Value="10,7"/>
+                                    <Setter Property="FontSize"    Value="11"/>
+                                    <Setter Property="Cursor"      Value="Hand"/>
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="ComboBoxItem">
@@ -542,17 +582,15 @@
                                                         Background="{TemplateBinding Background}"
                                                         Padding="{TemplateBinding Padding}"
                                                         CornerRadius="5"
-                                                        Margin="3,1">
+                                                        Margin="0,1">
                                                     <ContentPresenter/>
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsHighlighted" Value="True">
-                                                        <Setter TargetName="itBd" Property="Background"
-                                                                Value="#D97706"/>
+                                                        <Setter TargetName="itBd" Property="Background" Value="#D97706"/>
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
-                                                        <Setter TargetName="itBd" Property="Background"
-                                                                Value="#92400E"/>
+                                                        <Setter TargetName="itBd" Property="Background" Value="#92400E"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
