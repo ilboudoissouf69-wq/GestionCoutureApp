@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,32 +11,32 @@ namespace GestionCoutureApp.Views
 {
     public partial class AlertesView : Page
     {
-        private readonly IAlerteService      _alerteService;
-        private readonly IWhatsAppService    _whatsAppService;
-        private readonly IParametresService  _parametresService;
-        private readonly ICommandeService    _commandeService;
+        // ── Services ─────────────────────────────────────────────────────
+        private readonly IAlerteService   _alerteService;
+        private readonly IWhatsAppService _whatsAppService;
+        private readonly ICommandeService _commandeService;
 
+        // ── Données brutes chargées depuis les services ───────────────────
         private List<AlerteRendezVous> _alertesProduction = new();
         private List<AlerteRendezVous> _alertesRetrait    = new();
+        private List<AlerteRendezVous> _alertesRetard     = new();
 
-        // TÂCHE 7 : Timer de rafraîchissement automatique toutes les 60 secondes
+        // ── Timer 60 s + anti-répétition notifications ────────────────────
         private readonly DispatcherTimer _timer;
-
-        // TÂCHE 7 : Anti-répétition — clé = IdPieceCommande, valeur = heure de la dernière notif
-        // Une pièce ne sera re-notifiée qu'après le délai configuré (par défaut 15 min).
         private readonly Dictionary<int, DateTime> _dernieresNotifications = new();
         private static readonly TimeSpan DelaiRepetitionNotif = TimeSpan.FromMinutes(15);
 
+        // ══════════════════════════════════════════════════════════════════
+        // CONSTRUCTEUR
+        // ══════════════════════════════════════════════════════════════════
         public AlertesView()
         {
             InitializeComponent();
 
-            _alerteService     = App.Services.GetRequiredService<IAlerteService>();
-            _whatsAppService   = App.Services.GetRequiredService<IWhatsAppService>();
-            _parametresService = App.Services.GetRequiredService<IParametresService>();
-            _commandeService   = App.Services.GetRequiredService<ICommandeService>();
+            _alerteService   = App.Services.GetRequiredService<IAlerteService>();
+            _whatsAppService = App.Services.GetRequiredService<IWhatsAppService>();
+            _commandeService = App.Services.GetRequiredService<ICommandeService>();
 
-            // TÂCHE 7 : DispatcherTimer 60 secondes
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
             _timer.Tick += async (s, e) => await ChargerDonnees();
 
@@ -43,8 +44,6 @@ namespace GestionCoutureApp.Views
             {
                 await ChargerDonnees();
                 _timer.Start();
-
-                // Abonnement CommandeChanged pour rafraîchissement immédiat
                 _commandeService.CommandeChanged += OnCommandeChanged;
             };
 
@@ -55,53 +54,208 @@ namespace GestionCoutureApp.Views
             };
         }
 
-        // ==================================================================
-        // Rafraîchissement immédiat sur changement de commande
-        // ==================================================================
+        // ══════════════════════════════════════════════════════════════════
+        // RAFRAÎCHISSEMENT SUR CHANGEMENT DE COMMANDE
+        // ══════════════════════════════════════════════════════════════════
         private async void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
         {
             await Dispatcher.InvokeAsync(async () => await ChargerDonnees());
         }
 
-        // ==================================================================
-        // Chargement
-        // ==================================================================
+        // ══════════════════════════════════════════════════════════════════
+        // CHARGEMENT PRINCIPAL
+        // ══════════════════════════════════════════════════════════════════
         private async Task ChargerDonnees()
         {
             try
             {
                 _alertesProduction = await _alerteService.ObtenirAlertesActuelles();
                 _alertesRetrait    = await _alerteService.ObtenirRendezVousSemaine();
+                _alertesRetard     = await _alerteService.ObtenirRetards();
 
-                MettreAJourBadges();
-                AfficherProduction();
-                AfficherRetrait();
-
-                // TÂCHE 7 : notifications sonores et popups pour les alertes urgentes
+                RepartirEtAfficher();
                 await VerifierNotificationsUrgentes();
             }
             catch (Exception ex)
             {
-                // Ne pas bloquer le timer sur erreur — log silencieux
                 System.Diagnostics.Debug.WriteLine($"[AlertesView] Erreur chargement : {ex.Message}");
             }
         }
 
-        // ==================================================================
-        // TÂCHE 7 : Notifications urgentes (son + popup) — async, non bloquant
-        // ==================================================================
+        // ══════════════════════════════════════════════════════════════════
+        // RÉPARTITION EN 4 SECTIONS (§3 du cahier des charges)
+        // ══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Fusionne les trois listes, dédoublonne par IdPieceCommande,
+        /// affecte chaque pièce à UNE SEULE section par ordre de priorité,
+        /// regroupe par commande en AlerteCommandeVm, puis alimente les
+        /// quatre ItemsControls.
+        /// </summary>
+        private void RepartirEtAfficher()
+        {
+            var maintenant = DateTime.Now;
+
+            // 1. Union dédoublonnée (IdPieceCommande) — priorité : production
+            //    d'abord, retrait ensuite, retards en dernier pour les pièces
+            //    qui seraient dans plusieurs listes.
+            var toutes = _alertesProduction
+                .Concat(_alertesRetrait)
+                .Concat(_alertesRetard)
+                .GroupBy(a => a.IdPieceCommande)
+                .Select(g => g.First())
+                .ToList();
+
+            // 2. Affectation à une section par priorité
+            var prets       = new List<AlerteRendezVous>();
+            var retards     = new List<AlerteRendezVous>();
+            var auJourdhui  = new List<AlerteRendezVous>();
+            var imminentes  = new List<AlerteRendezVous>();
+
+            foreach (var a in toutes)
+            {
+                // Priorité 1 — Prêtes : pièce Terminee (peu importe le RDV)
+                if (a.PiecePrete)
+                {
+                    prets.Add(a);
+                    continue;
+                }
+
+                // Priorité 2 — En retard : RDV dépassé et non terminée
+                if (a.NiveauAlerte == "retard")
+                {
+                    retards.Add(a);
+                    continue;
+                }
+
+                // Priorité 3 — Aujourd'hui : RDV date == aujourd'hui, non terminée
+                if (a.DateRendezVous.Date == maintenant.Date)
+                {
+                    auJourdhui.Add(a);
+                    continue;
+                }
+
+                // Priorité 4 — À venir 7 jours : RDV dans la fenêtre > aujourd'hui
+                //   et <= +7 jours. Exception : colis stagnant (TypeAlerte ==
+                //   "PasEncorePriseEnCharge") dont le RDV dépasse la fenêtre →
+                //   affiché quand même pour ne pas être perdu.
+                bool rdvSemaine = a.DateRendezVous.Date > maintenant.Date
+                               && a.DateRendezVous.Date <= maintenant.AddDays(7).Date;
+                bool stagnantHorsFenetre = a.TypeAlerte == "PasEncorePriseEnCharge"
+                                        && a.DateRendezVous.Date > maintenant.AddDays(7).Date;
+
+                if (rdvSemaine || stagnantHorsFenetre)
+                {
+                    imminentes.Add(a);
+                }
+            }
+
+            // 3. Tris par section
+            prets      = prets
+                .OrderByDescending(a => a.ProposerContactWhatsApp)
+                .ThenBy(a => a.DateRendezVous)
+                .ToList();
+            retards    = retards.OrderBy(a => a.DateRendezVous).ToList();
+            auJourdhui = auJourdhui.OrderBy(a => a.DateRendezVous).ToList();
+            imminentes = imminentes.OrderBy(a => a.DateRendezVous).ToList();
+
+            // 4. Groupement en cartes
+            var cartesPrets      = Grouper(prets,      "💬 Prévenir : commande prête");
+            var cartesRetards    = Grouper(retards,    "💬 Informer Client");
+            var cartesAujourdhui = Grouper(auJourdhui, "💬 Rappel RDV");
+            var cartesImminentes = Grouper(imminentes, ""); // pas de bouton WhatsApp
+
+            // 5. Mise à jour badges KPI
+            TxtBadgeNbPrets.Text       = cartesPrets.Count.ToString();
+            TxtBadgeNbRetards.Text     = cartesRetards.Count.ToString();
+            TxtBadgeNbAujourdhui.Text  = cartesAujourdhui.Count.ToString();
+            TxtBadgeNbImminentes.Text  = cartesImminentes.Count.ToString();
+
+            // 6. Alimenter les sections
+            AppliquerSection(ListePrets,      TxtZeroPrets,      cartesPrets);
+            AppliquerSection(ListeRetards,    TxtZeroRetard,     cartesRetards);
+            AppliquerSection(ListeAujourdhui, TxtZeroAujourdhui, cartesAujourdhui);
+            AppliquerSection(ListeImminentes, TxtZeroImminentes, cartesImminentes);
+
+            // 7. Badge menu principal (en pièces, retards + aujourd'hui)
+            int totalBadge = toutes.Count(a => a.NiveauAlerte is "retard" or "jourbj");
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.MettreAJourBadgeAlertes(totalBadge);
+        }
+
+        // ── Groupement des AlerteRendezVous en AlerteCommandeVm ──────────
+        private static List<AlerteCommandeVm> Grouper(
+            List<AlerteRendezVous> pieces,
+            string libelleBoutonWhatsApp)
+        {
+            return pieces
+                .GroupBy(a => a.IdCommande)
+                .Select(g =>
+                {
+                    var ordered     = g.OrderBy(a => a.DateRendezVous).ToList();
+                    var plusUrgente = ordered.First();
+
+                    string detail = string.Join(" • ", ordered.Select(a =>
+                        $"{a.TypeVetement} ({a.Statut})"));
+
+                    bool stagnant = g.Any(a => a.TypeAlerte == "PasEncorePriseEnCharge");
+
+                    return new AlerteCommandeVm
+                    {
+                        IdCommande             = g.Key,
+                        NomClient              = plusUrgente.NomClient,
+                        Telephone              = plusUrgente.Telephone,
+                        DateEcheance           = plusUrgente.DateRendezVous,
+                        HeureRdv               = plusUrgente.HeureRendezVous,
+                        DetailPieces           = detail,
+                        LibelleBoutonWhatsApp  = libelleBoutonWhatsApp,
+                        EstStagnant            = stagnant,
+                        IdsPiecesCommande      = ordered.Select(a => a.IdPieceCommande).ToList()
+                    };
+                })
+                .ToList();
+        }
+
+        // ── Afficher / masquer une section ────────────────────────────────
+        private static void AppliquerSection(
+            ItemsControl liste,
+            TextBlock msgVide,
+            List<AlerteCommandeVm> cartes)
+        {
+            if (cartes.Count == 0)
+            {
+                liste.Visibility   = Visibility.Collapsed;
+                msgVide.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                liste.ItemsSource  = cartes;
+                liste.Visibility   = Visibility.Visible;
+                msgVide.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // NOTIFICATIONS URGENTES (son + popup groupée)
+        // ══════════════════════════════════════════════════════════════════
         private async Task VerifierNotificationsUrgentes()
         {
-            var urgentes = _alertesProduction
+            // Dédoublonnage global avant le filtre NecessiteNotificationUrgente
+            var toutesDedup = _alertesProduction
                 .Concat(_alertesRetrait)
+                .Concat(_alertesRetard)
+                .GroupBy(a => a.IdPieceCommande)
+                .Select(g => g.First())
+                .ToList();
+
+            var urgentes = toutesDedup
                 .Where(a => a.NecessiteNotificationUrgente)
                 .ToList();
 
             if (!urgentes.Any()) return;
 
-            // Filtrer celles déjà notifiées récemment
             var maintenant = DateTime.Now;
-            var nouvelles = urgentes.Where(a =>
+            var nouvelles  = urgentes.Where(a =>
             {
                 if (_dernieresNotifications.TryGetValue(a.IdPieceCommande, out DateTime derniere))
                     return (maintenant - derniere) >= DelaiRepetitionNotif;
@@ -110,14 +264,12 @@ namespace GestionCoutureApp.Views
 
             if (!nouvelles.Any()) return;
 
-            // Son Windows (SystemSounds.Exclamation — non bloquant)
             await Task.Run(() =>
             {
                 try { SystemSounds.Exclamation.Play(); }
-                catch { /* son indisponible → silencieux */ }
+                catch { /* son indisponible */ }
             });
 
-            // Popup (une seule popup groupée, non bloquante)
             string corps = string.Join("\n", nouvelles.Take(5).Select(a =>
                 $"• {a.NomClient} — {a.TypeVetement} " +
                 $"({(a.NiveauAlerte == "retard" ? "EN RETARD" : "Auj. " + a.HeureRendezVous)})"));
@@ -161,7 +313,6 @@ namespace GestionCoutureApp.Views
             };
             btnIgnorer.Click += (s, e) =>
             {
-                // Marquer comme notifiées
                 foreach (var a in nouvelles)
                     _dernieresNotifications[a.IdPieceCommande] = DateTime.Now;
                 popup.Close();
@@ -179,7 +330,6 @@ namespace GestionCoutureApp.Views
                 foreach (var a in nouvelles)
                     _dernieresNotifications[a.IdPieceCommande] = DateTime.Now;
                 popup.Close();
-                // Remonter la fenêtre principale au premier plan si possible
                 if (Window.GetWindow(this) is Window main)
                 {
                     main.Activate();
@@ -197,81 +347,15 @@ namespace GestionCoutureApp.Views
             sp.Children.Add(btnGrid);
             popup.Content = sp;
 
-            // Marquer les alertes notifiées AVANT d'ouvrir la popup
             foreach (var a in nouvelles)
                 _dernieresNotifications[a.IdPieceCommande] = DateTime.Now;
 
-            // Non bloquant — ShowDialog() bloquerait le Dispatcher
             popup.Show();
         }
 
-        // ==================================================================
-        // Badges KPI
-        // ==================================================================
-        private void MettreAJourBadges()
-        {
-            TxtNbProdUrgent.Text    = _alertesProduction.Count(a => a.EstUrgent).ToString();
-            TxtNbProdSurveiller.Text = _alertesProduction.Count(a => !a.EstUrgent).ToString();
-            TxtNbPrets.Text          = _alertesRetrait.Count(a => a.PiecePrete).ToString();
-            TxtNbRdvAVenir.Text      = _alertesRetrait.Count(a => !a.PiecePrete).ToString();
-
-            // TÂCHE 7 : Badge total dans le bouton menu (si MainWindow l'expose)
-            int totalUrgent = _alertesProduction.Count(a => a.NiveauAlerte is "retard" or "jourbj")
-                            + _alertesRetrait.Count(a => a.NiveauAlerte is "retard" or "jourbj");
-
-            if (Window.GetWindow(this) is MainWindow mw)
-            {
-                mw.MettreAJourBadgeAlertes(totalUrgent);
-            }
-        }
-
-        // ==================================================================
-        // Section 1 — Production (ItemsControl)
-        // ==================================================================
-        private void AfficherProduction()
-        {
-            if (_alertesProduction.Count == 0)
-            {
-                ListeProduction.Visibility   = Visibility.Collapsed;
-                TxtVideProduction.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                ListeProduction.Visibility   = Visibility.Visible;
-                TxtVideProduction.Visibility = Visibility.Collapsed;
-                ListeProduction.ItemsSource  = _alertesProduction
-                    .OrderByDescending(a => a.NiveauAlerte == "retard")
-                    .ThenByDescending(a => a.NiveauAlerte == "jourbj")
-                    .ThenByDescending(a => a.NiveauAlerte == "demain")
-                    .ThenBy(a => a.DateRendezVous)
-                    .ToList();
-            }
-        }
-
-        // ==================================================================
-        // Section 2 — Retrait (ItemsControl)
-        // ==================================================================
-        private void AfficherRetrait()
-        {
-            if (_alertesRetrait.Count == 0)
-            {
-                ListeRetrait.Visibility   = Visibility.Collapsed;
-                TxtVideRetrait.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                ListeRetrait.Visibility   = Visibility.Visible;
-                TxtVideRetrait.Visibility = Visibility.Collapsed;
-                ListeRetrait.ItemsSource  = _alertesRetrait
-                    .OrderByDescending(a => a.NiveauAlerte == "retard")
-                    .ThenBy(a => a.DateRendezVous)
-                    .ToList();
-            }
-        }
-
-        // ==================================================================
-        // Actualiser
-        // ==================================================================
+        // ══════════════════════════════════════════════════════════════════
+        // BOUTON ACTUALISER
+        // ══════════════════════════════════════════════════════════════════
         private async void BtnActualiser_Click(object sender, RoutedEventArgs e)
         {
             try { await ChargerDonnees(); }
@@ -282,42 +366,116 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        // ==================================================================
-        // WhatsApp — bouton rappel depuis la liste (retard / RDV proche)
-        // ==================================================================
-        private async void BtnContacterWhatsApp_Click(object sender, RoutedEventArgs e)
+        // ══════════════════════════════════════════════════════════════════
+        // WHATSAPP — CONTEXTUEL PAR SECTION
+        // ══════════════════════════════════════════════════════════════════
+        private async void BtnWhatsApp_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not FrameworkElement fe) return;
-            if (fe.DataContext is not AlerteRendezVous alerte) return;
+            if (sender is not Button btn) return;
+            if (btn.Tag is not AlerteCommandeVm vm) return;
 
-            if (string.IsNullOrWhiteSpace(alerte.Telephone))
+            if (string.IsNullOrWhiteSpace(vm.Telephone))
             {
                 MessageBox.Show("Ce client n'a pas de numéro de téléphone enregistré.",
                     "Numéro manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            // Charger la commande complète pour IWhatsAppService
+            var commande = _commandeService.ObtenirParId(vm.IdCommande);
+            if (commande == null)
+            {
+                MessageBox.Show("La commande est introuvable.",
+                    "Commande manquante", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (commande.Client == null)
+            {
+                MessageBox.Show("Le client de cette commande est introuvable.",
+                    "Client manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             try
             {
-                string modele    = await _parametresService.ObtenirMsgCommandePrete();
-                string nomAtelier = await _parametresService.ObtenirNomAtelier();
+                btn.IsEnabled = false;
 
-                string message = modele
-                    .Replace("{Nom}",      $"*{alerte.NomClient}*")
-                    .Replace("{Commande}", alerte.IdCommande.ToString())
-                    .Replace("{Pieces}",   alerte.TypeVetement)
-                    .Replace("{Reste}",    "—")
-                    .Replace("{Atelier}",  nomAtelier)
-                    .Replace("{Date}",     alerte.DateRendezVous.ToString("dd/MM/yyyy"))
-                    .Replace("{Heure}",    alerte.HeureRendezVous);
-
-                _whatsAppService.OuvrirConversation(alerte.Telephone, message);
+                // Le libellé sur le bouton détermine le contexte d'envoi
+                if (vm.LibelleBoutonWhatsApp.Contains("commande prête", StringComparison.OrdinalIgnoreCase))
+                    await _whatsAppService.NotifierCommandePreteAsync(commande);
+                else
+                    await _whatsAppService.NotifierRappelRdvAsync(commande);
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Erreur WhatsApp : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally
+            {
+                btn.IsEnabled = true;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // MODAL DÉTAILS COMMANDE
+        // ══════════════════════════════════════════════════════════════════
+        private void BtnVoirDetails_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+            if (btn.Tag is not AlerteCommandeVm vm) return;
+
+            OuvrirModal(vm);
+        }
+
+        private void OuvrirModal(AlerteCommandeVm vm)
+        {
+            // Charger la commande complète (avec pièces et paiements)
+            var commande = _commandeService.ObtenirParId(vm.IdCommande);
+            if (commande == null)
+            {
+                MessageBox.Show("La commande est introuvable.",
+                    "Commande manquante", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // En-tête
+            TxtModalSoustitre.Text  = $"Commande #{commande.IdCommande} · Échéance : {vm.DateEcheanceAffichee}";
+            TxtModalNomClient.Text  = vm.NomClient;
+            TxtModalTelephone.Text  = string.IsNullOrWhiteSpace(vm.Telephone)
+                ? "(pas de numéro)"
+                : vm.Telephone;
+
+            // Infos financières
+            TxtModalEcheance.Text    = vm.DateEcheanceAffichee;
+            TxtModalResteAPayer.Text = commande.ResteAPayer > 0
+                ? $"{commande.ResteAPayer:N0} FCFA"
+                : "Soldée ✅";
+
+            // Pièces avec StatutAffiche (lisible) pour les badges XAML
+            var piecesPourModal = (commande.Pieces ?? new List<PieceCommande>())
+                .Select(p => new PieceModalItem
+                {
+                    TypeVetement = p.TypeVetement,
+                    Statut       = p.StatutAffiche   // "Terminée", "En cours", etc.
+                })
+                .ToList();
+
+            ListeModalPieces.ItemsSource = piecesPourModal;
+
+            ModalDetailsCommande.Visibility = Visibility.Visible;
+        }
+
+        private void BtnFermerModal_Click(object sender, RoutedEventArgs e)
+        {
+            ModalDetailsCommande.Visibility = Visibility.Collapsed;
+        }
+
+        // ── Petit DTO interne pour la liste de pièces dans la modal ───────
+        private sealed class PieceModalItem
+        {
+            public string TypeVetement { get; init; } = string.Empty;
+            public string Statut       { get; init; } = string.Empty;
         }
     }
 }

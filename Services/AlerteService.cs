@@ -150,6 +150,43 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
+        /// <summary>
+        /// Pièces non terminées / non livrées dont le RDV est déjà dépassé,
+        /// pour les commandes NON supprimées. TypeAlerte = "Retard".
+        /// Tri : RDV le plus ancien en premier.
+        /// </summary>
+        public async Task<List<AlerteRendezVous>> ObtenirRetards()
+        {
+            var maintenant = DateTime.Now;
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var pieces = await context.PiecesCommande
+                .Include(p => p.Couturier)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Client)
+                .Where(p => p.Statut != "Livree"
+                         && p.Statut != "Terminee"
+                         && p.Commande != null
+                         && p.Commande.EstSupprimee == false)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var resultat = new List<AlerteRendezVous>();
+            foreach (var piece in pieces)
+            {
+                var commande = piece.Commande!;
+                var dateRdv  = ObtenirDateRendezVous(piece, commande);
+                if (dateRdv >= maintenant) continue; // RDV non encore dépassé
+
+                resultat.Add(ConstruireAlerte(piece, commande, dateRdv, maintenant, "Retard"));
+            }
+
+            return resultat
+                .OrderBy(a => a.DateRendezVous)
+                .ToList();
+        }
+
         // Retourne le rendez-vous de la pièce : honore PieceCommande.RendezVousException
         // (cas d'exception de pièce individuelle) en priorité sur le RDV global de la commande.
         private static DateTime ObtenirDateRendezVous(PieceCommande piece, Commande commande)

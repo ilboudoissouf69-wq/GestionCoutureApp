@@ -175,35 +175,32 @@
             </Setter>
         </Style>
 
-        <!-- TextBox moderne (champs de la modale) -->
+        <!-- TextBox moderne (champs de la modale) —
+             On n'utilise PAS de ControlTemplate personnalisé car WPF ne
+             propage pas Foreground dans PART_ContentHost → texte invisible.
+             Les coins arrondis sont obtenus par un Border conteneur dans le XAML.
+             Le style ne fait que fixer les couleurs et la police. -->
         <Style x:Key="TypTextBox" TargetType="TextBox">
             <Setter Property="Background"      Value="White"/>
             <Setter Property="BorderBrush"     Value="{StaticResource TypBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding"         Value="10,8"/>
             <Setter Property="FontSize"        Value="13"/>
-            <Setter Property="Foreground"      Value="{StaticResource TypSlateDark}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Bd"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush"
-                                        Value="{StaticResource TypAmber}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Foreground"      Value="#1E293B"/>
+            <Setter Property="CaretBrush"      Value="#1E293B"/>
+            <Setter Property="SelectionBrush"  Value="{StaticResource TypAmber}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Conteneur arrondi pour TextBox — à utiliser comme Border autour
+             du TextBox quand on veut CornerRadius.
+             Usage : <Border Style="{StaticResource TypInputBorder}"><TextBox .../></Border> -->
+        <Style x:Key="TypInputBorder" TargetType="Border">
+            <Setter Property="Background"      Value="White"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource TypBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="8"/>
+            <Setter Property="Padding"         Value="0"/>
         </Style>
 
         <!-- Libellé de champ -->
@@ -306,19 +303,25 @@
                             <!-- Nom du modèle -->
                             <TextBlock Text="Nom du modèle *"
                                        Style="{StaticResource TypFieldLabel}"/>
-                            <TextBox x:Name="TxtNom"
-                                     Style="{StaticResource TypTextBox}"
-                                     MaxLength="100"
-                                     Margin="0,0,0,14"/>
+                            <Border Style="{StaticResource TypInputBorder}"
+                                    Margin="0,0,0,14">
+                                <TextBox x:Name="TxtNom"
+                                         Style="{StaticResource TypTextBox}"
+                                         MaxLength="100"
+                                         BorderThickness="0"/>
+                            </Border>
 
                             <!-- Prix de base -->
                             <TextBlock Text="Prix de base (FCFA) *"
                                        Style="{StaticResource TypFieldLabel}"/>
-                            <TextBox x:Name="TxtPrixBase"
-                                     Style="{StaticResource TypTextBox}"
-                                     Margin="0,0,0,18"
-                                     PreviewTextInput="TxtPrixBase_PreviewTextInput"
-                                     DataObject.Pasting="TxtPrixBase_Pasting"/>
+                            <Border Style="{StaticResource TypInputBorder}"
+                                    Margin="0,0,0,18">
+                                <TextBox x:Name="TxtPrixBase"
+                                         Style="{StaticResource TypTextBox}"
+                                         BorderThickness="0"
+                                         PreviewTextInput="TxtPrixBase_PreviewTextInput"
+                                         DataObject.Pasting="TxtPrixBase_Pasting"/>
+                            </Border>
 
                             <!-- ── Séparateur ── -->
                             <Border BorderBrush="{StaticResource TypBorder}"
@@ -339,14 +342,17 @@
                                     <ColumnDefinition Width="8"/>
                                     <ColumnDefinition Width="44"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="TxtNomMesure"
-                                         Grid.Column="0"
-                                         Style="{StaticResource TypTextBox}"
-                                         Height="38"
-                                         PreviewTextInput="TxtNomMesure_PreviewTextInput"
-                                         MaxLength="200"
-                                         KeyDown="TxtNomMesure_KeyDown"
-                                         ToolTip="Nom de la mesure (Entrée pour ajouter)"/>
+                                <Border Style="{StaticResource TypInputBorder}"
+                                        Grid.Column="0"
+                                        Height="38">
+                                    <TextBox x:Name="TxtNomMesure"
+                                             Style="{StaticResource TypTextBox}"
+                                             BorderThickness="0"
+                                             PreviewTextInput="TxtNomMesure_PreviewTextInput"
+                                             MaxLength="200"
+                                             KeyDown="TxtNomMesure_KeyDown"
+                                             ToolTip="Nom de la mesure (Entrée pour ajouter)"/>
+                                </Border>
                                 <Button Grid.Column="2"
                                         x:Name="BtnAjouterMesure"
                                         Content="+"
@@ -405,14 +411,17 @@
                                        FontWeight="Bold"
                                        Foreground="{StaticResource TypSlateMuted}"
                                        Margin="0,0,0,8"/>
-                            <TextBox x:Name="TxtVariantes"
-                                     Style="{StaticResource TypTextBox}"
-                                     Height="62"
-                                     AcceptsReturn="False"
-                                     TextWrapping="Wrap"
-                                     VerticalScrollBarVisibility="Auto"
-                                     Margin="0,0,0,4"
-                                     ToolTip="Ex : Coupe droite, Coupe slim, Avec poches"/>
+                            <Border Style="{StaticResource TypInputBorder}"
+                                    Margin="0,0,0,4">
+                                <TextBox x:Name="TxtVariantes"
+                                         Style="{StaticResource TypTextBox}"
+                                         BorderThickness="0"
+                                         Height="62"
+                                         AcceptsReturn="False"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         ToolTip="Ex : Coupe droite, Coupe slim, Avec poches"/>
+                            </Border>
                             <TextBlock Text="Ex : Coupe droite, Coupe slim, Avec poches latérales"
                                        FontSize="11"
                                        Foreground="{StaticResource TypSlateMuted}"

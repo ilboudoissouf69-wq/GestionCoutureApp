@@ -38,6 +38,7 @@ namespace GestionCoutureApp.Services
         {
             "PasEncorePriseEnCharge" => "⚠️  Colis stagnant — mi-délai dépassé, statut 'À faire'",
             "RendezVousProche"       => "⏰  RDV proche — vêtement pas encore terminé",
+            "Retard"                 => "🔴  RDV dépassé — vêtement pas encore terminé",
             _                       => TypeAlerte
         };
 
@@ -86,5 +87,10 @@ namespace GestionCoutureApp.Services
         Task<List<AlerteRendezVous>> ObtenirTousRendezVousAVenir();
         /// <summary>RDV de la semaine en cours (pour la section Retrait).</summary>
         Task<List<AlerteRendezVous>> ObtenirRendezVousSemaine();
+        /// <summary>
+        /// Pièces non terminées/livrées dont le RDV est déjà dépassé
+        /// (commandes non supprimées uniquement).
+        /// </summary>
+        Task<List<AlerteRendezVous>> ObtenirRetards();
     }
 }

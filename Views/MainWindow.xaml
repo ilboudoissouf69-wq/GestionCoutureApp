@@ -432,7 +432,9 @@
         <Frame x:Name="ContentFrame"
                Grid.Column="1"
                Background="{StaticResource BackgroundBrush}"
-               NavigationUIVisibility="Hidden"/>
+               NavigationUIVisibility="Hidden"
+               ScrollViewer.VerticalScrollBarVisibility="Disabled"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
 
     </Grid>
 </Window>

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using System.Windows.Input;
+using System.Windows.Threading;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,49 +9,42 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GestionCoutureApp.Views
 {
     /// <summary>
-    /// Écran Kanban de suivi des pièces — 4 colonnes (A faire / En cours / Terminee / Livree).
-    /// Boss/Secrétaire : lecture + modification de statut.
-    /// Couturier : consultation uniquement.
+    /// Kanban Suivi Atelier — une carte par commande, scroll global unique.
+    /// Le Frame WPF a ScrollViewer désactivé (MainWindow.xaml) pour que
+    /// la scrollbar de cette Page soit la seule visible.
+    /// Boss/Secrétaire : lecture + modification. Couturier : lecture seule.
     ///
-    /// NOTE : ChargerCommandes() charge maintenant des PIÈCES (PieceCommande),
-    /// non plus des Commande. Le nom est conservé pour la cohérence avec l'abonnement
-    /// CommandeChanged existant.
+    /// ANOMALIE CONNUE (non corrigée) : rétrogradation Boss sans motif
+    /// silencieuse — AvecControleLivraison n'intercepte que
+    /// LivraisonNonSoldeeException, pas InvalidOperationException du flux.
     /// </summary>
     public partial class StatutView : Page
     {
-        // ── Services ────────────────────────────────────────────────────
         private readonly ICommandeService _commandeService;
         private readonly IWhatsAppService _whatsApp;
         private readonly IAuthService     _authService;
 
-        // ── Pagination ────────────────────────────────────────────────
-        private const int PAGE_SIZE = 20;
-        private int _currentPage = 1;
-        private string? _filtreStatut = null;   // null = tous
-        private string _recherche = string.Empty;
-
-        // Rôle de l'utilisateur connecté
+        private const int PAGE_SIZE   = 20;
+        private int    _currentPage   = 1;
+        private string? _filtreStatut = null;
+        private string  _recherche    = string.Empty;
         private readonly string _role;
 
-        // Référence au bouton de filtre actif (indicateur visuel)
-        private Button? _btnFiltreActif;
+        private int?  _filtreCouturierId   = null;
+        private bool  _suppressCmbCouturier = false;
 
-        // ── Filtre couturier (côté client) ─────────────────────────────
-        private int? _filtreCouturierId = null;   // null = tous
-        private bool _suppressCmbCouturier = false;
-
-        // ── Modal livraison non soldée ─────────────────────────────────
-        // Action en attente d'un motif (branche PeutForcer == true)
         private Func<string?, Task>? _actionEnAttente = null;
 
-        // ── Données Kanban ─────────────────────────────────────────────
-        // Les colonnes ; affectées à ItemsSource des ItemsControl dans le XAML
-        private List<PieceCommande> _itemsAfaire   = new();
-        private List<PieceCommande> _itemsEnCours  = new();
-        private List<PieceCommande> _itemsTerminee = new();
-        private List<PieceCommande> _itemsLivree   = new();
+        private List<Commande> _itemsAfaire   = new();
+        private List<Commande> _itemsEnCours  = new();
+        private List<Commande> _itemsTerminee = new();
+        private List<Commande> _itemsLivree   = new();
 
-        // ── Constructeur ───────────────────────────────────────────────
+        private int _versionChargement = 0;
+        private bool _pret = false;
+        private readonly DispatcherTimer _rechercheTimer;
+
+        // ──────────────────────────────────────────────────────────────
         public StatutView()
         {
             InitializeComponent();
@@ -58,365 +52,214 @@ namespace GestionCoutureApp.Views
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _whatsApp        = App.Services.GetRequiredService<IWhatsAppService>();
             _authService     = App.Services.GetRequiredService<IAuthService>();
+            _role            = _authService.UtilisateurConnecte?.Role ?? "";
 
-            _role = _authService.UtilisateurConnecte?.Role ?? "";
+            _rechercheTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _rechercheTimer.Tick += async (s, e) =>
+            {
+                _rechercheTimer.Stop();
+                _currentPage = 1;
+                await ChargerCommandes();
+            };
 
             Loaded += async (s, e) =>
             {
-                // Masquer le filtre couturier pour le Couturier lui-même
                 if (_role == "Couturier")
-                    CmbFiltreCouturier.Visibility = Visibility.Collapsed;
+                    PanelFiltreCouturier.Visibility = Visibility.Collapsed;
 
-                // Remplir le ComboBox couturiers (sentinelle + couturiers actifs)
                 RemplirFiltreCouturier();
-
-                SetFiltreActif(BtnFiltreAll);
                 await ChargerCommandes();
 
-                // Abonnement CommandeChanged pour rafraîchissement immédiat
-                // et proposition WhatsApp au passage à Terminee
+                _commandeService.CommandeChanged -= OnCommandeChanged;
                 _commandeService.CommandeChanged += OnCommandeChanged;
+                _pret = true;
             };
 
             Unloaded += (s, e) =>
             {
+                _pret = false;
+                _rechercheTimer.Stop();
                 _commandeService.CommandeChanged -= OnCommandeChanged;
             };
         }
 
-        // ── Remplissage filtre couturier ──────────────────────────────
-        /// <summary>
-        /// Construit la liste couturiers pour CmbFiltreCouturier en réutilisant
-        /// la logique de CommandesView : couturiers actifs (Role Couturier ou Boss)
-        /// précédés d'une sentinelle "Tous les couturiers" (IdEmploye = 0).
-        /// Si aucun service n'est disponible, déduit la liste des pièces chargées.
-        /// </summary>
+        // ── Filtre couturier ──────────────────────────────────────────
         private void RemplirFiltreCouturier()
         {
             _suppressCmbCouturier = true;
             try
             {
-                var sentinelle = new Employe
-                {
-                    IdEmploye   = 0,
-                    Prenom      = "Tous les couturiers",
-                    Nom         = "",
-                    Identifiant = "",
-                    MotDePasse  = ""
-                };
-
-                // Tente de résoudre un DbContextFactory pour lire les employés actifs
-                // (même source que CommandesView, sans toucher aux services)
+                var sentinelle = new Employe { IdEmploye = 0, Prenom = "Tous les couturiers", Nom = "", Role = "", Statut = "" };
                 List<Employe> couturiers = new();
                 try
                 {
-                    var ctxFactory = App.Services
-                        .GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<Data.ApplicationDbContext>>();
+                    var ctxFactory = App.Services.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<Data.ApplicationDbContext>>();
                     using var ctx = ctxFactory.CreateDbContext();
                     couturiers = ctx.Employes
                         .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
                         .OrderBy(e => e.Prenom)
                         .Select(e => new Employe
                         {
-                            IdEmploye   = e.IdEmploye,
-                            Nom         = e.Nom,
-                            Prenom      = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
-                            Role        = e.Role,
-                            Statut      = e.Statut,
-                            Identifiant = e.Identifiant,
-                            MotDePasse  = e.MotDePasse
-                        })
-                        .ToList();
+                            IdEmploye = e.IdEmploye,
+                            Nom       = e.Nom,
+                            Prenom    = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
+                            Role      = e.Role,
+                            Statut    = e.Statut
+                        }).ToList();
                 }
-                catch
-                {
-                    // Si DB inaccessible, laisse liste vide — on déduit depuis les pièces après chargement
-                }
+                catch { }
 
                 var liste = new List<Employe> { sentinelle };
                 liste.AddRange(couturiers);
-
                 CmbFiltreCouturier.ItemsSource   = liste;
                 CmbFiltreCouturier.SelectedIndex = 0;
+                _filtreCouturierId = null;
             }
-            finally
-            {
-                _suppressCmbCouturier = false;
-            }
+            finally { _suppressCmbCouturier = false; }
         }
 
-        // ── Abonnement CommandeChanged ────────────────────────────────
+        // ── CommandeChanged ───────────────────────────────────────────
         private async void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
         {
-            // Rafraîchir le Kanban
             await Dispatcher.InvokeAsync(async () => await ChargerCommandes());
 
-            // Proposition WhatsApp si une pièce vient de passer à Terminee
             if (e.TypeChangement == "PieceTerminee")
             {
-                var commande = _commandeService.ObtenirParId(e.IdCommande);
-                if (commande?.Client != null && !string.IsNullOrWhiteSpace(commande.Client.Telephone))
+                var cmd = _commandeService.ObtenirParId(e.IdCommande);
+                if (cmd?.Client != null && !string.IsNullOrWhiteSpace(cmd.Client.Telephone))
                 {
                     await Dispatcher.InvokeAsync(() =>
                     {
                         var rep = MessageBox.Show(
-                            $"La pièce est terminée !\n\n" +
-                            $"Client : {commande.Client.Prenom} {commande.Client.Nom}\n" +
-                            "Envoyer un message WhatsApp pour prévenir ?",
-                            "Pièce terminée — notification client",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Question);
-
+                            $"Une pièce est terminée !\n\nClient : {cmd.Client.Prenom} {cmd.Client.Nom}\n" +
+                            "Envoyer un message WhatsApp ?",
+                            "Pièce terminée", MessageBoxButton.YesNo, MessageBoxImage.Question);
                         if (rep == MessageBoxResult.Yes)
-                            _ = _whatsApp.NotifierCommandePreteAsync(commande);
+                            _ = _whatsApp.NotifierCommandePreteAsync(cmd);
                     });
                 }
             }
         }
 
-        // ── Helper opérateur connecté ─────────────────────────────────
         private (int id, string nom) OperateurConnecte()
         {
             var op = _authService.UtilisateurConnecte;
-            return op != null
-                ? (op.IdEmploye, $"{op.Prenom} {op.Nom}".Trim())
-                : (0, string.Empty);
+            return op != null ? (op.IdEmploye, $"{op.Prenom} {op.Nom}".Trim()) : (0, string.Empty);
         }
 
-        // =================================================================
-        // CHARGEMENT KANBAN
-        // =================================================================
-        /// <summary>
-        /// Charge les pièces dans les 4 colonnes du Kanban.
-        /// Nom conservé "ChargerCommandes" pour rester cohérent avec l'abonnement
-        /// CommandeChanged, mais charge bien des PieceCommande depuis ObtenirPagePiecesAsync.
-        /// </summary>
+        // ── Chargement Kanban ─────────────────────────────────────────
         private async Task ChargerCommandes()
         {
+            int maVersion = System.Threading.Interlocked.Increment(ref _versionChargement);
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
                 GrilleKanban.IsEnabled      = false;
 
-                // Décide quels appels effectuer selon le filtre actif
-                PagedResult<PieceCommande>? rAfaire   = null;
-                PagedResult<PieceCommande>? rEnCours  = null;
-                PagedResult<PieceCommande>? rTerminee = null;
-                PagedResult<PieceCommande>? rLivree   = null;
+                string? rech = string.IsNullOrWhiteSpace(_recherche) ? null : _recherche;
+                List<Commande> afaire = new(), enCours = new(), terminee = new(), livree = new();
+                int tAfaire = 0, tEnCours = 0, tTerminee = 0, tLivree = 0;
 
-                string? filtreEffectif = _filtreStatut;
-
-                if (filtreEffectif == null)
+                if (_filtreStatut == null)
                 {
-                    // Tous : 4 colonnes, chacune filtrée par son statut propre
-                    var t1 = _commandeService.ObtenirPagePiecesAsync("A faire",  _currentPage, PAGE_SIZE, NullRecherche());
-                    var t2 = _commandeService.ObtenirPagePiecesAsync("En cours", _currentPage, PAGE_SIZE, NullRecherche());
-                    var t3 = _commandeService.ObtenirPagePiecesAsync("Terminee", _currentPage, PAGE_SIZE, NullRecherche());
-                    var t4 = _commandeService.ObtenirPagePiecesAsync("Livree",   _currentPage, PAGE_SIZE, NullRecherche());
+                    var t1 = _commandeService.ObtenirPageCommandesStatutAsync("A faire",  _currentPage, PAGE_SIZE, rech);
+                    var t2 = _commandeService.ObtenirPageCommandesStatutAsync("En cours", _currentPage, PAGE_SIZE, rech);
+                    var t3 = _commandeService.ObtenirPageCommandesStatutAsync("Terminee", _currentPage, PAGE_SIZE, rech);
+                    var t4 = _commandeService.ObtenirPageCommandesStatutAsync("Livree",   _currentPage, PAGE_SIZE, rech);
                     await Task.WhenAll(t1, t2, t3, t4);
-                    rAfaire   = t1.Result;
-                    rEnCours  = t2.Result;
-                    rTerminee = t3.Result;
-                    rLivree   = t4.Result;
+                    afaire   = t1.Result.Items; tAfaire   = t1.Result.TotalCount;
+                    enCours  = t2.Result.Items; tEnCours  = t2.Result.TotalCount;
+                    terminee = t3.Result.Items; tTerminee = t3.Result.TotalCount;
+                    livree   = t4.Result.Items; tLivree   = t4.Result.TotalCount;
                 }
-                else if (filtreEffectif == "Retard")
+                else if (_filtreStatut == "Retard")
                 {
-                    // Retard : seules les colonnes A faire et En cours (filtre virtuel)
-                    var t1 = _commandeService.ObtenirPagePiecesAsync("Retard", _currentPage, PAGE_SIZE, NullRecherche());
-                    var t2 = _commandeService.ObtenirPagePiecesAsync("Retard", _currentPage, PAGE_SIZE, NullRecherche());
-                    await Task.WhenAll(t1, t2);
-                    // Le service retourne toutes les pièces en retard quel que soit le statut ;
-                    // on les sépare côté client entre A faire et En cours.
-                    var toutesRetard = t1.Result.Items
-                        .Concat(t2.Result.Items)
-                        .Distinct()
-                        .ToList();
-                    rAfaire   = FakeResult(toutesRetard.Where(p => p.Statut == "A faire").ToList(),  t1.Result);
-                    rEnCours  = FakeResult(toutesRetard.Where(p => p.Statut == "En cours").ToList(), t2.Result);
-                    rTerminee = FakeResult(new List<PieceCommande>(), new PagedResult<PieceCommande> { TotalCount = 0, Page = _currentPage, PageSize = PAGE_SIZE });
-                    rLivree   = FakeResult(new List<PieceCommande>(), new PagedResult<PieceCommande> { TotalCount = 0, Page = _currentPage, PageSize = PAGE_SIZE });
+                    var r = await _commandeService.ObtenirPageCommandesStatutAsync("Retard", _currentPage, PAGE_SIZE, rech);
+                    afaire  = r.Items.Where(c => c.StatutGlobal == "A faire").ToList();
+                    enCours = r.Items.Where(c => c.StatutGlobal == "En cours").ToList();
+                    tAfaire = afaire.Count; tEnCours = enCours.Count;
                 }
                 else
                 {
-                    // Filtre précis : seule la colonne correspondante est remplie
-                    var tFiltre = await _commandeService.ObtenirPagePiecesAsync(filtreEffectif, _currentPage, PAGE_SIZE, NullRecherche());
-                    var vide    = new PagedResult<PieceCommande> { Items = new(), TotalCount = 0, Page = _currentPage, PageSize = PAGE_SIZE };
-
-                    rAfaire   = filtreEffectif == "A faire"  ? tFiltre : vide;
-                    rEnCours  = filtreEffectif == "En cours" ? tFiltre : vide;
-                    rTerminee = filtreEffectif == "Terminee" ? tFiltre : vide;
-                    rLivree   = filtreEffectif == "Livree"   ? tFiltre : vide;
+                    var r = await _commandeService.ObtenirPageCommandesStatutAsync(_filtreStatut, _currentPage, PAGE_SIZE, rech);
+                    switch (_filtreStatut)
+                    {
+                        case "A faire":  afaire   = r.Items; tAfaire   = r.TotalCount; break;
+                        case "En cours": enCours  = r.Items; tEnCours  = r.TotalCount; break;
+                        case "Terminee": terminee = r.Items; tTerminee = r.TotalCount; break;
+                        case "Livree":   livree   = r.Items; tLivree   = r.TotalCount; break;
+                    }
                 }
 
-                // Appliquer filtre couturier côté client
-                _itemsAfaire   = AppliquerFiltreCouturier(rAfaire.Items);
-                _itemsEnCours  = AppliquerFiltreCouturier(rEnCours.Items);
-                _itemsTerminee = AppliquerFiltreCouturier(rTerminee.Items);
-                _itemsLivree   = AppliquerFiltreCouturier(rLivree.Items);
+                if (maVersion != _versionChargement) return;
 
-                // Alimenter les ItemsControl
+                _itemsAfaire   = FiltreCouturier(afaire);
+                _itemsEnCours  = FiltreCouturier(enCours);
+                _itemsTerminee = FiltreCouturier(terminee);
+                _itemsLivree   = FiltreCouturier(livree);
+
                 ListeAfaire.ItemsSource   = _itemsAfaire;
                 ListeEnCours.ItemsSource  = _itemsEnCours;
                 ListeTerminee.ItemsSource = _itemsTerminee;
                 ListeLivree.ItemsSource   = _itemsLivree;
 
-                // Compteurs (TotalCount de la colonne, pas Items.Count)
-                TxtCompteurAfaire.Text   = rAfaire.TotalCount.ToString();
-                TxtCompteurEnCours.Text  = rEnCours.TotalCount.ToString();
-                TxtCompteurTerminee.Text = rTerminee.TotalCount.ToString();
-                TxtCompteurLivree.Text   = rLivree.TotalCount.ToString();
+                bool fc = _filtreCouturierId.HasValue && _filtreCouturierId != 0;
+                TxtCompteurAfaire.Text   = fc ? _itemsAfaire.Count.ToString()   : tAfaire.ToString();
+                TxtCompteurEnCours.Text  = fc ? _itemsEnCours.Count.ToString()  : tEnCours.ToString();
+                TxtCompteurTerminee.Text = fc ? _itemsTerminee.Count.ToString() : tTerminee.ToString();
+                TxtCompteurLivree.Text   = fc ? _itemsLivree.Count.ToString()   : tLivree.ToString();
 
-                // États vides
                 TxtVideAfaire.Visibility   = _itemsAfaire.Count   == 0 ? Visibility.Visible : Visibility.Collapsed;
                 TxtVideEnCours.Visibility  = _itemsEnCours.Count  == 0 ? Visibility.Visible : Visibility.Collapsed;
                 TxtVideTerminee.Visibility = _itemsTerminee.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 TxtVideLivree.Visibility   = _itemsLivree.Count   == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-                // Pagination : activée si au moins une colonne a une page supplémentaire
-                BtnPagePrecedente.IsEnabled = rAfaire.HasPrevious || rEnCours.HasPrevious
-                                           || rTerminee.HasPrevious || rLivree.HasPrevious;
-                BtnPageSuivante.IsEnabled   = rAfaire.HasNext || rEnCours.HasNext
-                                           || rTerminee.HasNext || rLivree.HasNext;
-
-                // Info pagination
-                int totalPieces = rAfaire.TotalCount + rEnCours.TotalCount
-                                + rTerminee.TotalCount + rLivree.TotalCount;
-                TxtPaginationInfo.Text = totalPieces == 0
-                    ? "Aucune pièce"
-                    : $"Page {_currentPage} — {totalPieces} pièce(s)";
-
-                // Déduire couturiers manquants si la liste du ComboBox était vide
-                CompleterFiltreCouturiersDepuisPieces();
+                int total = tAfaire + tEnCours + tTerminee + tLivree;
+                BtnPagePrecedente.IsEnabled = _currentPage > 1;
+                BtnPageSuivante.IsEnabled   = total > _currentPage * PAGE_SIZE;
+                TxtPaginationInfo.Text = total == 0 ? "Aucune commande"
+                    : fc ? $"Page {_currentPage} — {_itemsAfaire.Count + _itemsEnCours.Count + _itemsTerminee.Count + _itemsLivree.Count} (filtre couturier)"
+                         : $"Page {_currentPage} — {total} commande(s)";
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Erreur lors du chargement : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (maVersion != _versionChargement) return;
+                MessageBox.Show("Erreur chargement : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
-                LoadingIndicator.Visibility = Visibility.Collapsed;
-                GrilleKanban.IsEnabled      = true;
-            }
-        }
-
-        // Retourne null si la recherche est vide (convention du service)
-        private string? NullRecherche() =>
-            string.IsNullOrWhiteSpace(_recherche) ? null : _recherche;
-
-        // Applique le filtre couturier côté client
-        private List<PieceCommande> AppliquerFiltreCouturier(List<PieceCommande> items)
-        {
-            if (_filtreCouturierId == null || _filtreCouturierId == 0)
-                return items;
-            return items.Where(p => p.IdCouturier == _filtreCouturierId).ToList();
-        }
-
-        // Construit un PagedResult à partir d'une liste filtrée et d'un résultat parent
-        private static PagedResult<PieceCommande> FakeResult(
-            List<PieceCommande> items, PagedResult<PieceCommande> parent) =>
-            new()
-            {
-                Items      = items,
-                TotalCount = parent.TotalCount,
-                Page       = parent.Page,
-                PageSize   = parent.PageSize
-            };
-
-        /// <summary>
-        /// Si le ComboBox couturier n'a que la sentinelle (DB inaccessible au Loaded),
-        /// complète la liste depuis les pièces maintenant disponibles en mémoire.
-        /// Garde anti-boucle via _suppressCmbCouturier.
-        /// </summary>
-        private void CompleterFiltreCouturiersDepuisPieces()
-        {
-            // Déjà plus d'un item (sentinelle + au moins un couturier) → rien à faire
-            if (CmbFiltreCouturier.Items.Count > 1) return;
-
-            _suppressCmbCouturier = true;
-            try
-            {
-                var toutes = _itemsAfaire.Concat(_itemsEnCours)
-                                         .Concat(_itemsTerminee)
-                                         .Concat(_itemsLivree);
-
-                var couturiersDistincts = toutes
-                    .Where(p => p.Couturier != null)
-                    .Select(p => p.Couturier!)
-                    .GroupBy(c => c.IdEmploye)
-                    .Select(g => g.First())
-                    .OrderBy(c => c.Prenom)
-                    .ToList();
-
-                if (couturiersDistincts.Count == 0) return;
-
-                var sentinelle = new Employe
+                if (maVersion == _versionChargement)
                 {
-                    IdEmploye   = 0,
-                    Prenom      = "Tous les couturiers",
-                    Nom         = "",
-                    Identifiant = "",
-                    MotDePasse  = ""
-                };
-                var liste = new List<Employe> { sentinelle };
-                liste.AddRange(couturiersDistincts);
-                CmbFiltreCouturier.ItemsSource   = liste;
-                CmbFiltreCouturier.SelectedIndex = 0;
-            }
-            finally
-            {
-                _suppressCmbCouturier = false;
+                    LoadingIndicator.Visibility = Visibility.Collapsed;
+                    GrilleKanban.IsEnabled      = true;
+                }
             }
         }
 
-        // =================================================================
-        // FILTRES RAPIDES
-        // =================================================================
-        private async void BtnFiltre_Click(object sender, RoutedEventArgs e)
+        private List<Commande> FiltreCouturier(List<Commande> items)
         {
-            if (sender is not Button btn) return;
-            string tag = btn.Tag?.ToString() ?? "";
-            _filtreStatut = string.IsNullOrEmpty(tag) ? null : tag;
-            _currentPage  = 1;
-            SetFiltreActif(btn);
-            await ChargerCommandes();
+            if (!_filtreCouturierId.HasValue || _filtreCouturierId == 0) return items;
+            return items.Where(c => c.Pieces.Any(p => p.IdCouturier == _filtreCouturierId)).ToList();
         }
 
-        private void SetFiltreActif(Button bouton)
-        {
-            if (_btnFiltreActif != null)
-                _btnFiltreActif.BorderThickness = new Thickness(1.5);
-            bouton.BorderThickness = new Thickness(2.5);
-            _btnFiltreActif = bouton;
-        }
-
-        // =================================================================
-        // FILTRE COUTURIER
-        // =================================================================
+        // ── Handlers UI ───────────────────────────────────────────────
         private async void CmbFiltreCouturier_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_suppressCmbCouturier) return;
-            if (CmbFiltreCouturier.SelectedItem is Employe emp)
-                _filtreCouturierId = emp.IdEmploye == 0 ? null : emp.IdEmploye;
-            else
-                _filtreCouturierId = null;
+            if (_suppressCmbCouturier || !_pret) return;
+            _filtreCouturierId = CmbFiltreCouturier.SelectedItem is Employe emp && emp.IdEmploye > 0
+                ? emp.IdEmploye : null;
             _currentPage = 1;
             await ChargerCommandes();
         }
 
-        // =================================================================
-        // RECHERCHE
-        // =================================================================
-        private async void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
+        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
         {
-            _recherche   = TxtRecherche.Text.Trim();
-            _currentPage = 1;
-            await ChargerCommandes();
+            if (!_pret) return;
+            _recherche = TxtRecherche.Text.Trim();
+            _rechercheTimer.Stop();
+            _rechercheTimer.Start();
         }
 
-        // =================================================================
-        // PAGINATION
-        // =================================================================
         private async void BtnPagePrecedente_Click(object sender, RoutedEventArgs e)
         {
             if (_currentPage > 1) { _currentPage--; await ChargerCommandes(); }
@@ -428,152 +271,29 @@ namespace GestionCoutureApp.Views
             await ChargerCommandes();
         }
 
-        // =================================================================
-        // HELPER PARTAGÉ — Changer statut d'une pièce
-        // =================================================================
-        /// <summary>
-        /// Point d'entrée unique pour tout changement de statut d'une pièce.
-        /// Applique la garde de rôle, AvecControleLivraison, ChangerStatutPiece,
-        /// puis recharge.
-        /// </summary>
-        private async Task ChangerStatutPieceAsync(int idPiece, string nouveauStatut)
-        {
-            if (_role == "Couturier")
-            {
-                MessageBox.Show("La modification de statut est réservée au Boss et à la Secrétaire.",
-                    "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var (idOp, nomOp) = OperateurConnecte();
-            bool ok = await AvecControleLivraison(async motif =>
-            {
-                await Task.Run(() =>
-                    _commandeService.ChangerStatutPiece(idPiece, nouveauStatut, idOp, nomOp, motif));
-            });
-
-            if (ok) await ChargerCommandes();
-        }
-
-        // =================================================================
-        // BOUTON ▶ — Avancer au statut suivant
-        // =================================================================
+        // ── Avancer toutes les pièces ─────────────────────────────────
         private async void BtnAvancerStatut_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button btn) return;
-            PieceCommande? piece = btn.Tag as PieceCommande;
-            if (piece == null) return;
-
-            string? suivant = piece.Statut switch
+            if (sender is not Button btn || btn.Tag is not Commande cmd) return;
+            string? suivant = cmd.StatutGlobal switch
             {
-                "A faire"  => "En cours",
-                "En cours" => "Terminee",
-                "Terminee" => "Livree",
-                _          => null
+                "A faire"                => "En cours",
+                "En cours"               => "Terminee",
+                "Terminee"               => "Livree",
+                "Terminee partiellement" => "Livree",
+                _                        => null
             };
             if (suivant == null) return;
-
-            await ChangerStatutPieceAsync(piece.IdPieceCommande, suivant);
+            await ForcerStatutCommande(cmd.IdCommande, suivant);
         }
 
-        // =================================================================
-        // BOUTON ⋯ — Menu contextuel (cette pièce + toute la commande)
-        // =================================================================
-        private void BtnPasserA_Click(object sender, RoutedEventArgs e)
-        {
-            if (_role == "Couturier")
-            {
-                MessageBox.Show("La modification de statut est réservée au Boss et à la Secrétaire.",
-                    "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (sender is not Button btn) return;
-            PieceCommande? piece = btn.Tag as PieceCommande;
-            if (piece == null) return;
-
-            var menu = new ContextMenu();
-
-            // ── Groupe 1 : Cette pièce ──
-            menu.Items.Add(new MenuItem
-            {
-                Header    = $"Cette pièce (P#{piece.IdPieceCommande})",
-                IsEnabled = false,
-                FontWeight = FontWeights.Bold
-            });
-            menu.Items.Add(new Separator());
-
-            void AjouterItemPiece(string libelle, string statut)
-            {
-                var item = new MenuItem { Header = libelle };
-                item.Click += async (s, ev) =>
-                    await ChangerStatutPieceAsync(piece.IdPieceCommande, statut);
-                menu.Items.Add(item);
-            }
-            AjouterItemPiece("⬜  À faire",  "A faire");
-            AjouterItemPiece("🟡  En cours",  "En cours");
-            AjouterItemPiece("🟢  Terminée",  "Terminee");
-            AjouterItemPiece("🔵  Livrée",    "Livree");
-
-            // ── Groupe 2 : Toute la commande ──
-            menu.Items.Add(new Separator());
-            menu.Items.Add(new MenuItem
-            {
-                Header    = $"Toute la commande #{piece.IdCommande}",
-                IsEnabled = false,
-                FontWeight = FontWeights.Bold
-            });
-            menu.Items.Add(new Separator());
-
-            void AjouterItemCommande(string libelle, string statut)
-            {
-                var item = new MenuItem { Header = libelle };
-                item.Click += async (s, ev) =>
-                    await ForcerStatutCommande(piece.IdCommande, statut);
-                menu.Items.Add(item);
-            }
-            AjouterItemCommande("⬜  À faire (tout)",  "A faire");
-            AjouterItemCommande("🟡  En cours (tout)",  "En cours");
-            AjouterItemCommande("🟢  Terminée (tout)",  "Terminee");
-            AjouterItemCommande("🔵  Livrée (tout)",    "Livree");
-
-            btn.ContextMenu = menu;
-            menu.PlacementTarget = btn;
-            menu.IsOpen = true;
-        }
-
-        private async Task ForcerStatutCommande(int idCommande, string statut)
-        {
-            if (_role == "Couturier")
-            {
-                MessageBox.Show("La modification de statut est réservée au Boss et à la Secrétaire.",
-                    "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var (idOp, nomOp) = OperateurConnecte();
-            bool ok = await AvecControleLivraison(async motif =>
-            {
-                await Task.Run(() =>
-                    _commandeService.ForcerStatutToutesPieces(idCommande, statut, idOp, nomOp, motif));
-            });
-
-            if (ok) await ChargerCommandes();
-        }
-
-        // =================================================================
-        // BOUTON 🗂 — Fiche atelier
-        // Pattern identique à CommandesView.BtnActionFicheAtelier_Click
-        // =================================================================
+        // ── Fiche atelier ─────────────────────────────────────────────
         private void BtnFicheAtelier_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button btn) return;
-            PieceCommande? piece = btn.Tag as PieceCommande;
-            if (piece == null) return;
-
+            if (sender is not Button btn || btn.Tag is not Commande cmd) return;
             try
             {
-                var commandeComplete = _commandeService.ObtenirParId(piece.IdCommande);
+                var commandeComplete = _commandeService.ObtenirParId(cmd.IdCommande);
                 if (commandeComplete == null)
                 {
                     MessageBox.Show("Commande introuvable.",
@@ -591,126 +311,89 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        // =================================================================
-        // BOUTON 💬 — WhatsApp
-        // DataContext = PieceCommande ; recharge la commande complète pour
-        // avoir StatutGlobal et Client corrects.
-        // =================================================================
-        private async void BtnWhatsApp_Click(object sender, RoutedEventArgs e)
+        // ── Menu ⋯ — changer statut commande ─────────────────────────
+        private void BtnPasserA_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button btn) return;
-            PieceCommande? piece = btn.Tag as PieceCommande;
-            if (piece == null) return;
-
-            // Recharger la commande complète (StatutGlobal, Client.Telephone)
-            var commande = _commandeService.ObtenirParId(piece.IdCommande);
-            if (commande == null)
+            if (_role == "Couturier")
             {
-                MessageBox.Show("Commande introuvable.",
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Réservé au Boss et à la Secrétaire.",
+                    "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
+            if (sender is not Button btn || btn.Tag is not Commande cmd) return;
 
-            if (commande.Client == null)
-            {
-                MessageBox.Show("Le client de cette commande est introuvable.",
-                    "Client manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            var menu = new ContextMenu();
+            menu.Items.Add(new MenuItem { Header = $"Commande #{cmd.IdCommande} — {cmd.TypeVetementAffiche}", IsEnabled = false, FontWeight = FontWeights.Bold });
+            menu.Items.Add(new Separator());
 
-            try
-            {
-                btn.IsEnabled = false;
+            void Add(string lbl, string s) { var it = new MenuItem { Header = lbl }; it.Click += async (x, y) => await ForcerStatutCommande(cmd.IdCommande, s); menu.Items.Add(it); }
+            Add("⬜  À faire",  "A faire");
+            Add("🟡  En cours",  "En cours");
+            Add("🟢  Terminée",  "Terminee");
+            Add("🔵  Livrée",    "Livree");
 
-                bool estTerminee  = commande.StatutGlobal is "Terminee" or "Terminee partiellement";
-                bool estLivree    = commande.StatutGlobal is "Livree"   or "Livree partiellement";
-                bool estEnRetard  = commande.EstEnRetard;
-                bool rdvProche    = !estEnRetard
-                    && commande.DateFin <= DateTime.Now.AddDays(2)
-                    && commande.StatutGlobal is "A faire" or "En cours";
-
-                if (estTerminee || estLivree)
-                    await _whatsApp.NotifierCommandePreteAsync(commande);
-                else if (estEnRetard || rdvProche)
-                    await _whatsApp.NotifierRappelRdvAsync(commande);
-                else
-                    await _whatsApp.ContacterClientAsync(commande.Client);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Erreur WhatsApp : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                btn.IsEnabled = true;
-            }
+            btn.ContextMenu = menu;
+            menu.PlacementTarget = btn;
+            menu.IsOpen = true;
         }
 
-        // =================================================================
-        // GESTION LIVRAISON NON SOLDÉE
-        // =================================================================
+        private async Task ForcerStatutCommande(int idCommande, string statut)
+        {
+            if (_role == "Couturier")
+            {
+                MessageBox.Show("Réservé au Boss et à la Secrétaire.",
+                    "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var (idOp, nomOp) = OperateurConnecte();
+            bool ok = await AvecControleLivraison(async motif =>
+            {
+                await Task.Run(() => _commandeService.ForcerStatutToutesPieces(idCommande, statut, idOp, nomOp, motif));
+            });
+            if (ok) await ChargerCommandes();
+        }
 
-        /// <summary>
-        /// Enveloppe une action asynchrone dans la gestion de LivraisonNonSoldeeException.
-        /// - PeutForcer == false : MessageBox bloquant, return false.
-        /// - PeutForcer == true  : ouvre le modal pour saisir un motif.
-        ///   Le modal appellera _actionEnAttente(motif) puis rechargera.
-        ///   Return false ici (l'action sera complétée depuis le modal).
-        /// Retourne true si l'action s'est exécutée sans exception de livraison.
-        /// </summary>
+        // ── AvecControleLivraison ─────────────────────────────────────
         private async Task<bool> AvecControleLivraison(Func<string?, Task> action)
         {
-            try
-            {
-                await action(null);
-                return true;
-            }
+            try { await action(null); return true; }
             catch (LivraisonNonSoldeeException ex) when (ex.PeutForcer)
             {
-                // Ouvrir le modal au lieu de la boîte de dialogue bloquante
-                _actionEnAttente = action;
+                _actionEnAttente         = action;
                 TxtInfoSoldeRestant.Text = $"Cette commande présente un solde restant de {ex.ResteAPayer:N0} FCFA.";
                 TxtMotifLivraison.Text   = string.Empty;
                 ModalLivraisonNonSoldee.Visibility = Visibility.Visible;
-                return false;   // L'action sera complétée depuis BtnConfirmerLivraisonNonSoldee_Click
+                TxtMotifLivraison.Focus();
+                return false;
             }
             catch (LivraisonNonSoldeeException ex) when (!ex.PeutForcer)
             {
-                MessageBox.Show(ex.Message,
-                    "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(ex.Message, "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return false;
             }
             catch (InvalidOperationException ex)
             {
-                MessageBox.Show(ex.Message, "Opération impossible",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(ex.Message, "Opération impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return false;
             }
             catch (UnauthorizedAccessException ex)
             {
-                MessageBox.Show(ex.Message, "Accès refusé",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(ex.Message, "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return false;
             }
         }
 
-        // ── Confirmer la livraison non soldée ──────────────────────────
         private async void BtnConfirmerLivraisonNonSoldee_Click(object sender, RoutedEventArgs e)
         {
             string motif = TxtMotifLivraison.Text.Trim();
             if (string.IsNullOrWhiteSpace(motif))
             {
-                MessageBox.Show("Le motif est obligatoire pour confirmer la livraison non soldée.",
-                    "Motif manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return; // Rester dans le modal
+                MessageBox.Show("Le motif est obligatoire.", "Motif manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
-
             if (_actionEnAttente == null) { FermerModal(); return; }
-
             var action = _actionEnAttente;
             FermerModal();
-
             try
             {
                 await action(motif);
@@ -718,37 +401,29 @@ namespace GestionCoutureApp.Views
             }
             catch (LivraisonNonSoldeeException ex) when (!ex.PeutForcer)
             {
-                MessageBox.Show(ex.Message,
-                    "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(ex.Message, "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            catch (InvalidOperationException ex)
-            {
-                MessageBox.Show(ex.Message, "Opération impossible",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                MessageBox.Show(ex.Message, "Accès refusé",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Erreur : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            catch (InvalidOperationException ex) { MessageBox.Show(ex.Message, "Opération impossible", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            catch (UnauthorizedAccessException ex) { MessageBox.Show(ex.Message, "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            catch (Exception ex) { MessageBox.Show("Erreur : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
-        // ── Annuler le modal ──────────────────────────────────────────
-        private void BtnAnnulerLivraisonNonSoldee_Click(object sender, RoutedEventArgs e)
-        {
-            FermerModal();
-        }
+        private void BtnAnnulerLivraisonNonSoldee_Click(object sender, RoutedEventArgs e) => FermerModal();
 
         private void FermerModal()
         {
             ModalLivraisonNonSoldee.Visibility = Visibility.Collapsed;
-            TxtMotifLivraison.Text   = string.Empty;
-            _actionEnAttente         = null;
+            TxtMotifLivraison.Text = string.Empty;
+            _actionEnAttente       = null;
+        }
+
+        private void Page_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape && ModalLivraisonNonSoldee.Visibility == Visibility.Visible)
+            {
+                FermerModal();
+                e.Handled = true;
+            }
         }
     }
 }
