@@ -368,8 +368,8 @@ namespace GestionCoutureApp.Views
                 Title = modeEdition
                     ? $"Retour #{retourExistant!.IdRetour} — Détails & Modification"
                     : "🔄  Nouveau retour — Reprise gratuite",
-                Width            = 620,
-                MaxHeight        = 860,
+                Width            = 560,          // réduit de 620 → 560
+                MaxHeight        = 700,          // réduit de 860 → 700
                 WindowStyle      = WindowStyle.None,
                 AllowsTransparency = true,
                 Background       = Brushes.Transparent,
@@ -482,11 +482,11 @@ namespace GestionCoutureApp.Views
             {
                 VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                MaxHeight = 620
+                MaxHeight = 560      // réduit de 620 → 560 pour tenir dans 700px total
             };
             Grid.SetRow(scroll, 1);
 
-            var root = new StackPanel { Margin = new Thickness(24, 20, 24, 8) };
+            var root = new StackPanel { Margin = new Thickness(18, 14, 18, 6) }; // marges réduites
 
             // ══════════════════════════════════════════════════════════════
             // SECTION 1 — PIÈCE CONCERNÉE
@@ -496,8 +496,8 @@ namespace GestionCoutureApp.Views
             AjouterLabel(root, "Client *");
             var cmbCommande = new ComboBox
             {
-                Height = 36, FontSize = 13,
-                Margin = new Thickness(0, 0, 0, 10),
+                Height = 32, FontSize = 12,       // hauteur réduite 36→32, police 13→12
+                Margin = new Thickness(0, 0, 0, 8),
                 IsEnabled = !modeEdition
             };
             cmbCommande.ItemsSource = commandesEligibles.Select(c => new
@@ -512,8 +512,8 @@ namespace GestionCoutureApp.Views
             AjouterLabel(root, "Pièce concernée *");
             var cmbPiece = new ComboBox
             {
-                Height = 36, FontSize = 13,
-                Margin = new Thickness(0, 0, 0, 10),
+                Height = 32, FontSize = 12,       // hauteur réduite
+                Margin = new Thickness(0, 0, 0, 8),
                 IsEnabled = !modeEdition
             };
             cmbPiece.DisplayMemberPath = "DisplayText";
@@ -524,24 +524,24 @@ namespace GestionCoutureApp.Views
             AjouterLabel(root, "Couturier initial (responsable)");
             var txtCouturierInitial = new TextBox
             {
-                IsReadOnly = true, Height = 36, FontSize = 13,
+                IsReadOnly = true, Height = 30, FontSize = 12,  // compacté
                 Background = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6)),
                 Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80)),
                 Text = "— (sélectionnez une pièce)",
-                Margin = new Thickness(0, 0, 0, 4),
-                Padding = new Thickness(10, 0, 10, 0)
+                Margin = new Thickness(0, 0, 0, 2),
+                Padding = new Thickness(8, 0, 8, 0)
             };
             root.Children.Add(txtCouturierInitial);
 
             var txtMontantOrigine = new TextBlock
             {
-                FontSize = 11, FontStyle = FontStyles.Italic,
+                FontSize = 10, FontStyle = FontStyles.Italic,   // police réduite
                 Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
-                Margin = new Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 0, 8)
             };
             root.Children.Add(txtMontantOrigine);
 
-            // ── Photo de la pièce (affichage automatique) ─────────────────
+            // ── Photo de la pièce (affichage automatique) — hauteur réduite ─
             AjouterLabel(root, "📸  Photo de la pièce d'origine");
             var borderPhotoPiece = new Border
             {
@@ -549,8 +549,8 @@ namespace GestionCoutureApp.Views
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xE0, 0xDC)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
-                Height = 160,
-                Margin = new Thickness(0, 0, 0, 16),
+                Height = 100,                    // réduit de 160 → 100
+                Margin = new Thickness(0, 0, 0, 10),
                 ClipToBounds = true
             };
             var imgPhotoPiece = new System.Windows.Controls.Image
@@ -670,12 +670,12 @@ namespace GestionCoutureApp.Views
             AjouterLabel(root, "Description du problème *");
             var txtDescription = new TextBox
             {
-                Height = 80, FontSize = 13,
+                Height = 60, FontSize = 12,       // réduit 80→60, police 13→12
                 TextWrapping = TextWrapping.Wrap,
                 AcceptsReturn = true,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Margin = new Thickness(0, 0, 0, 14),
-                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 8),
+                Padding = new Thickness(8, 6, 8, 6),
                 Text = modeEdition ? retourExistant!.DescriptionProbleme : ""
             };
             root.Children.Add(txtDescription);
@@ -685,17 +685,17 @@ namespace GestionCoutureApp.Views
 
             string cheminPhotoDefaut = modeEdition ? retourExistant!.CheminPhotoDefaut ?? "" : "";
 
-            // Prévisualisation photo défaut
+            // Prévisualisation photo défaut — hauteur réduite
             var borderPhotoDefaut = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
-                Height = 160,
-                Margin = new Thickness(0, 0, 0, 8),
+                Height = 100,                    // réduit de 160 → 100
+                Margin = new Thickness(0, 0, 0, 6),
                 ClipToBounds = true,
-                Visibility = Visibility.Collapsed   // caché jusqu'à ce qu'une photo soit prise
+                Visibility = Visibility.Collapsed
             };
             var imgPhotoDefaut = new System.Windows.Controls.Image
             {
@@ -726,34 +726,34 @@ namespace GestionCoutureApp.Views
             var panelBtnsPhoto = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 10)   // réduit de 16 → 10
             };
 
             // Bouton Webcam (prioritaire)
             var btnWebcam = new Button
             {
                 Content = "📷  Webcam",
-                Height = 36, Padding = new Thickness(16, 0, 16, 0),
-                FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Height = 32, Padding = new Thickness(12, 0, 12, 0),  // réduit 36→32
+                FontSize = 11, FontWeight = FontWeights.SemiBold,
                 Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)), // ambre
+                Background = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)),
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Margin = new Thickness(0, 0, 10, 0)
+                Margin = new Thickness(0, 0, 8, 0)
             };
 
             // Bouton Importer
             var btnImporter = new Button
             {
                 Content = "📁  Importer",
-                Height = 36, Padding = new Thickness(14, 0, 14, 0),
-                FontSize = 12,
+                Height = 32, Padding = new Thickness(12, 0, 12, 0),  // réduit
+                FontSize = 11,
                 Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x41, 0x55)),
                 Background = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC)),
                 BorderThickness = new Thickness(1),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Margin = new Thickness(0, 0, 10, 0)
+                Margin = new Thickness(0, 0, 8, 0)
             };
 
             // Label nom fichier
@@ -851,8 +851,8 @@ namespace GestionCoutureApp.Views
             var employes = _context.Employes.Where(e => e.Statut == "Actif").ToList();
             var cmbCouturierReprise = new ComboBox
             {
-                Height = 36, FontSize = 13,
-                Margin = new Thickness(0, 0, 0, 12)
+                Height = 32, FontSize = 12,       // compacté
+                Margin = new Thickness(0, 0, 0, 8)
             };
             cmbCouturierReprise.Items.Add(new ComboBoxItem
             {
@@ -880,25 +880,25 @@ namespace GestionCoutureApp.Views
             }
             root.Children.Add(cmbCouturierReprise);
 
-            // Ligne RDV : Date + H début + H fin
-            var gridRdv = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+            // Ligne RDV : Date + H début + H fin — marges réduites
+            var gridRdv = new Grid { Margin = new Thickness(0, 0, 0, 8) };
             gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
-            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(95) });
+            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            gridRdv.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(95) });
 
             TextBlock LblRdv(string t) => new()
             {
-                Text = t, FontSize = 11, FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)),
-                Margin = new Thickness(0, 0, 0, 4)
+                Text = t, FontSize = 10, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)), // ardoise
+                Margin = new Thickness(0, 0, 0, 3)
             };
 
             TextBox TxtHeure(string valeur) => new()
             {
-                Height = 36, FontSize = 13,
-                Padding = new Thickness(10, 0, 10, 0),
+                Height = 30, FontSize = 12,       // compacté 36→30
+                Padding = new Thickness(8, 0, 8, 0),
                 Text = valeur
             };
 
@@ -959,12 +959,12 @@ namespace GestionCoutureApp.Views
             // ══════════════════════════════════════════════════════════════
             root.Children.Add(new Border
             {
-                Background      = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)), // amber-100
-                BorderBrush     = new SolidColorBrush(Color.FromRgb(0xFD, 0xE6, 0x8A)), // amber-200
+                Background      = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)),
+                BorderBrush     = new SolidColorBrush(Color.FromRgb(0xFD, 0xE6, 0x8A)),
                 BorderThickness = new Thickness(1),
                 CornerRadius    = new CornerRadius(8),
-                Padding         = new Thickness(14, 10, 14, 10),
-                Margin          = new Thickness(0, 4, 0, 12),
+                Padding         = new Thickness(12, 8, 12, 8),    // réduit de 14,10
+                Margin          = new Thickness(0, 2, 0, 8),       // réduit de 0,4,0,12
                 Child = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -1008,7 +1008,7 @@ namespace GestionCoutureApp.Views
                 Background      = footerBg,
                 BorderBrush     = borderClr,
                 BorderThickness = new Thickness(0, 1, 0, 0),
-                Padding         = new Thickness(20, 12, 20, 14),
+                Padding         = new Thickness(18, 10, 18, 12),
                 CornerRadius    = new CornerRadius(0, 0, 14, 14)
             };
 
@@ -1018,28 +1018,28 @@ namespace GestionCoutureApp.Views
                 HorizontalAlignment  = HorizontalAlignment.Right
             };
 
-            // Bouton Annuler — blanc avec bordure ardoise
+            // Bouton Annuler
             var btnAnnuler = new Button
             {
                 Content         = "✕  Annuler",
-                Width           = 110, Height = 40,
-                FontSize        = 13,
+                Width           = 100, Height = 36,  // compacté 110,40 → 100,36
+                FontSize        = 12,
                 Foreground      = slateBody,
                 Background      = Brushes.White,
                 BorderThickness = new Thickness(1),
                 BorderBrush     = borderClr,
                 Cursor          = System.Windows.Input.Cursors.Hand,
-                Margin          = new Thickness(0, 0, 10, 0)
+                Margin          = new Thickness(0, 0, 8, 0)
             };
             btnAnnuler.Click += (s, ev) => fenetre.Close();
 
-            // Bouton Enregistrer — ambre
+            // Bouton Enregistrer
             var btnEnregistrer = new Button
             {
                 Content         = modeEdition ? "💾  Enregistrer les modifications" : "💾  Enregistrer la Reprise",
-                Height          = 40,
-                Padding         = new Thickness(18, 0, 18, 0),
-                FontSize        = 13, FontWeight = FontWeights.Bold,
+                Height          = 36,                // compacté 40 → 36
+                Padding         = new Thickness(16, 0, 16, 0),
+                FontSize        = 12, FontWeight = FontWeights.Bold,
                 Foreground      = Brushes.White,
                 Background      = amber,
                 BorderThickness = new Thickness(0),
