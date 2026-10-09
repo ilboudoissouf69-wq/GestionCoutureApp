@@ -117,6 +117,7 @@ namespace GestionCoutureApp.Views
             GridRetours.ItemsSource = null;
             GridRetours.ItemsSource = liste;
             TxtCompteur.Text = $"{liste.Count} retour(s) affiché(s) sur {_tousLesRetours.Count} total";
+            MettreAJourEtatVide(liste.Count);
         }
 
         private void MettreAJourBadges()
@@ -127,6 +128,22 @@ namespace GestionCoutureApp.Views
             TxtNbEnReprise.Text = actifs.Count(r => r.Statut == "En reprise").ToString();
             TxtNbPret.Text      = actifs.Count(r => r.Statut == "Pret").ToString();
             TxtNbRendu.Text     = actifs.Count(r => r.Statut == "Rendu").ToString();
+        }
+
+        // ── Affichage de l'état vide selon le nombre de lignes dans le DataGrid ──
+        private void MettreAJourEtatVide(int nbLignesAffichees)
+        {
+            if (PanneauVide == null || GridRetours == null) return;
+            bool aucun = nbLignesAffichees == 0;
+            PanneauVide.Visibility  = aucun ? Visibility.Visible  : Visibility.Collapsed;
+            GridRetours.Visibility  = aucun ? Visibility.Collapsed : Visibility.Visible;
+            if (TxtEtatVide != null)
+            {
+                TxtEtatVide.Text = string.IsNullOrEmpty(TxtRecherche?.Text?.Trim()) &&
+                                   (CmbFiltreStatut?.SelectedIndex == 0)
+                    ? "Aucun retour enregistré"
+                    : "Aucun résultat pour cette recherche / ce filtre";
+            }
         }
 
         private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)

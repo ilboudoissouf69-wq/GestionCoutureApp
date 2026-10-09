@@ -127,5 +127,21 @@ namespace GestionCoutureApp.Models
             "Rendu"      => "#6B7280",
             _            => "#374151"
         };
+
+        // ── Couturier initial affiché (pour la colonne Couturiers) ────────
+        [NotMapped]
+        public string CouturierOrigineAffiche =>
+            Couturier != null
+                ? Couturier.Prenom + " " + Couturier.Nom
+                : "—";
+
+        // ── Vrai si le RDV est passé et le retour pas encore clôturé ─────
+        [NotMapped]
+        public bool RdvEnRetard =>
+            DateRdvReprise.HasValue &&
+            DateRdvReprise.Value.Date < DateTime.Today &&
+            Statut != "Pret" &&
+            Statut != "Rendu" &&
+            !EstAnnule;
     }
 }
