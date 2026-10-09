@@ -2,192 +2,698 @@
 <Page x:Class="GestionCoutureApp.Views.TypesVetementsView"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Background="{StaticResource BackgroundBrush}">
+      Background="#F8FAFC">
 
-    <Grid Margin="28,24,28,28">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="20"/>
-            <ColumnDefinition Width="340"/>
-        </Grid.ColumnDefinitions>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         RESSOURCES LOCALES — Charte « Ambre & Ardoise »
+         Toutes les clés sont préfixées « Typ » pour éviter toute collision
+         avec les ressources globales (PrimaryBrush, BackgroundBrush, etc.)
+    ═══════════════════════════════════════════════════════════════════ -->
+    <Page.Resources>
 
-        <!-- GAUCHE -->
-        <Grid Grid.Column="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <!-- Couleurs de base -->
+        <SolidColorBrush x:Key="TypAmber"        Color="#F59E0B"/>
+        <SolidColorBrush x:Key="TypAmberHover"   Color="#D97706"/>
+        <SolidColorBrush x:Key="TypAmberLight"   Color="#FEF3C7"/>
+        <SolidColorBrush x:Key="TypAmberText"    Color="#92400E"/>
+        <SolidColorBrush x:Key="TypSlateDark"    Color="#1E293B"/>
+        <SolidColorBrush x:Key="TypSlateMuted"   Color="#64748B"/>
+        <SolidColorBrush x:Key="TypSlateLight"   Color="#F1F5F9"/>
+        <SolidColorBrush x:Key="TypBorder"       Color="#E2E8F0"/>
+        <SolidColorBrush x:Key="TypBadgeBg"      Color="#F1F5F9"/>
+        <SolidColorBrush x:Key="TypBadgeFg"      Color="#475569"/>
+        <SolidColorBrush x:Key="TypCardBg"       Color="White"/>
+        <SolidColorBrush x:Key="TypOverlay"      Color="#80000000"/>
+        <SolidColorBrush x:Key="TypDanger"       Color="#EF4444"/>
+        <SolidColorBrush x:Key="TypDangerHover"  Color="#DC2626"/>
+        <SolidColorBrush x:Key="TypSuccess"      Color="#10B981"/>
+        <SolidColorBrush x:Key="TypModalBg"      Color="White"/>
+        <SolidColorBrush x:Key="TypBandeauBg"    Color="#D1FAE5"/>
+        <SolidColorBrush x:Key="TypBandeauFg"    Color="#065F46"/>
 
-            <StackPanel Grid.Row="0"
-                    Margin="0,0,0,20">
-                <TextBlock Text="Types de Vetements"
-                           FontSize="22"
-                        FontWeight="Bold"
-                           Foreground="{StaticResource PrimaryBrush}"/>
-                <Border Height="3"
-                        Width="40"
-                        CornerRadius="2"
-                        Background="#CC0000"
-                        HorizontalAlignment="Left"
-                        Margin="0,6,0,0"/>
-            </StackPanel>
+        <!-- Style de carte -->
+        <Style x:Key="TypCardStyle" TargetType="Border">
+            <Setter Property="Background"   Value="{StaticResource TypCardBg}"/>
+            <Setter Property="BorderBrush"  Value="{StaticResource TypBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding"      Value="18,16"/>
+            <Setter Property="Margin"       Value="0,0,12,12"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="8" ShadowDepth="1"
+                                      Direction="270" Opacity="0.06"
+                                      Color="#000000"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <TextBox Grid.Row="1"
-                    x:Name="TxtRecherche"
-                     Style="{StaticResource ModernTextBox}"
-                     Margin="0,0,0,14"
-                     TextChanged="TxtRecherche_TextChanged"/>
+        <!-- Bouton Ambre principal (+ Nouveau Modèle) -->
+        <Style x:Key="TypBtnAmber" TargetType="Button">
+            <Setter Property="Background"   Value="{StaticResource TypAmber}"/>
+            <Setter Property="Foreground"   Value="White"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="Padding"      Value="16,9"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{StaticResource TypAmberHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-            <Border Grid.Row="2"
-                    Style="{StaticResource Card}"
-                    Padding="0">
-                <DataGrid x:Name="GridTypes"
-                          Style="{StaticResource ModernGrid}"
-                          SelectionChanged="GridTypes_SelectionChanged">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Nom du type"
-                                Binding="{Binding Nom}"
-                                Width="*"
-                                MinWidth="100">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}"/>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Header="Prix de base (FCFA)"
-                                Binding="{Binding PrixBase}"
-                                Width="Auto"
-                                MinWidth="130">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
-                                    <Setter Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Header="Nb mesures"
-                                Binding="{Binding NbMesures}"
-                                Width="Auto"
-                                MinWidth="90">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource DataGridCellText}">
-                                    <Setter Property="HorizontalAlignment" Value="Center"/>
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </Border>
-        </Grid>
+        <!-- Bouton icône plat (✏️ sur les cartes) -->
+        <Style x:Key="TypBtnIcon" TargetType="Button">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Foreground"      Value="{StaticResource TypSlateMuted}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="FontSize"        Value="14"/>
+            <Setter Property="Padding"         Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{StaticResource TypSlateLight}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <!-- DROITE -->
-        <Border Grid.Column="2"
-                Style="{StaticResource Card}"
-                Padding="0"
-                VerticalAlignment="Top">
-            <StackPanel>
-                <!-- En-tête panel — noir -->
-                <Border CornerRadius="10,10,0,0"
-                        Padding="20,14"
-                        Background="#1A1A1A">
-                    <TextBlock Text="Details du type"
-                               FontSize="14"
-                            FontWeight="Bold"
-                            Foreground="White"/>
-                </Border>
+        <!-- Bouton Danger (Supprimer dans la modale) -->
+        <Style x:Key="TypBtnDanger" TargetType="Button">
+            <Setter Property="Background"      Value="{StaticResource TypDanger}"/>
+            <Setter Property="Foreground"      Value="White"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="FontSize"        Value="13"/>
+            <Setter Property="Padding"         Value="16,9"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{StaticResource TypDangerHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-                <StackPanel Margin="20,16,20,20">
-                    <TextBlock Text="Nom *"
-                            Style="{StaticResource FieldLabel}"/>
-                    <TextBox x:Name="TxtNom"
-                            Style="{StaticResource ModernTextBox}"
-                            Margin="0,0,0,12"/>
+        <!-- Bouton Ghost (Annuler dans la modale) -->
+        <Style x:Key="TypBtnGhost" TargetType="Button">
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Foreground"      Value="{StaticResource TypSlateMuted}"/>
+            <Setter Property="FontSize"        Value="13"/>
+            <Setter Property="Padding"         Value="16,9"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource TypBorder}"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{StaticResource TypSlateLight}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-                    <TextBlock Text="Prix de base (FCFA) *"
-                            Style="{StaticResource FieldLabel}"/>
-                    <TextBox x:Name="TxtPrixBase"
-                            Style="{StaticResource ModernTextBox}"
-                            Margin="0,0,0,18"
-                            PreviewTextInput="TxtPrixBase_PreviewTextInput"
-                            DataObject.Pasting="TxtPrixBase_Pasting"/>
+        <!-- TextBox moderne (champs de la modale) -->
+        <Style x:Key="TypTextBox" TargetType="TextBox">
+            <Setter Property="Background"      Value="White"/>
+            <Setter Property="BorderBrush"     Value="{StaticResource TypBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"         Value="10,8"/>
+            <Setter Property="FontSize"        Value="13"/>
+            <Setter Property="Foreground"      Value="{StaticResource TypSlateDark}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush"
+                                        Value="{StaticResource TypAmber}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-                    <Separator Background="{StaticResource BorderBrush}"
-                            Margin="0,0,0,14"/>
+        <!-- Libellé de champ -->
+        <Style x:Key="TypFieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Foreground"   Value="{StaticResource TypSlateDark}"/>
+            <Setter Property="Margin"       Value="0,0,0,4"/>
+        </Style>
 
-                    <TextBlock Text="Mesures requises"
-                               FontSize="13"
-                            FontWeight="SemiBold"
-                               Foreground="{StaticResource PrimaryBrush}"
-                               Margin="0,0,0,10"/>
+        <!-- Badge de mesure (pilule) dans les cartes -->
+        <Style x:Key="TypBadgeCard" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource TypBadgeBg}"/>
+            <Setter Property="CornerRadius"    Value="20"/>
+            <Setter Property="Padding"         Value="10,4"/>
+            <Setter Property="Margin"          Value="0,0,6,6"/>
+        </Style>
 
-                    <Grid Margin="0,0,0,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="44"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtNomMesure"
-                                Grid.Column="0"
-                                 Style="{StaticResource ModernTextBox}"
-                                Height="36"
-                                PreviewTextInput="TxtNomMesure_PreviewTextInput"
-                                MaxLength="200"/>
-                        <Button Grid.Column="2"
-                                x:Name="BtnAjouterMesure"
-                                Content="+"
-                                Style="{StaticResource BtnPrimary}"
-                                Height="36"
-                                Padding="0"
-                                FontSize="18"
-                                FontWeight="Bold"
-                                Click="BtnAjouterMesure_Click"/>
-                    </Grid>
+        <!-- Badge de mesure (pilule) dans la modale avec bouton × -->
+        <Style x:Key="TypBadgeModal" TargetType="Border">
+            <Setter Property="Background"      Value="{StaticResource TypAmberLight}"/>
+            <Setter Property="CornerRadius"    Value="20"/>
+            <Setter Property="Padding"         Value="10,4"/>
+            <Setter Property="Margin"          Value="0,0,6,6"/>
+        </Style>
 
-                    <Border BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="7"
-                            Margin="0,0,0,16">
-                        <ListBox x:Name="ListeMesures"
-                                 MaxHeight="140"
-                                BorderThickness="0"
-                                 Background="Transparent"
-                                FontSize="13">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Padding"
-                                            Value="12,8"/>
-                                    <Setter Property="BorderBrush"
-                                            Value="{StaticResource BorderBrush}"/>
-                                    <Setter Property="BorderThickness"
-                                            Value="0,0,0,1"/>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                        </ListBox>
+    </Page.Resources>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         CONTENU PRINCIPAL (Grid racine)
+         Ligne 0 : en-tête   (Auto)
+         Ligne 1 : bandeau   (Auto)
+         Ligne 2 : recherche (Auto)
+         Ligne 3 : cartes    (*) avec ScrollViewer
+    ═══════════════════════════════════════════════════════════════════ -->
+    <Grid>
+        <!-- Overlay modale — par-dessus tout (ZIndex élevé) -->
+        <Border x:Name="ModalTypeVetement"
+                Background="{StaticResource TypOverlay}"
+                Panel.ZIndex="100"
+                Visibility="Collapsed">
+            <!-- Clic sur le fond ferme la modale -->
+            <Border.InputBindings>
+                <MouseBinding MouseAction="LeftClick"
+                              Command="{x:Null}"/>
+            </Border.InputBindings>
+
+            <!-- Boîte de la modale centrée -->
+            <Border Background="{StaticResource TypModalBg}"
+                    CornerRadius="14"
+                    Width="520"
+                    MaxHeight="680"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    MouseDown="Modal_MouseDown">
+
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" ShadowDepth="4"
+                                      Direction="270" Opacity="0.18"
+                                      Color="#000000"/>
+                </Border.Effect>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>   <!-- en-tête modale -->
+                        <RowDefinition Height="*"/>       <!-- corps scrollable -->
+                        <RowDefinition Height="Auto"/>   <!-- pied : boutons -->
+                    </Grid.RowDefinitions>
+
+                    <!-- En-tête modale -->
+                    <Border Grid.Row="0"
+                            Background="{StaticResource TypSlateDark}"
+                            CornerRadius="14,14,0,0"
+                            Padding="22,16">
+                        <Grid>
+                            <TextBlock x:Name="TxtModalTitre"
+                                       Text="Configurer un Type de Vêtement"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="White"
+                                       VerticalAlignment="Center"/>
+                            <!-- Bouton ✕ -->
+                            <Button Content="✕"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource TypBtnIcon}"
+                                    Foreground="White"
+                                    FontSize="16"
+                                    Click="BtnFermerModal_Click"
+                                    ToolTip="Fermer (Échap)"/>
+                        </Grid>
                     </Border>
 
-                    <Separator Background="{StaticResource BorderBrush}"
-                            Margin="0,0,0,14"/>
+                    <!-- Corps scrollable -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="22,18,22,8">
 
-                    <Button x:Name="BtnEnregistrer"
-                            Content="Enregistrer"
-                            Style="{StaticResource BtnSuccess}"
-                            Click="BtnEnregistrer_Click"
-                            Margin="0,0,0,8"/>
-                    <Button Content="Supprimer"
-                            Style="{StaticResource BtnDanger}"
-                            Click="BtnSupprimer_Click"
-                            Margin="0,0,0,8"/>
-                    <Button Content="Vider"
-                            Style="{StaticResource BtnGhost}"
-                            Click="BtnVider_Click"
-                            Margin="0,0,0,8"/>
+                            <!-- Nom du modèle -->
+                            <TextBlock Text="Nom du modèle *"
+                                       Style="{StaticResource TypFieldLabel}"/>
+                            <TextBox x:Name="TxtNom"
+                                     Style="{StaticResource TypTextBox}"
+                                     MaxLength="100"
+                                     Margin="0,0,0,14"/>
 
-                    <TextBlock x:Name="TxtMessage"
-                            FontSize="12"
-                            TextWrapping="Wrap"
-                            Margin="0,6,0,0"/>
-                </StackPanel>
-            </StackPanel>
+                            <!-- Prix de base -->
+                            <TextBlock Text="Prix de base (FCFA) *"
+                                       Style="{StaticResource TypFieldLabel}"/>
+                            <TextBox x:Name="TxtPrixBase"
+                                     Style="{StaticResource TypTextBox}"
+                                     Margin="0,0,0,18"
+                                     PreviewTextInput="TxtPrixBase_PreviewTextInput"
+                                     DataObject.Pasting="TxtPrixBase_Pasting"/>
+
+                            <!-- ── Séparateur ── -->
+                            <Border BorderBrush="{StaticResource TypBorder}"
+                                    BorderThickness="0,0,0,1"
+                                    Margin="0,0,0,16"/>
+
+                            <!-- Section mesures -->
+                            <TextBlock Text="MESURES REQUISES"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource TypSlateMuted}"
+                                       Margin="0,0,0,10"/>
+
+                            <!-- Ligne saisie mesure + bouton + -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="44"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtNomMesure"
+                                         Grid.Column="0"
+                                         Style="{StaticResource TypTextBox}"
+                                         Height="38"
+                                         PreviewTextInput="TxtNomMesure_PreviewTextInput"
+                                         MaxLength="200"
+                                         KeyDown="TxtNomMesure_KeyDown"
+                                         ToolTip="Nom de la mesure (Entrée pour ajouter)"/>
+                                <Button Grid.Column="2"
+                                        x:Name="BtnAjouterMesure"
+                                        Content="+"
+                                        Style="{StaticResource TypBtnAmber}"
+                                        Height="38"
+                                        Padding="0"
+                                        FontSize="20"
+                                        FontWeight="Bold"
+                                        Click="BtnAjouterMesure_Click"
+                                        ToolTip="Ajouter la mesure"/>
+                            </Grid>
+
+                            <!-- Zone pilules mesures -->
+                            <ItemsControl x:Name="ListeMesures"
+                                          MinHeight="32"
+                                          Margin="0,0,0,16">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource TypBadgeModal}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding}"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource TypAmberText}"
+                                                           VerticalAlignment="Center"/>
+                                                <Button Content="×"
+                                                        FontSize="13"
+                                                        FontWeight="Bold"
+                                                        Foreground="{StaticResource TypAmberText}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        Margin="5,0,0,0"
+                                                        Padding="0"
+                                                        Tag="{Binding}"
+                                                        Click="BtnSupprimerMesureTag_Click"
+                                                        ToolTip="Retirer cette mesure"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- ── Séparateur ── -->
+                            <Border BorderBrush="{StaticResource TypBorder}"
+                                    BorderThickness="0,0,0,1"
+                                    Margin="0,0,0,16"/>
+
+                            <!-- Section variantes courantes -->
+                            <TextBlock Text="VARIANTES COURANTES (séparées par des virgules)"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource TypSlateMuted}"
+                                       Margin="0,0,0,8"/>
+                            <TextBox x:Name="TxtVariantes"
+                                     Style="{StaticResource TypTextBox}"
+                                     Height="62"
+                                     AcceptsReturn="False"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Margin="0,0,0,4"
+                                     ToolTip="Ex : Coupe droite, Coupe slim, Avec poches"/>
+                            <TextBlock Text="Ex : Coupe droite, Coupe slim, Avec poches latérales"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TypSlateMuted}"
+                                       Margin="0,0,0,16"/>
+
+                            <!-- Message d'erreur / validation -->
+                            <TextBlock x:Name="TxtMessage"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8"
+                                       Visibility="Collapsed"/>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Pied de modale : boutons -->
+                    <Border Grid.Row="2"
+                            BorderBrush="{StaticResource TypBorder}"
+                            BorderThickness="0,1,0,0"
+                            Padding="22,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Supprimer (gauche, visible uniquement en édition) -->
+                            <Button Grid.Column="0"
+                                    x:Name="BtnSupprimerDansModal"
+                                    Content="🗑 Supprimer"
+                                    Style="{StaticResource TypBtnDanger}"
+                                    Click="BtnSupprimerDansModal_Click"
+                                    Visibility="Collapsed"
+                                    ToolTip="Supprimer ce type de vêtement"/>
+                            <!-- Spacer -->
+                            <StackPanel Grid.Column="1"/>
+                            <!-- Annuler -->
+                            <Button Grid.Column="2"
+                                    Content="Annuler"
+                                    Style="{StaticResource TypBtnGhost}"
+                                    Click="BtnFermerModal_Click"/>
+                            <!-- Enregistrer -->
+                            <Button Grid.Column="4"
+                                    x:Name="BtnEnregistrer"
+                                    Content="✔ Enregistrer Modèle"
+                                    Style="{StaticResource TypBtnAmber}"
+                                    Click="BtnEnregistrer_Click"
+                                    ToolTip="Enregistrer les modifications"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
         </Border>
+
+        <!-- ── Contenu de page ────────────────────────────────────────── -->
+        <Grid Margin="28,24,28,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>   <!-- en-tête page -->
+                <RowDefinition Height="Auto"/>   <!-- bandeau confirmation -->
+                <RowDefinition Height="Auto"/>   <!-- barre de recherche -->
+                <RowDefinition Height="*"/>       <!-- grille de cartes -->
+            </Grid.RowDefinitions>
+
+            <!-- ── EN-TÊTE ─────────────────────────────────────────────── -->
+            <Grid Grid.Row="0" Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Titre + sous-titre -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🏷"
+                                   FontSize="24"
+                                   Margin="0,0,10,0"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Catalogue des Vêtements &amp; Mesures Requises"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource TypSlateDark}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="Configurez les types confectionnés à l'atelier et les prises de mesure standard"
+                               FontSize="13"
+                               Foreground="{StaticResource TypSlateMuted}"
+                               Margin="34,4,0,0"/>
+                </StackPanel>
+                <!-- Bouton + Nouveau Modèle -->
+                <Button Grid.Column="1"
+                        Content="+ Nouveau Modèle"
+                        Style="{StaticResource TypBtnAmber}"
+                        FontSize="14"
+                        Padding="18,10"
+                        VerticalAlignment="Center"
+                        Click="BtnOuvrirNouveauType_Click"
+                        ToolTip="Créer un nouveau type de vêtement"/>
+            </Grid>
+
+            <!-- ── BANDEAU DE CONFIRMATION ─────────────────────────────── -->
+            <Border x:Name="BandeauConfirmation"
+                    Grid.Row="1"
+                    Background="{StaticResource TypBandeauBg}"
+                    BorderBrush="{StaticResource TypSuccess}"
+                    BorderThickness="0,0,0,2"
+                    CornerRadius="8"
+                    Padding="16,10"
+                    Margin="0,0,0,14"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="✔  "
+                               FontSize="14"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource TypBandeauFg}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtBandeauMessage"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TypBandeauFg}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ── BARRE DE RECHERCHE ─────────────────────────────────── -->
+            <Border Grid.Row="2"
+                    Background="White"
+                    BorderBrush="{StaticResource TypBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Margin="0,0,0,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="🔍"
+                               FontSize="14"
+                               Margin="12,0,6,0"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TypSlateMuted}"/>
+                    <!-- TextBox avec placeholder -->
+                    <Grid Grid.Column="1">
+                        <TextBlock x:Name="TxtRecherchePlaceholder"
+                                   Text="Rechercher un type de vêtement…"
+                                   FontSize="13"
+                                   Foreground="{StaticResource TypSlateMuted}"
+                                   IsHitTestVisible="False"
+                                   VerticalAlignment="Center"
+                                   Margin="2,0,0,0"/>
+                        <TextBox x:Name="TxtRecherche"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 FontSize="13"
+                                 Foreground="{StaticResource TypSlateDark}"
+                                 Padding="2,10"
+                                 VerticalAlignment="Center"
+                                 TextChanged="TxtRecherche_TextChanged"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- ── GRILLE DE CARTES ──────────────────────────────────── -->
+            <ScrollViewer Grid.Row="3"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <Grid>
+                    <!-- État vide -->
+                    <Border x:Name="PanelEtatVide"
+                            Visibility="Collapsed"
+                            Padding="40"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top"
+                            Margin="0,40,0,0">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="👗"
+                                       FontSize="48"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock x:Name="TxtEtatVide"
+                                       Text="Aucun type de vêtement enregistré. Cliquez sur + Nouveau Modèle."
+                                       FontSize="14"
+                                       Foreground="{StaticResource TypSlateMuted}"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="340"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ItemsControl des cartes -->
+                    <ItemsControl x:Name="ItemsTypesVetements">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <!-- Carte individuelle -->
+                                <Border Style="{StaticResource TypCardStyle}"
+                                        Width="290"
+                                        MinHeight="180">
+                                    <StackPanel>
+
+                                        <!-- En-tête carte : nom + bouton ✏️ -->
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Nom}"
+                                                       FontSize="16"
+                                                       FontWeight="Bold"
+                                                       Foreground="{StaticResource TypSlateDark}"
+                                                       TextWrapping="Wrap"/>
+                                            <Button Grid.Column="1"
+                                                    Content="✏"
+                                                    Style="{StaticResource TypBtnIcon}"
+                                                    Tag="{Binding IdTypeVetement}"
+                                                    Click="BtnModifierType_Click"
+                                                    ToolTip="Modifier ce type"/>
+                                        </Grid>
+
+                                        <!-- Prix -->
+                                        <TextBlock Text="{Binding PrixBaseAffiche}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TypAmber}"
+                                                   Margin="0,0,0,12"/>
+
+                                        <!-- Label mesures -->
+                                        <TextBlock Text="{Binding LabelMesures}"
+                                                   FontSize="11"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource TypSlateMuted}"
+                                                   Margin="0,0,0,8"/>
+
+                                        <!-- Badges mesures -->
+                                        <ItemsControl ItemsSource="{Binding Mesures}"
+                                                      Margin="0,0,0,10">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource TypBadgeCard}">
+                                                        <TextBlock Text="{Binding}"
+                                                                   FontSize="12"
+                                                                   Foreground="{StaticResource TypBadgeFg}"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <!-- Variantes courantes -->
+                                        <StackPanel Visibility="{Binding VariantesVisibility}">
+                                            <TextBlock Text="VARIANTES COURANTES"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="{StaticResource TypSlateMuted}"
+                                                       Margin="0,0,0,4"/>
+                                            <TextBlock Text="{Binding VariantesAffichage}"
+                                                       FontSize="12"
+                                                       FontStyle="Italic"
+                                                       Foreground="{StaticResource TypSlateMuted}"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </ScrollViewer>
+
+        </Grid>
     </Grid>
 </Page>
