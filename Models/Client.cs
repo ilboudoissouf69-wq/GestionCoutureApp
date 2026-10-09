@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GestionCoutureApp.Models
 {
@@ -21,5 +22,29 @@ namespace GestionCoutureApp.Models
         public string Telephone { get; set; } = string.Empty;
 
         public List<Commande> Commandes { get; set; } = new();
+
+        // ── Propriétés [NotMapped] pour la vue Clients (aucune migration) ──
+
+        /// <summary>Nom complet « Prénom Nom » pour les colonnes et la fiche.</summary>
+        [NotMapped]
+        public string NomComplet => $"{Prenom} {Nom}".Trim();
+
+        /// <summary>Nombre de commandes non supprimées — rempli après chargement de page.</summary>
+        [NotMapped]
+        public int NbCommandes { get; set; }
+
+        /// <summary>Date de la dernière commande non supprimée — remplie après chargement de page.</summary>
+        [NotMapped]
+        public DateTime? DerniereCommande { get; set; }
+
+        /// <summary>
+        /// Sous-titre affiché sous le NomComplet dans le DataGrid :
+        /// « · dernière commande le dd/MM/yyyy » ou « · aucune commande ».
+        /// </summary>
+        [NotMapped]
+        public string SousTitreDerniereCommande =>
+            DerniereCommande.HasValue
+                ? $"· dernière commande le {DerniereCommande.Value:dd/MM/yyyy}"
+                : "· aucune commande";
     }
 }

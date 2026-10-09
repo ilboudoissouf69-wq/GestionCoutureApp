@@ -317,5 +317,87 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException(msg);
             }
         }
+
+        // ================================================================
+        // Méthodes de LECTURE pour la vue Clients (aucune écriture)
+        // ================================================================
+
+        /// <inheritdoc/>
+        public Dictionary<int, StatsCommandesClient> ObtenirStatistiquesCommandes(
+            IEnumerable<int> idsClients)
+        {
+            var idsList = idsClients.ToList();
+            if (idsList.Count == 0) return new Dictionary<int, StatsCommandesClient>();
+
+            using var context = _contextFactory.CreateDbContext();
+
+            // Une seule requête GROUP BY — AsNoTracking car lecture seule
+            return context.Commandes
+                .AsNoTracking()
+                .Where(cmd => idsList.Contains(cmd.IdClient) && !cmd.EstSupprimee)
+                .GroupBy(cmd => cmd.IdClient)
+                .Select(g => new StatsCommandesClient
+                {
+                    IdClient         = g.Key,
+                    NbCommandes      = g.Count(),
+                    DerniereCommande = g.Max(cmd => (DateTime?)cmd.DateDebut)
+                })
+                .ToDictionary(s => s.IdClient);
+        }
+
+        /// <inheritdoc/>
+        public List<HistoriqueCommandeClient> ObtenirHistoriqueCommandes(
+            int idClient, int max = 20)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            return context.Commandes
+                .AsNoTracking()
+                .Where(cmd => cmd.IdClient == idClient && !cmd.EstSupprimee)
+                .Include(cmd => cmd.Pieces)
+                .Include(cmd => cmd.Paiements)
+                .OrderByDescending(cmd => cmd.DateDebut)
+                .Take(max)
+                .AsEnumerable()   // matérialise pour utiliser les propriétés [NotMapped]
+                .Select(cmd => new HistoriqueCommandeClient
+                {
+                    IdCommande    = cmd.IdCommande,
+                    ResumePieces  = cmd.TypeVetementAffiche,
+                    DateDebut     = cmd.DateDebut,
+                    StatutAffiche = cmd.StatutGlobalAffiche,
+                    ResteAPayer   = cmd.ResteAPayer
+                })
+                .ToList();
+        }
+
+        /// <inheritdoc/>
+        public DernieresMesuresClient? ObtenirDernieresMesures(int idClient)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            // Chercher la pièce la plus récente ayant au moins une mesure
+            var piece = context.PiecesCommande
+                .AsNoTracking()
+                .Where(p => p.Commande != null &&
+                            p.Commande.IdClient == idClient &&
+                            !p.Commande.EstSupprimee &&
+                            p.Mesures.Any())
+                .Include(p => p.Commande)
+                .Include(p => p.Mesures)
+                .OrderByDescending(p => p.Commande!.DateDebut)
+                .FirstOrDefault();
+
+            if (piece == null) return null;
+
+            string labelSource = piece.Commande != null
+                ? $"{piece.TypeVetement} — {piece.Commande.DateDebut:dd/MM/yyyy}"
+                : piece.TypeVetement;
+
+            return new DernieresMesuresClient
+            {
+                LabelSource = labelSource,
+                Mesures     = piece.Mesures.ToList()
+            };
+        }
     }
 }
