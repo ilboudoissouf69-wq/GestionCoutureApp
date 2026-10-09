@@ -392,12 +392,21 @@
         </Grid>
 
         <!-- ══════════════════════════════════════════════════════════════
-             LIGNE 3 — PANNEAU PERFORMANCE QUALITÉ (carte ardoise)
+             LIGNE 3 — PANNEAU PERFORMANCE QUALITÉ (carte ardoise/ambre)
         ══════════════════════════════════════════════════════════════════ -->
         <Border Grid.Row="3"
-                Background="#0F172A"
                 CornerRadius="12"
-                Margin="0,0,0,16">
+                Margin="0,0,0,16"
+                BorderThickness="1"
+                BorderBrush="#1E293B">
+            <!-- Dégradé ardoise : #0F172A (haut) → #1E293B (bas) -->
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#0F172A" Offset="0"/>
+                    <GradientStop Color="#1E293B" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+
             <Grid Margin="18,14,18,14">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -405,25 +414,33 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Titre du panneau + ComboBox période -->
-                <Grid Grid.Row="0" Margin="0,0,0,10">
+                <!-- ── EN-TÊTE : titre ambre + sélecteur période ──────── -->
+                <Grid Grid.Row="0" Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
+                    <!-- Titre avec accent ambre -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal"
                                 VerticalAlignment="Center">
+                        <!-- Barre ambre verticale -->
+                        <Border Width="3" Height="20"
+                                CornerRadius="2"
+                                Background="{StaticResource RetAmber}"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"/>
                         <TextBlock Text="📈"
-                                   FontSize="15"
+                                   FontSize="14"
                                    VerticalAlignment="Center"
-                                   Margin="0,0,8,0"/>
+                                   Margin="0,0,7,0"/>
                         <TextBlock Text="PERFORMANCE QUALITÉ DES COUTURIERS"
                                    FontSize="12" FontWeight="Bold"
                                    Foreground="White"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
 
+                    <!-- Sélecteur période — ComboBox custom ardoise -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                 VerticalAlignment="Center">
                         <TextBlock Text="Période :"
@@ -431,23 +448,123 @@
                                    Foreground="#94A3B8"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"/>
+
+                        <!-- ComboBox avec template explicite pour respecter les couleurs ardoise -->
                         <ComboBox x:Name="CmbPeriodeQualite"
-                                  Width="140" Height="30"
+                                  Width="148" Height="32"
                                   FontSize="11"
-                                  Background="#1E293B"
-                                  Foreground="#E2E8F0"
-                                  BorderBrush="#334155"
                                   SelectionChanged="CmbPeriodeQualite_SelectionChanged">
+
+                            <!-- Style local : fond ardoise, texte clair, flèche ambre -->
+                            <ComboBox.Style>
+                                <Style TargetType="ComboBox">
+                                    <Setter Property="Background"   Value="#1E293B"/>
+                                    <Setter Property="Foreground"   Value="#E2E8F0"/>
+                                    <Setter Property="BorderBrush"  Value="#334155"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                    <Setter Property="Padding"      Value="10,0"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ComboBox">
+                                                <Grid>
+                                                    <!-- Fond principal -->
+                                                    <Border x:Name="bd"
+                                                            Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="7">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="26"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <!-- Valeur sélectionnée -->
+                                                            <ContentPresenter Grid.Column="0"
+                                                                              Content="{TemplateBinding SelectionBoxItem}"
+                                                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                                              Margin="10,0,0,0"
+                                                                              VerticalAlignment="Center"/>
+                                                            <!-- Flèche ambre -->
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="▾"
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource RetAmber}"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Border>
+                                                    <!-- Popup de la liste déroulante -->
+                                                    <Popup x:Name="PART_Popup"
+                                                           IsOpen="{TemplateBinding IsDropDownOpen}"
+                                                           AllowsTransparency="True"
+                                                           Focusable="False"
+                                                           PopupAnimation="Slide"
+                                                           Placement="Bottom">
+                                                        <Border Background="#1E293B"
+                                                                BorderBrush="#334155"
+                                                                BorderThickness="1"
+                                                                CornerRadius="7"
+                                                                MinWidth="{TemplateBinding ActualWidth}">
+                                                            <ScrollViewer MaxHeight="200"
+                                                                          VerticalScrollBarVisibility="Auto">
+                                                                <ItemsPresenter/>
+                                                            </ScrollViewer>
+                                                        </Border>
+                                                    </Popup>
+                                                </Grid>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bd" Property="BorderBrush"
+                                                                Value="{StaticResource RetAmber}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsDropDownOpen" Value="True">
+                                                        <Setter TargetName="bd" Property="BorderBrush"
+                                                                Value="{StaticResource RetAmber}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ComboBox.Style>
+
+                            <!-- Style des items de la liste déroulante -->
                             <ComboBox.Resources>
                                 <Style TargetType="ComboBoxItem">
-                                    <Setter Property="Foreground" Value="#1F2937"/>
-                                    <Setter Property="Background" Value="White"/>
+                                    <Setter Property="Foreground"   Value="#E2E8F0"/>
+                                    <Setter Property="Background"   Value="Transparent"/>
+                                    <Setter Property="Padding"      Value="10,6"/>
+                                    <Setter Property="FontSize"     Value="11"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ComboBoxItem">
+                                                <Border x:Name="itBd"
+                                                        Background="{TemplateBinding Background}"
+                                                        Padding="{TemplateBinding Padding}"
+                                                        CornerRadius="5"
+                                                        Margin="3,1">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsHighlighted" Value="True">
+                                                        <Setter TargetName="itBd" Property="Background"
+                                                                Value="#D97706"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="itBd" Property="Background"
+                                                                Value="#92400E"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
                                 </Style>
                             </ComboBox.Resources>
-                            <ComboBoxItem Content="Ce mois-ci"    Tag="mois"      IsSelected="True"/>
-                            <ComboBoxItem Content="Ce trimestre"  Tag="trimestre"/>
-                            <ComboBoxItem Content="Cette année"   Tag="annee"/>
-                            <ComboBoxItem Content="Tout"          Tag="tout"/>
+
+                            <ComboBoxItem Content="Ce mois-ci"   Tag="mois"       IsSelected="True"/>
+                            <ComboBoxItem Content="Ce trimestre" Tag="trimestre"/>
+                            <ComboBoxItem Content="Cette année"  Tag="annee"/>
+                            <ComboBoxItem Content="Tout"         Tag="tout"/>
                         </ComboBox>
                     </StackPanel>
                 </Grid>
@@ -462,18 +579,47 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
+                            <!-- Carte ardoise avec liseré ambre à gauche -->
                             <Border Background="#1E293B"
+                                    BorderBrush="#334155"
+                                    BorderThickness="1"
                                     CornerRadius="8"
-                                    Margin="0,0,0,4">
-                                <Grid Margin="12,8">
+                                    Margin="0,0,0,5">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="26"/>
-                                        <ColumnDefinition Width="160"/>
-                                        <ColumnDefinition Width="90"/>
-                                        <ColumnDefinition Width="90"/>
-                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="4"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
+                                    <!-- Liseré ambre -->
+                                    <Border Grid.Column="0"
+                                            CornerRadius="8,0,0,8">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#334155"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding EstExcellent}" Value="True">
+                                                        <Setter Property="Background" Value="#10B981"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding EstFaible}" Value="True">
+                                                        <Setter Property="Background" Value="#EF4444"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding EstEligiblePrime}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource RetAmber}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                    <!-- Contenu -->
+                                    <Grid Grid.Column="1" Margin="12,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="26"/>
+                                            <ColumnDefinition Width="160"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
                                     <!-- Médaille / rang -->
                                     <TextBlock Grid.Column="0"
@@ -567,20 +713,22 @@
                                                    Foreground="White"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </Border>
-                                </Grid>
-                            </Border>
+
+                                    </Grid><!-- fin Grid contenu col1 -->
+                                </Grid><!-- fin Grid liseré+contenu -->
+                            </Border><!-- fin Border carte couturier -->
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Message aucune donnée -->
+                <!-- Message aucune donnée — texte visible en clair sur fond ardoise -->
                 <TextBlock x:Name="TxtAucunePerformance"
                            Grid.Row="2"
                            Text="Aucune donnée de performance pour cette période."
                            FontSize="11" FontStyle="Italic"
-                           Foreground="#64748B"
+                           Foreground="#94A3B8"
                            HorizontalAlignment="Center"
-                           Margin="0,8,0,2"
+                           Margin="0,10,0,4"
                            Visibility="Collapsed"/>
             </Grid>
         </Border>
