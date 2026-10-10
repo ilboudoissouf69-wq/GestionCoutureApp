@@ -2,6 +2,7 @@ using GestionCoutureApp.Models;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 
