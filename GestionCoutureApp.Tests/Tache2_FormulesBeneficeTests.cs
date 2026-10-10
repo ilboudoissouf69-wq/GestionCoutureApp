@@ -58,7 +58,7 @@ namespace GestionCoutureApp.Tests
             _tresorerieService = new TresorerieService(_factory, new Logger<TresorerieService>(logFactory));
             _paiementService   = new PaiementService(_factory, new Logger<PaiementService>(logFactory));
             _materielService   = new MaterielService(_factory);
-            _commissionService = new CommissionService(_factory, new Logger<CommissionService>(logFactory));
+            _commissionService = new CommissionService(_factory, new Logger<CommissionService>(logFactory), new MockParametresService());
 
             using var ctx = _factory.CreateDbContext();
             ctx.Employes.AddRange(

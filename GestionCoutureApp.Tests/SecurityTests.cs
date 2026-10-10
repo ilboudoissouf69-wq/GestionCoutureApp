@@ -715,5 +715,10 @@ namespace GestionCoutureApp.Tests
         public Task DefinirCouleurAccent(string hex) => Task.CompletedTask;
         public Task<string> ObtenirLangue() => Task.FromResult("fr");
         public Task DefinirLangue(string code) => Task.CompletedTask;
+        // Phase 2 : prime qualité configurable
+        public Task<int>     ObtenirSeuilPrimeNbCommandes()        => Task.FromResult(5);
+        public Task          DefinirSeuilPrimeNbCommandes(int n)   => Task.CompletedTask;
+        public Task<decimal> ObtenirMontantPrimeQualite()          => Task.FromResult(5000m);
+        public Task          DefinirMontantPrimeQualite(decimal m) => Task.CompletedTask;
     }
 }

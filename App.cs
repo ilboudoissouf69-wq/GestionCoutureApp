@@ -59,6 +59,7 @@ namespace GestionCoutureApp
 
             // Services
             services.AddSingleton<ILogService, LogService>();  // Service de logging
+            services.AddSingleton<IClock, SystemClock>();       // Phase 2 : horloge injectable
             services.AddSingleton<IAuthService, AuthService>();
             services.AddSingleton<IClientService, ClientService>();
             services.AddSingleton<ICommandeService, CommandeService>();

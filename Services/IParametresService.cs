@@ -17,6 +17,11 @@ namespace GestionCoutureApp.Services
         Task          DefinirTauxCommissionDefaut(decimal taux);
         Task<decimal> ObtenirPrimeZeroDefaut();
         Task          DefinirPrimeZeroDefaut(decimal prime);
+        // Phase 2 : seuil (nb pièces min) et montant FCFA de la prime qualité — configurables
+        Task<int>     ObtenirSeuilPrimeNbCommandes();
+        Task          DefinirSeuilPrimeNbCommandes(int n);
+        Task<decimal> ObtenirMontantPrimeQualite();
+        Task          DefinirMontantPrimeQualite(decimal montant);
 
         // ── Onglet 1 — Comptabilité & Seuils ─────────────────────────────
         Task<string>  ObtenirModeCA();           // "Encaisse" | "Total"

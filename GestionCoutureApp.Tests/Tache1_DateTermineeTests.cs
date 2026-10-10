@@ -49,7 +49,7 @@ namespace GestionCoutureApp.Tests
 
             var logFactory = NullLoggerFactory.Instance;
             _commandeService   = new CommandeService(_factory,  new Logger<CommandeService>(logFactory));
-            _commissionService = new CommissionService(_factory, new Logger<CommissionService>(logFactory));
+            _commissionService = new CommissionService(_factory, new Logger<CommissionService>(logFactory), new MockParametresService());
             _paiementService   = new PaiementService(_factory,  new Logger<PaiementService>(logFactory));
 
             using var ctx = _factory.CreateDbContext();

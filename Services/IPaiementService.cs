@@ -28,6 +28,11 @@ namespace GestionCoutureApp.Services
         List<Paiement> ObtenirParCommande(int idCommande);
         void Ajouter(Paiement paiement, int idOperateur, string nomOperateur);
         void Annuler(int idPaiement, string motif, int idAnnulateur, string nomAnnulateur);
+        /// <summary>
+        /// DÉPRÉCIÉ — Inclut les paiements annulés. Utiliser TotalValideParCommande à la place.
+        /// Conservé pour compatibilité ascendante uniquement.
+        /// </summary>
+        [Obsolete("Inclut les paiements annulés — utiliser TotalValideParCommande (paiements non annulés seulement).")]
         decimal TotalPayeParCommande(int idCommande);
         decimal TotalValideParCommande(int idCommande);
         string GenererNumeroRecu();

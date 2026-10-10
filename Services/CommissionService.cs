@@ -9,15 +9,18 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<CommissionService> _logger;
+        private readonly IParametresService _parametresService;
 
         private static readonly object _verrou = new();
 
         public CommissionService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
-            ILogger<CommissionService> logger)
+            ILogger<CommissionService> logger,
+            IParametresService parametresService)
         {
             _contextFactory = contextFactory;
             _logger = logger;
+            _parametresService = parametresService;
         }
 
         // Le moteur de calcul de commission opère sur PieceCommande, et non sur Commande
@@ -92,7 +95,7 @@ namespace GestionCoutureApp.Services
                 decimal caEncaisse = piecesCouturier.Sum(p => PartEncaisseeDeLaPiece(p));
 
                 decimal base_ = surMontantEncaisse ? caEncaisse : caTotal;
-                decimal commission = Math.Round(base_ * (pourcentage / 100m), 0);
+                decimal commission = Math.Round(base_ * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero);
 
                 // Matériaux rattachés aux pièces de ce couturier (exclus de la commission)
                 decimal totalMateriaux = piecesCouturier
@@ -124,6 +127,31 @@ namespace GestionCoutureApp.Services
                 "Aperçu commission calculé — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy} " +
                 "— {Pct}% — {NbCouturiers} couturier(s)",
                 dateDebut, dateFin, pourcentage, resultat.Count);
+
+            // Phase 2 : calcul de la prime qualité dans le service (plus dans la vue).
+            // Paramètres configurables : seuil en nombre de pièces et montant FCFA.
+            // La prime est accordée si le couturier a ≥ seuilPieces pièces ET 0 retour.
+            int seuilPieces    = _parametresService.ObtenirSeuilPrimeNbCommandes().GetAwaiter().GetResult();
+            decimal montantPrime = _parametresService.ObtenirMontantPrimeQualite().GetAwaiter().GetResult();
+
+            // Charger les retours non résolus par couturier pour le calcul de prime
+            var retoursParCouturier = context.Retours
+                .Where(r => !r.EstAnnule)
+                .GroupBy(r => r.IdCouturier)
+                .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
+                .ToDictionary(x => x.IdCouturier, x => x.NbRetours);
+
+            foreach (var ap in resultat)
+            {
+                int nbRetours = retoursParCouturier.TryGetValue(ap.IdEmploye, out var nb) ? nb : 0;
+                ap.NbRetours   = nbRetours;
+                ap.TauxQualite = ap.NbCommandes > 0
+                    ? Math.Max(0.0, 100.0 - (nbRetours * 100.0 / ap.NbCommandes))
+                    : 100.0;
+                ap.PrimeQualite = (ap.NbCommandes >= seuilPieces && nbRetours == 0)
+                    ? montantPrime
+                    : 0m;
+            }
 
             return resultat;
         }
@@ -161,7 +189,32 @@ namespace GestionCoutureApp.Services
 
             // Part proportionnelle de cette pièce
             decimal proportion = piece.MontantCouture / totalCouture;
-            return Math.Round(encaisseCouture * proportion, 0);
+            return Math.Round(encaisseCouture * proportion, 0, MidpointRounding.AwayFromZero);
+        }
+
+        // Version multi-pièces qui garantit que la somme des parts == encaissé couture
+        // en reportant le reliquat d'arrondi sur la dernière pièce de la commande.
+        // À appeler uniquement quand on traite TOUTES les pièces d'une commande ensemble.
+        internal static List<decimal> RepartirEncaisseSurPieces(
+            IReadOnlyList<PieceCommande> pieces, decimal encaisseCouture)
+        {
+            if (pieces.Count == 0) return new List<decimal>();
+            decimal totalCouture = pieces.Sum(p => p.MontantCouture);
+            if (totalCouture <= 0m) return pieces.Select(_ => 0m).ToList();
+
+            var parts = new List<decimal>(pieces.Count);
+            decimal somme = 0m;
+            for (int i = 0; i < pieces.Count - 1; i++)
+            {
+                decimal part = Math.Round(
+                    encaisseCouture * (pieces[i].MontantCouture / totalCouture),
+                    0, MidpointRounding.AwayFromZero);
+                parts.Add(part);
+                somme += part;
+            }
+            // Dernière pièce reçoit le reliquat pour que la somme soit exacte
+            parts.Add(encaisseCouture - somme);
+            return parts;
         }
 
         public void EnregistrerCommissions(
@@ -235,6 +288,40 @@ namespace GestionCoutureApp.Services
                         .Where(p => ligne.IdsPieces.Contains(p.IdPieceCommande) && p.IdCommission == null)
                         .ToList();
 
+                    // Phase 2 : vérification que chaque pièce appartient bien à cet employé
+                    // et que les conditions d'éligibilité sont toujours remplies.
+                    var retoursNonResolus = context.Retours
+                        .Where(r => !r.EstAnnule &&
+                                    (r.Statut == "Signale" || r.Statut == "En reprise"))
+                        .Select(r => r.IdPieceCommande)
+                        .ToHashSet();
+
+                    var piecesInvalides = pieces.Where(p =>
+                        // Pièce n'appartient pas au bon couturier
+                        p.IdCouturier != ligne.IdEmploye ||
+                        // Statut invalide
+                        (p.Statut != "Terminee" && p.Statut != "Livree") ||
+                        // Pas de DateTerminee
+                        !p.DateTerminee.HasValue ||
+                        // DateTerminee hors période
+                        p.DateTerminee.Value.Date < dateDebut.Date ||
+                        p.DateTerminee.Value.Date > dateFin.Date ||
+                        // Retour actif
+                        retoursNonResolus.Contains(p.IdPieceCommande)
+                    ).ToList();
+
+                    if (piecesInvalides.Any())
+                    {
+                        transaction.Rollback();
+                        _logger.LogWarning(
+                            "Écart aperçu/base pour {Nom} — {Nb} pièce(s) invalide(s) à l'enregistrement",
+                            ligne.Nom, piecesInvalides.Count);
+                        throw new InvalidOperationException(
+                            $"Écart détecté pour {ligne.Nom} : {piecesInvalides.Count} pièce(s) ne " +
+                            "remplissent plus les conditions (statut, période, retour actif, ou couturier). " +
+                            "Recalculez l'aperçu avant d'enregistrer.");
+                    }
+
                     // Vérification de cohérence : si le nombre de pièces récupérées ne
                     // correspond pas à l'aperçu, une ou plusieurs ont été verrouillées entre-temps.
                     if (pieces.Count != ligne.IdsPieces.Count)
@@ -284,7 +371,7 @@ namespace GestionCoutureApp.Services
                     }
 
                     commission.MontantCommission =
-                        Math.Round(commission.BaseMontant * (pourcentage / 100m), 0);
+                        Math.Round(commission.BaseMontant * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero);
 
                     // Prime qualité zéro défaut (calculée dans l'aperçu et transmise ici)
                     commission.PrimeQualite = ligne.PrimeQualite;

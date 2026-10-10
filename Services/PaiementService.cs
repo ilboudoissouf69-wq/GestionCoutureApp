@@ -9,16 +9,19 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<PaiementService> _logger;
+        private readonly IClock _clock;
 
         // Verrou statique pour éviter les numéros de reçu en doublon
         private static readonly object _verrou = new();
 
         public PaiementService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
-            ILogger<PaiementService> logger)
+            ILogger<PaiementService> logger,
+            IClock? clock = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
+            _clock = clock ?? new SystemClock();
         }
 
         // ----------------------------------------------------------------
@@ -238,7 +241,7 @@ namespace GestionCoutureApp.Services
                 paiement.ResteAvantPaiement = resteReel;
                 paiement.IdOperateur = idOperateur;
                 paiement.NomOperateur = nomOperateur;
-                paiement.DatePaiement = DateTime.Now;
+                paiement.DatePaiement = _clock.Now;
                 paiement.RecuNumero = GenererNumeroRecu(context);
                 paiement.EstAnnule = false;
 
@@ -289,9 +292,39 @@ namespace GestionCoutureApp.Services
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
+            // Phase 2 : bloquer si la commande a des pièces rattachées à une commission non annulée.
+            // Annuler un paiement alors que les commissions sont déjà calculées fausserait les
+            // comptes des couturiers. Il faut d'abord annuler la commission.
+            var commissionsActives = context.PiecesCommande
+                .Where(p => p.IdCommande == paiement.IdCommande && p.IdCommission != null)
+                .Select(p => new { p.IdCommission })
+                .Distinct()
+                .ToList()
+                .Select(x => x.IdCommission!.Value)
+                .Distinct()
+                .ToList();
+
+            if (commissionsActives.Any())
+            {
+                var commissions = context.Commissions
+                    .Where(c => commissionsActives.Contains(c.IdCommission) && !c.EstAnnulee)
+                    .Select(c => new { c.IdCommission, c.NomEmployeSnapshot })
+                    .ToList();
+
+                if (commissions.Any())
+                {
+                    string liste = string.Join(", ",
+                        commissions.Select(c => $"Commission #{c.IdCommission} ({c.NomEmployeSnapshot})"));
+                    throw new InvalidOperationException(
+                        $"Impossible d'annuler ce paiement : la commande a des pièces rattachées " +
+                        $"à des commissions non annulées ({liste}). " +
+                        "Annulez d'abord les commissions concernées, puis réessayez.");
+                }
+            }
+
             paiement.EstAnnule = true;
             paiement.MotifsAnnulation = motif.Trim();
-            paiement.DateAnnulation = DateTime.Now;
+            paiement.DateAnnulation = _clock.Now;
             paiement.NomAnnulateur = nomAnnulateur;
 
             context.SaveChanges();

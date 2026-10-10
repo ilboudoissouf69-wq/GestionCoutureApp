@@ -155,29 +155,8 @@ namespace GestionCoutureApp.Views
             _dernierApercu = _commissionService.CalculerApercu(
                 dateDebut, dateFin, pourcentage, _surMontantEncaisse, _idCouturierSelectionne);
 
-            // ── Enrichir chaque aperçu avec les données qualité ──────────
-            try
-            {
-                using var ctx = _contextFactory.CreateDbContext();
-                var retours = ctx.Retours
-                    .Where(r => !r.EstAnnule &&
-                                r.DateSignalement.Date >= dateDebut.Date &&
-                                r.DateSignalement.Date <= dateFin.Date)
-                    .ToList();
-
-                foreach (var ap in _dernierApercu)
-                {
-                    ap.NbRetours = retours.Count(r => r.IdCouturier == ap.IdEmploye);
-                    ap.TauxQualite = ap.NbCommandes > 0
-                        ? Math.Round(100.0 * (ap.NbCommandes - ap.NbRetours) / ap.NbCommandes, 1)
-                        : 100.0;
-                    // Prime si ≥ 5 pièces et 0 retour
-                    ap.PrimeQualite = (ap.NbCommandes >= 5 && ap.NbRetours == 0)
-                        ? primeZeroDefaut
-                        : 0m;
-                }
-            }
-            catch { /* retours pas encore en base */ }
+            // Phase 2 : le calcul qualité (NbRetours, TauxQualite, PrimeQualite) est
+            // désormais fait par CommissionService.CalculerApercu() — plus besoin ici.
 
             decimal caTotalRetenu    = _dernierApercu.Sum(a => a.BaseCalcul);
             decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);

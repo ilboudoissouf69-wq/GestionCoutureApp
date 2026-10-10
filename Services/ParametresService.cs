@@ -13,6 +13,8 @@ namespace GestionCoutureApp.Services
         // Onglet 3 — Métier
         public const string CleDelaiAlerte        = "DelaiAlerteRendezVousHeures";
         public const string CleSeuiRetard         = "SeuiRetardHeures";
+        public const string CleSeuilPrimeCommandes = "SeuilPrimeNbCommandes";   // Phase 2 : nb commandes min pour prime
+        public const string CleMontantPrimeQualite = "MontantPrimeQualite";    // Phase 2 : montant FCFA de la prime
         public const string CleSalaireSecretaire  = "SalaireMensuelSecretaire";
         public const string CleTauxCommission     = "TauxCommissionDefaut";
         public const string ClePrimeZeroDefaut    = "PrimeZeroDefaut";
@@ -82,6 +84,11 @@ namespace GestionCoutureApp.Services
         public Task          DefinirTauxCommissionDefaut(decimal t)=> SetDec(CleTauxCommission, t);
         public Task<decimal> ObtenirPrimeZeroDefaut()              => GetDecimal(ClePrimeZeroDefaut, 5000m);
         public Task          DefinirPrimeZeroDefaut(decimal p)     => SetDec(ClePrimeZeroDefaut, p);
+        // Phase 2 : seuil et montant de la prime qualité configurables
+        public Task<int>     ObtenirSeuilPrimeNbCommandes()        => GetInt(CleSeuilPrimeCommandes, 5);
+        public Task          DefinirSeuilPrimeNbCommandes(int n)   => SetInt(CleSeuilPrimeCommandes, n);
+        public Task<decimal> ObtenirMontantPrimeQualite()          => GetDecimal(CleMontantPrimeQualite, 5000m);
+        public Task          DefinirMontantPrimeQualite(decimal m) => SetDec(CleMontantPrimeQualite, m);
 
         // ── Onglet 1 — Comptabilité ──────────────────────────────────────
         public async Task<string>  ObtenirModeCA()         => await ObtenirValeur(CleModeCA) ?? "Encaisse";

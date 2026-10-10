@@ -178,7 +178,7 @@ namespace GestionCoutureApp.Services
             // Prorata mensuel du salaire selon la période
             double nbJoursPeriode = (fin.Date - debut.Date).TotalDays + 1;
             double nbJoursMois = DateTime.DaysInMonth(debut.Year, debut.Month);
-            salaireSecretaire = Math.Round(salaireSecretaire * (decimal)(nbJoursPeriode / nbJoursMois), 0);
+            salaireSecretaire = Math.Round(salaireSecretaire * (decimal)(nbJoursPeriode / nbJoursMois), 0, MidpointRounding.AwayFromZero);
 
             return new StatsFinancieres
             {

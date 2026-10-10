@@ -49,7 +49,8 @@ namespace GestionCoutureApp.Tests
             _paiementService = new PaiementService(
                 _contextFactory, loggerFactory.CreateLogger<PaiementService>());
             _commissionService = new CommissionService(
-                _contextFactory, loggerFactory.CreateLogger<CommissionService>());
+                _contextFactory, loggerFactory.CreateLogger<CommissionService>(),
+                new MockParametresService());
             _authService = new AuthService(
                 _contextFactory, loggerFactory.CreateLogger<AuthService>());
 
