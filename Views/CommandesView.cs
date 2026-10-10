@@ -61,6 +61,9 @@ namespace GestionCoutureApp.Views
         // Chaque carte est un objet anonyme encapsulé dans une classe interne
         private readonly List<Cartepiece> _cartesPieces = new();
 
+        // Liste partagée des couturiers disponibles (utilisée dans AjouterCarte)
+        private List<Employe> _couturiers = new();
+
         // ================================================================
         // HELPER OPÉRATEUR
         // ================================================================
@@ -132,6 +135,10 @@ namespace GestionCoutureApp.Views
             {
                 if (NavigationService != null)
                     NavigationService.Navigated += OnNavigatedBackToThis;
+
+                // Fix sidebar : activer le bouton Commandes quelle que soit la page d'origine
+                if (Window.GetWindow(this) is MainWindow mainWin)
+                    mainWin.ActiverBoutonCommandes();
             };
             Unloaded += (s, e) =>
             {
@@ -168,7 +175,7 @@ namespace GestionCoutureApp.Views
             CmbModalClient.ItemsSource = clients;
 
             // ── Couturiers (filtre rôle Couturier + Boss) ──
-            var couturiers = _context.Employes
+            _couturiers = _context.Employes
                 .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
                 .OrderBy(e => e.Prenom)
                 .ToList()
@@ -180,7 +187,7 @@ namespace GestionCoutureApp.Views
                     Role        = e.Role, Statut = e.Statut,
                     Identifiant = e.Identifiant, MotDePasse = e.MotDePasse
                 }).ToList();
-            CmbCouturier.ItemsSource = couturiers;
+            CmbCouturier.ItemsSource = _couturiers;
 
             // ── CmbFiltreCouturier (avec entrée "Tous") ──
             if (CmbFiltreCouturier != null)
@@ -190,7 +197,7 @@ namespace GestionCoutureApp.Views
                     new Employe { IdEmploye = 0, Prenom = "Tous", Nom = "les couturiers",
                                   Identifiant = "", MotDePasse = "" }
                 };
-                filtreCouturiers.AddRange(couturiers);
+                filtreCouturiers.AddRange(_couturiers);
                 CmbFiltreCouturier.ItemsSource  = filtreCouturiers;
                 CmbFiltreCouturier.SelectedIndex = 0;
             }
@@ -296,6 +303,10 @@ namespace GestionCoutureApp.Views
                     result = await _commandeService.RechercherPageLightAsync(_currentSearch, _currentPage, PAGE_SIZE);
                 else
                     result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+
+                // Filtrer les pièces vides (sans type) pour l'affichage
+                foreach (var c in result.Items)
+                    c.Pieces = c.Pieces.Where(p => !string.IsNullOrEmpty(p.TypeVetement)).ToList();
 
                 GridCommandes.ItemsSource = result.Items;
 
@@ -714,7 +725,11 @@ namespace GestionCoutureApp.Views
             public TextBlock TxtPhotoPlaceholderCarte { get; set; } = null!;
             public Button    BtnSupprimerPhotoCarte   { get; set; } = null!;
             public string    CheminPhoto { get; set; } = "";
+
+            // Matériaux — buffer (avant sauvegarde) + UI
             public List<MaterielSupplement> MateriauxBuffer { get; set; } = new();
+            public StackPanel PanelListeMateriaux { get; set; } = null!;  // lignes existantes
+            public TextBlock  TxtTotalMatCarte    { get; set; } = null!;  // "Total mat. : X FCFA"
         }
 
         // ================================================================
@@ -728,45 +743,123 @@ namespace GestionCoutureApp.Views
             };
 
             // ── Conteneur carte ──
+            // ── Palette de couleurs tournante par numéro de pièce ──
+            int numCarte = _cartesPieces.Count + 1;
+            // Chaque pièce a une teinte d'accent légèrement différente (max 6 couleurs)
+            var (accentHex, accentLight) = (numCarte % 6) switch
+            {
+                1 => ("#CC0000", "#FFF5F5"),   // rouge
+                2 => ("#1D4ED8", "#EFF6FF"),   // bleu
+                3 => ("#059669", "#F0FDF4"),   // vert
+                4 => ("#D97706", "#FFFBEB"),   // ambre
+                5 => ("#7C3AED", "#F5F3FF"),   // violet
+                0 => ("#0891B2", "#F0F9FF"),   // cyan
+                _ => ("#CC0000", "#FFF5F5")
+            };
+            var accentColor   = (Color)ColorConverter.ConvertFromString(accentHex);
+            var accentBrush   = new SolidColorBrush(accentColor);
+            var accentLightBg = (Color)ColorConverter.ConvertFromString(accentLight);
+
+            // ── Bordure pointillée via DrawingBrush ──
+            // WPF n'a pas de StrokeDashArray sur Border — on simule avec un DrawingBrush.
+            var tiretBrush = new DrawingBrush
+            {
+                TileMode   = TileMode.Tile,
+                Viewport   = new Rect(0, 0, 8, 1),
+                ViewportUnits = BrushMappingMode.Absolute,
+                Drawing    = new GeometryDrawing
+                {
+                    Brush    = accentBrush,
+                    Geometry = new LineGeometry(new Point(0, 0.5), new Point(5, 0.5))
+                }
+            };
+
+            // Conteneur principal avec bordure pleine colorée à gauche + fond clair
             var border = new Border
             {
-                Background      = Brushes.White,
-                BorderBrush     = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Background      = new SolidColorBrush(accentLightBg),
+                BorderBrush     = accentBrush,
+                BorderThickness = new Thickness(3, 0, 0, 0),  // barre gauche colorée
+                CornerRadius    = new CornerRadius(0, 8, 8, 0),
+                Margin          = new Thickness(0, 0, 0, 14),
+                // Bordure externe pointillée émulée via un Border imbriqué
+            };
+
+            // Enveloppe extérieure avec bordure pointillée (simulée par tirets)
+            var enveloppe = new Border
+            {
+                BorderBrush     = new SolidColorBrush(accentColor) { Opacity = 0.35 },
                 BorderThickness = new Thickness(1),
                 CornerRadius    = new CornerRadius(8),
-                Padding         = new Thickness(14, 12, 14, 14),
-                Margin          = new Thickness(0, 0, 0, 10)
+                Margin          = new Thickness(0, 0, 0, 14),
+                Effect          = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color     = accentColor,
+                    Opacity   = 0.08,
+                    BlurRadius = 8,
+                    ShadowDepth = 2,
+                    Direction  = 270
+                }
             };
-            var sp = new StackPanel();
+            enveloppe.Child = border;
+            border.Margin   = new Thickness(0);  // reset après imbrication
+            carte.Conteneur = enveloppe;
+
+            var sp = new StackPanel { Margin = new Thickness(0) };
             border.Child = sp;
-            carte.Conteneur = border;
 
-            // ── Titre carte + boutons Dupliquer/Supprimer ──
-            var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            int num = _cartesPieces.Count + 1;
-            var lblNum = new TextBlock
+            // ── Bandeau titre en haut de la carte ──
+            var bandeau = new Border
             {
-                Text       = $"Pièce {num}",
-                FontSize   = 13, FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
+                Background   = accentBrush,
+                CornerRadius = new CornerRadius(0, 8, 0, 0),
+                Padding      = new Thickness(14, 8, 12, 8)
+            };
+            var bandeauGrid = new Grid();
+            bandeauGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            bandeauGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            bandeauGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Badge numéro
+            var badgeNum = new Border
+            {
+                Background   = new SolidColorBrush(Colors.White) { Opacity = 0.25 },
+                CornerRadius = new CornerRadius(12),
+                Padding      = new Thickness(8, 2, 8, 2),
+                Margin       = new Thickness(0, 0, 10, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(lblNum, 0);
-            headerGrid.Children.Add(lblNum);
+            int num = _cartesPieces.Count + 1;
+            badgeNum.Child = new TextBlock
+            {
+                Text       = $"#{num}",
+                FontSize   = 11, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White
+            };
+            Grid.SetColumn(badgeNum, 0);
+            bandeauGrid.Children.Add(badgeNum);
 
+            var lblNum = new TextBlock
+            {
+                Text      = $"Pièce {num}",
+                FontSize  = 13, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(lblNum, 1);
+            bandeauGrid.Children.Add(lblNum);
+
+            // Boutons Dupliquer / Supprimer dans le bandeau
             var btnRow = new StackPanel { Orientation = Orientation.Horizontal };
-            Grid.SetColumn(btnRow, 1);
-            headerGrid.Children.Add(btnRow);
+            Grid.SetColumn(btnRow, 2);
+            bandeauGrid.Children.Add(btnRow);
 
-            var btnDup = CreerBoutonIcone("📋", "Dupliquer cette pièce");
+            var btnDup = CreerBoutonIconeSurBandeau("📋", "Dupliquer cette pièce");
             btnDup.Tag = carte;
             btnDup.Click += BtnDupliquerCartePiece_Click;
             btnRow.Children.Add(btnDup);
 
-            var btnSup = CreerBoutonIcone("🗑️", "Supprimer cette pièce");
+            var btnSup = CreerBoutonIconeSurBandeau("🗑️", "Supprimer cette pièce");
             btnSup.Tag = carte;
             btnSup.Click += BtnSupprimerCartePiece_Click;
             // Secrétaire peut supprimer, Boss aussi
@@ -774,7 +867,16 @@ namespace GestionCoutureApp.Views
                 btnSup.IsEnabled = false;
             btnRow.Children.Add(btnSup);
 
-            sp.Children.Add(headerGrid);
+            bandeau.Child = bandeauGrid;
+            sp.Children.Add(bandeau);
+
+            // Corps de la carte avec padding interne
+            var corps = new StackPanel { Margin = new Thickness(14, 10, 14, 14) };
+            sp.Children.Add(corps);
+
+            // Rediriger les ajouts suivants vers corps au lieu de sp
+            // (on utilise une variable locale "conteneurChamps")
+            var conteneurChamps = corps;
 
             // ── Ligne 1 : Type vêtement + Couturier ──
             var grille1 = new Grid { Margin = new Thickness(0, 0, 0, 8) };
@@ -801,15 +903,13 @@ namespace GestionCoutureApp.Views
             spCout.Children.Add(new TextBlock { Text = "Couturier",
                 FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
                 Margin = new Thickness(0, 0, 0, 4) });
-            var couturiers = (CmbCouturier.ItemsSource as IEnumerable<Employe>)?.ToList()
-                             ?? new List<Employe>();
             var cmbCout = new ComboBox { Height = 36, FontSize = 12,
                 DisplayMemberPath = "Prenom", SelectedValuePath = "IdEmploye" };
-            cmbCout.ItemsSource = couturiers;
+            cmbCout.ItemsSource = _couturiers;
             carte.CmbCouturier  = cmbCout;
             spCout.Children.Add(cmbCout);
             grille1.Children.Add(spCout);
-            sp.Children.Add(grille1);
+            conteneurChamps.Children.Add(grille1);
 
             // ── Ligne 2 : Prix + Description ──
             var grille2 = new Grid { Margin = new Thickness(0, 0, 0, 8) };
@@ -845,7 +945,7 @@ namespace GestionCoutureApp.Views
             carte.CmbDesc = cmbDesc;
             spDesc.Children.Add(cmbDesc);
             grille2.Children.Add(spDesc);
-            sp.Children.Add(grille2);
+            conteneurChamps.Children.Add(grille2);
 
             // ── Statut de la pièce ──
             var spStatut = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
@@ -865,12 +965,12 @@ namespace GestionCoutureApp.Views
             cmbStatut.SelectedIndex = 0;
             carte.CmbStatutPiece = cmbStatut;
             spStatut.Children.Add(cmbStatut);
-            sp.Children.Add(spStatut);
+            conteneurChamps.Children.Add(spStatut);
 
             // ── Mesures dynamiques (panneau vide, rempli au choix du type) ──
             var panelMesures = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
             carte.PanelMesures = panelMesures;
-            sp.Children.Add(panelMesures);
+            conteneurChamps.Children.Add(panelMesures);
 
             // ── Photo ──
             var spPhoto = new StackPanel { Orientation = Orientation.Horizontal,
@@ -924,7 +1024,260 @@ namespace GestionCoutureApp.Views
             spBtnsPhoto.Children.Add(btnSupPhoto);
 
             spPhoto.Children.Add(spBtnsPhoto);
-            sp.Children.Add(spPhoto);
+            conteneurChamps.Children.Add(spPhoto);
+
+            // ── MATÉRIAUX / SUPPLÉMENTS ─────────────────────────────
+            // Séparateur
+            conteneurChamps.Children.Add(new Separator
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xE8, 0xE0, 0xDC)),
+                Margin = new Thickness(0, 6, 0, 10)
+            });
+
+            // En-tête matériaux
+            var headerMat = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            headerMat.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerMat.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var stackTitreMat = new StackPanel { Orientation = Orientation.Horizontal };
+            Grid.SetColumn(stackTitreMat, 0);
+            stackTitreMat.Children.Add(new TextBlock
+            {
+                Text = "🧵  Matériaux / Suppléments",
+                FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            headerMat.Children.Add(stackTitreMat);
+
+            // Total matériaux (badge sombre)
+            var borderTotalMat = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(8, 3, 8, 3)
+            };
+            var txtTotalMat = new TextBlock
+            {
+                Text = "0 FCFA", FontSize = 11, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center
+            };
+            borderTotalMat.Child = txtTotalMat;
+            Grid.SetColumn(borderTotalMat, 1);
+            headerMat.Children.Add(borderTotalMat);
+            carte.TxtTotalMatCarte = txtTotalMat;
+
+            conteneurChamps.Children.Add(headerMat);
+
+            // Sous-titre informatif
+            conteneurChamps.Children.Add(new TextBlock
+            {
+                Text = "Facturés au client · Exclus de la commission couturier",
+                FontSize = 10, FontStyle = FontStyles.Italic,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            // Liste des lignes matériaux
+            var panelListeMat = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+            carte.PanelListeMateriaux = panelListeMat;
+            conteneurChamps.Children.Add(panelListeMat);
+
+            // Message "aucun matériau"
+            var txtAucunMat = new TextBlock
+            {
+                Text = "Aucun matériau ajouté.",
+                FontSize = 11, FontStyle = FontStyles.Italic,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            panelListeMat.Children.Add(txtAucunMat);
+
+            // ── Mini-formulaire d'ajout ─────────────────────────────
+            var panelFormMat = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xF8, 0xF5, 0xF3)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xD4, 0xC8, 0xBE)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Visibility = Visibility.Collapsed
+            };
+            var spFormMat = new StackPanel();
+            panelFormMat.Child = spFormMat;
+
+            // Désignation
+            spFormMat.Children.Add(new TextBlock
+            {
+                Text = "Désignation *", FontSize = 10,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Margin = new Thickness(0, 0, 0, 3)
+            });
+            var txtDesigMat = new TextBox
+            {
+                Height = 32, FontSize = 11, Padding = new Thickness(8, 0, 8, 0),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 0, 6)
+            };
+            spFormMat.Children.Add(txtDesigMat);
+
+            // Quantité + Prix sur même ligne
+            var grilleMat = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            grilleMat.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grilleMat.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
+            grilleMat.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+
+            var spQte = new StackPanel(); Grid.SetColumn(spQte, 0);
+            spQte.Children.Add(new TextBlock { Text = "Qté", FontSize = 10,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Margin = new Thickness(0, 0, 0, 3) });
+            var txtQteMat = new TextBox { Height = 32, FontSize = 11, Text = "1",
+                Padding = new Thickness(8, 0, 8, 0), VerticalContentAlignment = VerticalAlignment.Center,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)), BorderThickness = new Thickness(1) };
+            spQte.Children.Add(txtQteMat);
+            grilleMat.Children.Add(spQte);
+
+            var spPrixMat = new StackPanel(); Grid.SetColumn(spPrixMat, 2);
+            spPrixMat.Children.Add(new TextBlock { Text = "Prix unitaire (FCFA) *", FontSize = 10,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Margin = new Thickness(0, 0, 0, 3) });
+            var txtPrixMat = new TextBox { Height = 32, FontSize = 11,
+                Padding = new Thickness(8, 0, 8, 0), VerticalContentAlignment = VerticalAlignment.Center,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)), BorderThickness = new Thickness(1) };
+            spPrixMat.Children.Add(txtPrixMat);
+            grilleMat.Children.Add(spPrixMat);
+            spFormMat.Children.Add(grilleMat);
+
+            // Boutons Valider / Annuler formulaire
+            var stackBtnsFormMat = new StackPanel { Orientation = Orientation.Horizontal };
+            var btnValiderMat = new Button
+            {
+                Content = "✔  Ajouter", Height = 30, Padding = new Thickness(12, 0, 12, 0),
+                FontSize = 11, FontWeight = FontWeights.SemiBold,
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                Foreground = Brushes.White, BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand, Margin = new Thickness(0, 0, 8, 0)
+            };
+            var btnAnnulerFormMat = new Button
+            {
+                Content = "Annuler", Height = 30, Padding = new Thickness(10, 0, 10, 0),
+                FontSize = 11, Background = Brushes.Transparent,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                BorderThickness = new Thickness(1), Cursor = Cursors.Hand,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B))
+            };
+            stackBtnsFormMat.Children.Add(btnValiderMat);
+            stackBtnsFormMat.Children.Add(btnAnnulerFormMat);
+            spFormMat.Children.Add(stackBtnsFormMat);
+            conteneurChamps.Children.Add(panelFormMat);
+
+            // Bouton "+ Ajouter un matériau"
+            var btnOuvrirFormMat = new Button
+            {
+                Height = 30, Padding = new Thickness(10, 0, 10, 0),
+                FontSize = 11, Background = Brushes.Transparent,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xD4, 0xC8, 0xBE)),
+                BorderThickness = new Thickness(1), Cursor = Cursors.Hand,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x5B, 0x4E)),
+                Content = "+ Ajouter un matériau / supplément"
+            };
+            conteneurChamps.Children.Add(btnOuvrirFormMat);
+
+            // ── Handlers matériaux inline ───────────────────────────
+            // Ouvrir / fermer le formulaire
+            btnOuvrirFormMat.Click += (s, ev) =>
+            {
+                panelFormMat.Visibility = panelFormMat.Visibility == Visibility.Visible
+                    ? Visibility.Collapsed : Visibility.Visible;
+                if (panelFormMat.Visibility == Visibility.Visible)
+                {
+                    txtDesigMat.Text = "";
+                    txtQteMat.Text   = "1";
+                    txtPrixMat.Text  = "";
+                    txtDesigMat.Focus();
+                }
+            };
+
+            btnAnnulerFormMat.Click += (s, ev) =>
+            {
+                panelFormMat.Visibility = Visibility.Collapsed;
+            };
+
+            // Valider l'ajout d'un matériau
+            btnValiderMat.Click += (s, ev) =>
+            {
+                string desig = txtDesigMat.Text.Trim();
+                if (string.IsNullOrEmpty(desig))
+                {
+                    MessageBox.Show("La désignation est obligatoire.", "Champ manquant",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    txtDesigMat.Focus(); return;
+                }
+                if (!int.TryParse(txtQteMat.Text.Trim(), out int qte) || qte <= 0)
+                {
+                    MessageBox.Show("La quantité doit être un entier positif.", "Valeur invalide",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    txtQteMat.Focus(); return;
+                }
+                if (!decimal.TryParse(txtPrixMat.Text.Trim().Replace(" ", ""),
+                    System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out decimal prixMat) || prixMat < 0)
+                {
+                    MessageBox.Show("Le prix unitaire doit être un nombre positif.", "Valeur invalide",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    txtPrixMat.Focus(); return;
+                }
+
+                // Si la pièce est déjà en base → sauver directement
+                if (carte.IdPieceCommande.HasValue && _commandeSelectionneeId > 0)
+                {
+                    try
+                    {
+                        var (idOp, nomOp) = OperateurConnecte();
+                        var mat = new MaterielSupplement
+                        {
+                            IdCommande = _commandeSelectionneeId,
+                            IdPieceCommande = carte.IdPieceCommande.Value,
+                            Designation = desig, Quantite = qte, PrixUnitaire = prixMat
+                        };
+                        _materielService.Ajouter(mat, idOp, nomOp);
+                        AjouterLigneMateriau(carte, mat, panelListeMat, txtTotalMat);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Erreur : " + ex.Message, "Erreur",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    // En création : stocker dans le buffer (sauvé avec la pièce)
+                    var mat = new MaterielSupplement
+                    {
+                        Designation = desig, Quantite = qte, PrixUnitaire = prixMat
+                    };
+                    carte.MateriauxBuffer.Add(mat);
+                    AjouterLigneMateriau(carte, mat, panelListeMat, txtTotalMat);
+                }
+
+                panelFormMat.Visibility = Visibility.Collapsed;
+            };
+
+            // ── Charger les matériaux existants (mode édition) ──────
+            if (pieceExistante != null && pieceExistante.IdPieceCommande > 0)
+            {
+                try
+                {
+                    var matExistants = _materielService.ObtenirParPiece(pieceExistante.IdPieceCommande);
+                    foreach (var mat in matExistants)
+                        AjouterLigneMateriau(carte, mat, panelListeMat, txtTotalMat);
+                }
+                catch { /* silencieux si service non disponible */ }
+            }
+            // ── Fin section matériaux ────────────────────────────────
 
             // ── Pré-remplir depuis pièce existante ──
             if (pieceExistante != null)
@@ -980,7 +1333,7 @@ namespace GestionCoutureApp.Views
             }
 
             _cartesPieces.Add(carte);
-            PanneauCartesPieces.Children.Add(border);
+            PanneauCartesPieces.Children.Add(enveloppe);
         }
 
         private static Button CreerBoutonIcone(string emoji, string tooltip)
@@ -992,6 +1345,169 @@ namespace GestionCoutureApp.Views
                 Cursor          = Cursors.Hand, Margin = new Thickness(2, 0, 0, 0),
                 ToolTip         = tooltip
             };
+        }
+
+        // Version pour les boutons dans le bandeau coloré (fond blanc semi-transparent)
+        private static Button CreerBoutonIconeSurBandeau(string emoji, string tooltip)
+        {
+            var btn = new Button
+            {
+                Content         = emoji, Width = 28, Height = 26, FontSize = 13,
+                Background      = new SolidColorBrush(Colors.White) { Opacity = 0.18 },
+                BorderThickness = new Thickness(0),
+                Cursor          = Cursors.Hand, Margin = new Thickness(4, 0, 0, 0),
+                ToolTip         = tooltip,
+                Foreground      = Brushes.White
+            };
+            return btn;
+        }
+
+        // ================================================================
+        // HELPER — Ajouter une ligne de matériau dans le panneau d'une carte
+        // ================================================================
+        private void AjouterLigneMateriau(
+            Cartepiece carte,
+            MaterielSupplement mat,
+            StackPanel panelListeMat,
+            TextBlock txtTotalMat)
+        {
+            // Retirer le message "Aucun matériau" s'il est encore là
+            var toClear = panelListeMat.Children
+                .OfType<TextBlock>()
+                .FirstOrDefault(tb => tb.Text == "Aucun matériau ajouté.");
+            if (toClear != null) panelListeMat.Children.Remove(toClear);
+
+            var ligne = new Border
+            {
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xE8, 0xE2, 0xDC)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(10, 6, 10, 6),
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+            var g = new Grid();
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
+
+            // Désignation
+            var lblDesig = new TextBlock
+            {
+                Text = mat.Designation, FontSize = 11, FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(lblDesig, 0);
+
+            // Qté × prix
+            var lblQtePrix = new TextBlock
+            {
+                Text = $"{mat.Quantite} × {mat.PrixUnitaire:N0} F", FontSize = 10,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            Grid.SetColumn(lblQtePrix, 1);
+
+            // Montant total ligne
+            var borderMontant = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xFF, 0xF3, 0xF0)),
+                CornerRadius = new CornerRadius(4), Padding = new Thickness(8, 2, 8, 2),
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center
+            };
+            borderMontant.Child = new TextBlock
+            {
+                Text = $"{mat.Montant:N0} FCFA", FontSize = 11, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00))
+            };
+            Grid.SetColumn(borderMontant, 2);
+
+            // Bouton supprimer
+            var btnSup = new Button
+            {
+                Content = "✕", Width = 22, Height = 22, FontSize = 10, FontWeight = FontWeights.Bold,
+                Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
+                Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            Grid.SetColumn(btnSup, 3);
+
+            // Supprimer la ligne
+            btnSup.Click += (s, ev) =>
+            {
+                var conf = MessageBox.Show("Supprimer ce matériau ?", "Confirmation",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (conf != MessageBoxResult.Yes) return;
+
+                if (mat.IdMateriel > 0)
+                {
+                    try { _materielService.Supprimer(mat.IdMateriel); }
+                    catch (InvalidOperationException ex)
+                    {
+                        MessageBox.Show(ex.Message, "Suppression impossible",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+                }
+                else
+                {
+                    carte.MateriauxBuffer.Remove(mat);
+                }
+
+                panelListeMat.Children.Remove(ligne);
+                MettreAJourTotalMatCarte(carte, panelListeMat, txtTotalMat);
+                if (panelListeMat.Children.Count == 0)
+                {
+                    panelListeMat.Children.Add(new TextBlock
+                    {
+                        Text = "Aucun matériau ajouté.", FontSize = 11, FontStyle = FontStyles.Italic,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
+                        Margin = new Thickness(0, 0, 0, 6)
+                    });
+                }
+            };
+
+            g.Children.Add(lblDesig);
+            g.Children.Add(lblQtePrix);
+            g.Children.Add(borderMontant);
+            g.Children.Add(btnSup);
+            ligne.Child = g;
+            panelListeMat.Children.Add(ligne);
+
+            MettreAJourTotalMatCarte(carte, panelListeMat, txtTotalMat);
+        }
+
+        // Recalcule et affiche le total matériaux d'une carte
+        private void MettreAJourTotalMatCarte(
+            Cartepiece carte,
+            StackPanel panelListeMat,
+            TextBlock txtTotalMat)
+        {
+            // Total = lignes Border dans le panel (on exclut les TextBlock "Aucun matériau")
+            decimal total = 0m;
+            foreach (var child in panelListeMat.Children)
+            {
+                if (child is Border b && b.Child is Grid g)
+                {
+                    // Chercher le TextBlock montant dans la colonne 2
+                    foreach (UIElement el in g.Children)
+                    {
+                        if (el is Border bMontant && Grid.GetColumn(bMontant) == 2
+                            && bMontant.Child is TextBlock tb)
+                        {
+                            string txt = tb.Text.Replace(" FCFA", "").Replace(" ", "").Replace("\u00A0", "");
+                            if (decimal.TryParse(txt, System.Globalization.NumberStyles.Any,
+                                System.Globalization.CultureInfo.InvariantCulture, out decimal m))
+                                total += m;
+                        }
+                    }
+                }
+            }
+            txtTotalMat.Text = total > 0 ? $"{total:N0} FCFA" : "0 FCFA";
         }
 
 
@@ -1196,7 +1712,7 @@ namespace GestionCoutureApp.Views
         // PHOTO DANS LES CARTES
         // ================================================================
         private static readonly string[] ExtensionsAutorisees = { ".jpg", ".jpeg", ".png", ".bmp" };
-        private const long TailleMaxOctets = 1 * 1024 * 1024;
+        private const long TailleMaxOctets = 5 * 1024 * 1024; // 5 Mo (était 1 Mo, trop restrictif)
 
         private async void BtnImporterPhotoCarte_Click(object sender, RoutedEventArgs e)
         {
@@ -1212,22 +1728,37 @@ namespace GestionCoutureApp.Views
                 var info = new System.IO.FileInfo(dialog.FileName);
                 string ext = info.Extension.ToLowerInvariant();
                 if (!ExtensionsAutorisees.Contains(ext))
-                { MessageBox.Show($"Format non autorisé : {ext}", "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                { MessageBox.Show($"Format non autorisé : {ext}\nFormats acceptés : JPG, PNG, BMP.", "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
                 if (info.Length > TailleMaxOctets)
-                { MessageBox.Show("Image trop volumineuse (max 1 Mo).", "Trop grande", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                { MessageBox.Show($"Image trop volumineuse ({info.Length / 1024 / 1024.0:F1} Mo).\nTaille maximum : 5 Mo.", "Fichier trop grand", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
                 if (!EstImageValide(dialog.FileName))
-                { MessageBox.Show("Le fichier n'est pas une image valide.", "Invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+                { MessageBox.Show("Le fichier sélectionné n'est pas une image valide.", "Fichier invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
 
-                string dossier  = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
-                string suffixe  = Guid.NewGuid().ToString("N")[..8];
-                string nomFich  = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixe}{ext}";
-                string dest     = System.IO.Path.Combine(dossier, nomFich);
+                string dossier = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
+                string suffixe = Guid.NewGuid().ToString("N")[..8];
+                string nomFich = $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixe}{ext}";
+                string dest    = System.IO.Path.Combine(dossier, nomFich);
+
+                // Copie d'abord, puis compression dans un try/finally pour
+                // nettoyer le fichier de destination si la compression échoue.
                 System.IO.File.Copy(dialog.FileName, dest, overwrite: true);
-                await Task.Run(() => GestionCoutureApp.Helpers.PhotoCompressor.Compresser(dest, dest));
+                try
+                {
+                    await Task.Run(() => GestionCoutureApp.Helpers.PhotoCompressor.Compresser(dest, dest));
+                }
+                catch
+                {
+                    // Compression non critique — on affiche quand même la photo originale
+                    // (certains formats BMP ne sont pas compressables par PhotoCompressor)
+                }
 
                 ChargerPhotoDansCarte(carte, dest);
             }
-            catch (Exception ex) { MessageBox.Show("Erreur import : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de l'import de la photo :\n" + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void BtnPrendrePhotoCarte_Click(object sender, RoutedEventArgs e)
@@ -1345,7 +1876,7 @@ namespace GestionCoutureApp.Views
             {
                 var (idOp, nomOp) = OperateurConnecte();
                 _commandeService.Ajouter(commande, premierePiece, premieresMesures, idOp, nomOp,
-                    _materiauxTemporaires.ToList());
+                    _cartesPieces[0].MateriauxBuffer.ToList());
                 _materiauxTemporaires.Clear();
 
                 // Pièces supplémentaires (à partir de la 2ème)
@@ -1353,7 +1884,7 @@ namespace GestionCoutureApp.Views
                 {
                     var (pc, mes) = pieces[i];
                     _commandeService.AjouterPiece(commande.IdCommande, pc, mes,
-                        _roleUtilisateur == "Boss", null, new List<MaterielSupplement>(), idOp, nomOp);
+                        _roleUtilisateur == "Boss", null, _cartesPieces[i].MateriauxBuffer.ToList(), idOp, nomOp);
                 }
 
                 await ChargerCommandes();

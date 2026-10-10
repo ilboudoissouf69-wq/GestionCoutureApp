@@ -107,7 +107,11 @@ namespace GestionCoutureApp.Views
                             Statut    = e.Statut
                         }).ToList();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // Erreur non bloquante : la liste restera vide mais l'écran fonctionnera
+                    System.Diagnostics.Debug.WriteLine($"[StatutView] Erreur chargement couturiers : {ex.Message}");
+                }
 
                 var liste = new List<Employe> { sentinelle };
                 liste.AddRange(couturiers);

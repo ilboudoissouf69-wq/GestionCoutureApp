@@ -1,25 +1,27 @@
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using AForge.Video;
-using AForge.Video.DirectShow;
+using System.Windows.Threading;
+using OpenCvSharp;
+
+// Alias explicites pour lever l'ambiguïté OpenCvSharp.Window vs System.Windows.Window
+using CvWindow  = OpenCvSharp.Window;
+using WpfWindow = System.Windows.Window;
 
 namespace GestionCoutureApp.Views
 {
-    public partial class WebcamCaptureWindow : Window
+    /// <summary>
+    /// Fenêtre de capture webcam — remplace AForge 2013 par OpenCvSharp4 (2024).
+    /// OpenCvSharp4.Windows utilise OpenCV 4.x natif sans COM DirectShow.
+    /// Compatible .NET 8 x64 Windows sans NU1701.
+    /// </summary>
+    public partial class WebcamCaptureWindow : WpfWindow
     {
-        private VideoCaptureDevice? _videoSource;
-        private Bitmap? _lastFrame;
-
-        // CORRECTIF (sécurité multithread) : AForge livre les frames sur son
-        // propre thread de capture, pendant que BtnCapturer_Click lit _lastFrame
-        // sur le thread UI. Sans verrou, une frame peut être disposée par
-        // VideoSource_NewFrame exactement pendant que BtnCapturer_Click est en
-        // train de l'enregistrer sur disque (ObjectDisposedException possible,
-        // rare mais réelle en usage normal vu la fréquence des frames).
-        private readonly object _verrouFrame = new();
+        private VideoCapture?    _capture;
+        private DispatcherTimer? _timer;
+        private Mat?             _lastFrame;
+        private readonly object  _verrouFrame = new();
 
         public string? CapturedFilePath { get; private set; }
 
@@ -28,134 +30,164 @@ namespace GestionCoutureApp.Views
             InitializeComponent();
         }
 
+        // ──────────────────────────────────────────────────────────
+        // Démarrer la caméra
+        // ──────────────────────────────────────────────────────────
         private void BtnDemarrer_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var videoDevices = new FilterInfoCollection(FilterCategory.VideoInputDevice);
-                if (videoDevices.Count == 0)
+                _capture = new VideoCapture(0, VideoCaptureAPIs.DSHOW);
+                if (!_capture.IsOpened())
                 {
-                    MessageBox.Show("Aucune webcam detectee.",
-                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _capture.Dispose();
+                    _capture = new VideoCapture(0, VideoCaptureAPIs.ANY);
+                }
+
+                if (!_capture.IsOpened())
+                {
+                    MessageBox.Show(
+                        "Aucune webcam détectée ou webcam déjà utilisée par une autre application.",
+                        "Webcam introuvable", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _capture.Dispose();
+                    _capture = null;
                     return;
                 }
 
-                _videoSource = new VideoCaptureDevice(videoDevices[0].MonikerString);
-                _videoSource.NewFrame += VideoSource_NewFrame;
-                _videoSource.Start();
+                _capture.Set(VideoCaptureProperties.FrameWidth,  640);
+                _capture.Set(VideoCaptureProperties.FrameHeight, 480);
+
+                _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+                _timer.Tick += TimerTick;
+                _timer.Start();
 
                 BtnDemarrer.IsEnabled = false;
                 BtnCapturer.IsEnabled = true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Erreur webcam : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Impossible d'ouvrir la webcam :\n" + ex.Message,
+                    "Erreur webcam", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void VideoSource_NewFrame(object sender, NewFrameEventArgs eventArgs)
+        // ──────────────────────────────────────────────────────────
+        // Lecture de chaque frame (DispatcherTimer ~20 fps)
+        // ──────────────────────────────────────────────────────────
+        private void TimerTick(object? sender, EventArgs e)
         {
-            // CORRECTIF (fuite de ressources GDI+) : à chaque frame (potentiellement
-            // 15 à 30 fois par seconde), l'ancien code écrasait _lastFrame par un
-            // nouveau Bitmap SANS jamais disposer le précédent. Un Bitmap GDI+
-            // encapsule un handle système non géré : laisser la fenêtre webcam
-            // ouverte plus de quelques secondes épuisait progressivement ces handles,
-            // avec un comportement de plus en plus instable pour toute l'application.
-            var nouvelleFrame = (Bitmap)eventArgs.Frame.Clone();
-            Bitmap? ancienneFrame;
+            if (_capture == null || !_capture.IsOpened()) return;
+
+            var frame = new Mat();
+            if (!_capture.Read(frame) || frame.Empty())
+            { frame.Dispose(); return; }
+
+            // BGR → BitmapSource WPF
+            BitmapSource? bmp = null;
+            try { bmp = MatToBitmapSource(frame); }
+            catch { frame.Dispose(); return; }
+
             lock (_verrouFrame)
             {
-                ancienneFrame = _lastFrame;
-                _lastFrame = nouvelleFrame;
+                _lastFrame?.Dispose();
+                _lastFrame = frame;
             }
-            ancienneFrame?.Dispose();
 
-            Dispatcher.Invoke(() =>
-            {
-                WebcamPreview.Source = BitmapToImageSource(nouvelleFrame);
-            });
+            if (bmp != null)
+                WebcamPreview.Source = bmp;
         }
 
-        private BitmapImage BitmapToImageSource(Bitmap bitmap)
+        // ──────────────────────────────────────────────────────────
+        // Convertir un Mat BGR en BitmapSource WPF sans WpfExtensions
+        // ──────────────────────────────────────────────────────────
+        private static BitmapSource MatToBitmapSource(Mat mat)
         {
-            using var ms = new MemoryStream();
-            bitmap.Save(ms, ImageFormat.Bmp);
-            ms.Position = 0;
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.StreamSource = ms;
-            image.EndInit();
-            image.Freeze();
-            return image;
+            // Convertir BGR → RGB
+            var rgb = new Mat();
+            Cv2.CvtColor(mat, rgb, ColorConversionCodes.BGR2RGB);
+
+            int width    = rgb.Width;
+            int height   = rgb.Height;
+            int channels = rgb.Channels();
+            int stride   = width * channels;
+
+            // Récupérer les pixels
+            var pixelData = new byte[height * stride];
+            System.Runtime.InteropServices.Marshal.Copy(rgb.Data, pixelData, 0, pixelData.Length);
+            rgb.Dispose();
+
+            var bmp = BitmapSource.Create(
+                width, height,
+                96, 96,
+                PixelFormats.Rgb24,
+                null,
+                pixelData,
+                stride);
+            bmp.Freeze();
+            return bmp;
         }
 
+        // ──────────────────────────────────────────────────────────
+        // Capturer la frame courante → JPEG sur disque
+        // ──────────────────────────────────────────────────────────
         private void BtnCapturer_Click(object sender, RoutedEventArgs e)
         {
-            Bitmap? copieLocale;
+            Mat? copie;
             lock (_verrouFrame)
             {
-                if (_lastFrame == null) return;
-                // Copie sous verrou : on ne travaille plus ensuite sur le champ
-                // partagé, qui peut continuer à être réassigné/disposé par le
-                // thread de capture pendant qu'on écrit le fichier sur disque.
-                copieLocale = (Bitmap)_lastFrame.Clone();
+                if (_lastFrame == null || _lastFrame.Empty()) return;
+                copie = _lastFrame.Clone();
             }
 
             try
             {
-                // CORRECTIF : dossier AppData centralisé + nom de fichier
-                // unique (voir la même correction dans CommandesView.cs).
-                string dossierPhotos = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
+                string dossier = GestionCoutureApp.Helpers.AppPaths.DossierPhotos;
+                string suffixe = Guid.NewGuid().ToString("N")[..8];
+                string chemin  = Path.Combine(dossier,
+                    $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixe}.jpg");
 
-                // CORRECTIF (bug réel) : l'ancien code tronquait la chaîne complète
-                // ("photo_" + horodatage + GUID) à 24 caractères AVANT d'ajouter
-                // l'extension. "photo_" (6) + horodatage yyyyMMdd_HHmmss (15) + "_" (1)
-                // = 22 caractères déjà utilisés, ce qui ne laissait que 2 caractères
-                // hexadécimaux du GUID (256 combinaisons) — loin de l'unicité recherchée.
-                // On prend maintenant explicitement 8 caractères du GUID.
-                string suffixeUnique = Guid.NewGuid().ToString("N")[..8];
-                string chemin = System.IO.Path.Combine(dossierPhotos,
-                    $"photo_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixeUnique}.jpg");
+                // Qualité JPEG 85
+                Cv2.ImWrite(chemin, copie,
+                    new ImageEncodingParam(ImwriteFlags.JpegQuality, 85));
 
-                // Compression JPEG 1024×768 / 70% à la source
-                chemin = GestionCoutureApp.Helpers.PhotoCompressor.CompresserBitmap(copieLocale, chemin);
                 CapturedFilePath = chemin;
-                DialogResult = true;
+                DialogResult     = true;
                 Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Erreur capture : " + ex.Message,
+                MessageBox.Show("Erreur lors de la capture :\n" + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
-                copieLocale.Dispose();
+                copie?.Dispose();
             }
         }
 
         private void BtnAnnuler_Click(object sender, RoutedEventArgs e)
         {
             CapturedFilePath = null;
-            DialogResult = false;
+            DialogResult     = false;
             Close();
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            if (_videoSource != null && _videoSource.IsRunning)
-            {
-                _videoSource.SignalToStop();
-                _videoSource.NewFrame -= VideoSource_NewFrame;
-                _videoSource = null;
-            }
+            _timer?.Stop();
+            _timer = null;
+
             lock (_verrouFrame)
             {
                 _lastFrame?.Dispose();
                 _lastFrame = null;
             }
+
+            _capture?.Release();
+            _capture?.Dispose();
+            _capture = null;
+
             base.OnClosed(e);
         }
     }

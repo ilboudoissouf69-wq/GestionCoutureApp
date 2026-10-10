@@ -158,8 +158,10 @@ namespace GestionCoutureApp
                     string messageErreur =
                         $"Schéma de base de données incohérent après Migrate() :\n\n{erreursSchema}\n\n" +
                         $"Base : {AppPaths.CheminBaseDeDonnees}\n\n" +
-                        "Supprimez le fichier .db (et .db-wal / .db-shm s'ils existent) " +
-                        "puis relancez l'application pour recréer un schéma propre.";
+                        "Contactez le support technique en fournissant le dossier des sauvegardes :\n" +
+                        AppPaths.DossierBackups + "\n\n" +
+                        "⚠️ Ne supprimez pas le fichier .db sans avoir d'abord " +
+                        "sauvegardé vos données — vous perdriez toutes vos commandes et paiements.";
 
                     logService.LogError("[SCHEMA] " + messageErreur);
                     MessageBox.Show(
@@ -246,11 +248,11 @@ namespace GestionCoutureApp
                     catch { /* déjà présente */ }
                 }
 
-                // Mode WAL (Write-Ahead Logging) : permet aux lectures de continuer
-                // pendant une écriture, réduisant les erreurs "database is locked".
-                // PRAGMA journal_mode est persistant — on le réapplique à chaque
-                // démarrage pour qu'il reste actif même après une restauration.
+                // Mode WAL + foreign_keys activés à chaque démarrage.
+                // journal_mode=WAL est persistant mais on le réapplique après restauration.
+                // foreign_keys doit être activé à chaque connexion (non persistant en SQLite).
                 context.Database.ExecuteSql($"PRAGMA journal_mode=WAL;");
+                context.Database.ExecuteSql($"PRAGMA foreign_keys=ON;");
 
                 // ── Configuration initiale (Phase 1) ─────────────────────────────
                 // Au premier lancement (base vide), on affiche une fenêtre de configuration

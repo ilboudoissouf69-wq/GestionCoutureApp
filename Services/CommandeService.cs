@@ -114,7 +114,7 @@ namespace GestionCoutureApp.Services
         public Commande? ObtenirParId(int id)
         {
             using var context = _contextFactory.CreateDbContext();
-            return context.Commandes
+            var commande = context.Commandes
                 .Include(c => c.Paiements)
                 .Include(c => c.Client)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
@@ -122,6 +122,16 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Pieces).ThenInclude(p => p.MaterielSupplements)
                 .Include(c => c.MaterielSupplements)
                 .FirstOrDefault(c => c.IdCommande == id);
+
+            // Filtrer les pièces fantômes (TypeVetement vide) créées par les
+            // opérations de mise à jour partielle. Ces pièces ne doivent jamais
+            // apparaître dans la fiche atelier ni dans le reçu.
+            if (commande != null)
+                commande.Pieces = commande.Pieces
+                    .Where(p => !string.IsNullOrWhiteSpace(p.TypeVetement))
+                    .ToList();
+
+            return commande;
         }
 
         public void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
@@ -267,16 +277,27 @@ namespace GestionCoutureApp.Services
                 return;
             }
 
-            Task.Run(() => _auditService.EnregistrerActionAsync(
-                idOperateur: operateur.IdEmploye,
-                nomOperateur: nomOperateur,
-                roleOperateur: operateur.Role,
-                typeAction: typeAction,
-                entite: entite,
-                idEntite: idEntite,
-                valeursAvant: avant,
-                valeursApres: apres,
-                motif: motif)).GetAwaiter().GetResult();
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await _auditService.EnregistrerActionAsync(
+                        idOperateur: operateur.IdEmploye,
+                        nomOperateur: nomOperateur,
+                        roleOperateur: operateur.Role,
+                        typeAction: typeAction,
+                        entite: entite,
+                        idEntite: idEntite,
+                        valeursAvant: avant,
+                        valeursApres: apres,
+                        motif: motif);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Échec audit — {Action} sur {Entite} #{Id}", typeAction, entite, idEntite);
+                }
+            }).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1190,7 +1211,8 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Couturier)
                 .Include(p => p.Mesures)
                 .Include(p => p.MaterielSupplements)
-                .Where(p => p.IdCommande == idCommande)
+                .Where(p => p.IdCommande == idCommande
+                         && p.TypeVetement != null && p.TypeVetement != "")
                 .ToList();
         }
 

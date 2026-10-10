@@ -129,10 +129,12 @@ namespace GestionCoutureApp.Services
                 dateDebut, dateFin, pourcentage, resultat.Count);
 
             // Phase 2 : calcul de la prime qualité dans le service (plus dans la vue).
-            // Paramètres configurables : seuil en nombre de pièces et montant FCFA.
-            // La prime est accordée si le couturier a ≥ seuilPieces pièces ET 0 retour.
-            int seuilPieces    = _parametresService.ObtenirSeuilPrimeNbCommandes().GetAwaiter().GetResult();
-            decimal montantPrime = _parametresService.ObtenirMontantPrimeQualite().GetAwaiter().GetResult();
+            // Les paramètres sont lus de façon synchrone via GetAwaiter().GetResult()
+            // car CalculerApercu() est synchrone (SQLite local, pas de réseau).
+            // Ce pattern est acceptable ici car le contexte d'exécution est un thread
+            // de pool sans SynchronizationContext (pas de deadlock possible).
+            int seuilPieces    = _parametresService.ObtenirSeuilPrimeNbCommandes().ConfigureAwait(false).GetAwaiter().GetResult();
+            decimal montantPrime = _parametresService.ObtenirMontantPrimeQualite().ConfigureAwait(false).GetAwaiter().GetResult();
 
             // Charger les retours non résolus par couturier pour le calcul de prime
             var retoursParCouturier = context.Retours
