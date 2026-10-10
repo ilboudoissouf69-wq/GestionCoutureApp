@@ -45,3 +45,23 @@ token.json
 TestResults/
 coverage.json
 coverage.cobertura.xml
+*.trx
+
+# ── Artefacts de build des tests (dossier généré par le CI local) ────────────
+TestsBuildOut/
+
+# ── Sorties de build temporaires ─────────────────────────────────────────────
+build_output.txt
+build2.txt
+
+# ── Secrets OAuth (ne JAMAIS committer — voir docs/PURGE_HISTORIQUE.md) ─────
+client_secret*.json
+
+# ── IDE VS Code (paramètres locaux uniquement) ───────────────────────────────
+# On ignore settings.json (chemins locaux, préférences personnelles)
+# mais on conserve éventuellement extensions.json si présent.
+.vscode/
+!.vscode/extensions.json
+
+# ── Script de lancement obsolète ─────────────────────────────────────────────
+run.bat
