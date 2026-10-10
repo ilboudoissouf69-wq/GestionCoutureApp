@@ -85,6 +85,6 @@ namespace GestionCoutureApp.Services
         List<Commission> ObtenirHistorique();
 
         /// <summary>Annule une commission déjà enregistrée et déverrouille les commandes.</summary>
-        void Annuler(int idCommission, string motif, string nomAnnulateur);
+        void Annuler(int idCommission, string motif, int idAnnulateur, string nomAnnulateur);
     }
 }

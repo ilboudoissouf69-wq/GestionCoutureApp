@@ -81,6 +81,17 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
+            // Validation de force côté UI (évite un aller-retour service inutile)
+            try
+            {
+                GestionCoutureApp.Services.AuthService.ValiderForceMotDePasse(nouveau);
+            }
+            catch (System.InvalidOperationException ex)
+            {
+                AfficherErreur(ex.Message);
+                return;
+            }
+
             try
             {
                 _authService.ChangerMotDePasse(_employe.IdEmploye, ancien, nouveau);

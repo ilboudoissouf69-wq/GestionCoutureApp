@@ -332,6 +332,7 @@ namespace GestionCoutureApp.Views
                 _commissionService.Annuler(
                     idCommission,
                     TxtMotifAnnulation.Text.Trim(),
+                    _authService.UtilisateurConnecte!.IdEmploye,
                     _authService.UtilisateurConnecte!.Prenom + " " + _authService.UtilisateurConnecte!.Nom);
 
                 TxtMessageHistorique.Text = "Commission annulée.";

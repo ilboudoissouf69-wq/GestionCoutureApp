@@ -316,7 +316,7 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
-        public void Annuler(int idCommission, string motif, string nomAnnulateur)
+        public void Annuler(int idCommission, string motif, int idAnnulateur, string nomAnnulateur)
         {
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
@@ -324,9 +324,13 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
 
             // Seul le Boss peut annuler une commission.
-            var annulateur = context.Employes.FirstOrDefault(e => 
-                (e.Prenom + " " + e.Nom) == nomAnnulateur);
-            Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
+            // Identification par ID (jamais par nom, pour éviter les homonymes).
+            // On vérifie aussi que l'annulateur est Actif.
+            var annulateur = context.Employes.Find(idAnnulateur);
+            if (annulateur == null || annulateur.Statut != "Actif")
+                throw new UnauthorizedAccessException(
+                    "Opérateur introuvable ou inactif.");
+            Helpers.AuthorizationHelper.RequireRoleEnum(annulateur, RoleEmploye.Boss);
 
             var commission = context.Commissions
                 .Include(c => c.Commandes) // historique legacy (commissions antérieures au verrouillage par pièce)

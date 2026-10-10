@@ -38,8 +38,14 @@ namespace GestionCoutureApp.Services
         /// </summary>
         /// <exception cref="InvalidOperationException">
         /// Levée si l'ancien mot de passe est incorrect ou si le nouveau
-        /// mot de passe ne respecte pas la longueur minimale.
+        /// mot de passe ne respecte pas les règles (≥10 car., liste noire).
         /// </exception>
         void ChangerMotDePasse(int idEmploye, string ancienMotDePasse, string nouveauMotDePasse);
+
+        /// <summary>
+        /// Définit le mot de passe initial sans vérifier l'ancien (Boss uniquement).
+        /// Réservé à la configuration initiale et à la réinitialisation par le Boss.
+        /// </summary>
+        void DefinirMotDePasseInitial(int idEmploye, string nouveauMotDePasse);
     }
 }

@@ -181,13 +181,15 @@ namespace GestionCoutureApp.Views
                     return;
                 }
 
-                // CORRECTIF (securite) : aucune longueur minimale n'etait imposee
-                // au mot de passe d'un employe, ce qui rend le hachage PBKDF2
-                // (voir Helpers/PasswordHasher.cs) quasi inutile face a une
-                // simple attaque par force brute sur un mot de passe trivial.
-                if (TxtMotDePasse.Password.Length < 6)
+                // Phase 1 : longueur minimale portée à 10 caractères (DEC-03),
+                // vérification via AuthService.ValiderForceMotDePasse (liste noire incluse).
+                try
                 {
-                    AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
+                    GestionCoutureApp.Services.AuthService.ValiderForceMotDePasse(TxtMotDePasse.Password);
+                }
+                catch (System.InvalidOperationException ex)
+                {
+                    AfficherMessage(ex.Message, succes: false);
                     return;
                 }
 
@@ -357,11 +359,14 @@ namespace GestionCoutureApp.Views
                 // Mettre a jour le mot de passe seulement si saisi
                 if (!string.IsNullOrWhiteSpace(TxtMotDePasse.Password))
                 {
-                    // CORRECTIF (securite) : meme controle de longueur minimale
-                    // qu'a la creation (voir BtnEnregistrer_Click).
-                    if (TxtMotDePasse.Password.Length < 6)
+                    // Phase 1 : validation via AuthService.ValiderForceMotDePasse (10 car., liste noire).
+                    try
                     {
-                        AfficherMessage("Le mot de passe doit contenir au moins 6 caracteres.", succes: false);
+                        GestionCoutureApp.Services.AuthService.ValiderForceMotDePasse(TxtMotDePasse.Password);
+                    }
+                    catch (System.InvalidOperationException ex)
+                    {
+                        AfficherMessage(ex.Message, succes: false);
                         return;
                     }
                     _employeSelectionne.MotDePasse = HashMotDePasse(TxtMotDePasse.Password);

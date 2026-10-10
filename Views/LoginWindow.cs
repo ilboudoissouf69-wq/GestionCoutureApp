@@ -55,13 +55,13 @@ namespace GestionCoutureApp.Views
                 // La colonne DoitChangerMotDePasse a été supprimée (migration
                 // SupprimerDoitChangerMotDePasse), mais le risque reste entier :
                 // un compte Boss dont le mot de passe n'a jamais été changé
-                // depuis la création utilise encore "boss123", affiché en clair
+                // depuis la création utilise encore le mot de passe par défaut d'une ancienne version.
                 // dans la boîte de dialogue du premier démarrage.
                 //
                 // On détecte ce cas directement au login, sans colonne en base :
                 // si le mot de passe qui vient de fonctionner correspond encore
-                // au hash de "boss123", on impose le changement AVANT d'ouvrir
-                // MainWindow. L'utilisateur ne peut pas contourner cette étape
+                // au hash du mot de passe par défaut initial, on impose le changement
+                // AVANT d'ouvrir MainWindow. L'utilisateur ne peut pas contourner cette étape
                 // (ChangerMotDePasseWindow bloque Alt+F4 et la croix système
                 // tant que ChangementReussi est false — voir son code-behind).
                 //
@@ -85,8 +85,7 @@ namespace GestionCoutureApp.Views
                 }
 
                     // Changement réussi : on recharge l'employé depuis la base
-                    // pour que MainWindow dispose du hash à jour (et non de
-                    // l'ancien "boss123"), puis on continue normalement.
+                    // pour que MainWindow dispose du hash à jour, puis on continue normalement.
                     employe = _authService.Authentifier(employe.Identifiant,
                         changerMdp.NouveauMotDePasse) ?? employe;
                 }

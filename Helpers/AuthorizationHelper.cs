@@ -63,7 +63,8 @@ namespace GestionCoutureApp.Helpers
         }
 
         /// <summary>
-        /// Vérifie que l'opérateur identifié par son ID possède le rôle requis (version enum).
+        /// Vérifie que l'opérateur identifié par son ID possède le rôle requis (version enum)
+        /// ET que son statut est Actif.
         /// Version pour les services qui reçoivent un idOperateur au lieu de l'objet Employe.
         /// </summary>
         public static void RequireRoleByIdEnum(
@@ -73,6 +74,10 @@ namespace GestionCoutureApp.Helpers
         {
             using var context = contextFactory.CreateDbContext();
             var operateur = context.Employes.Find(idOperateur);
+            // Phase 1 : vérifier aussi que l'opérateur est Actif
+            if (operateur != null && operateur.Statut != "Actif")
+                throw new UnauthorizedAccessException(
+                    $"Accès refusé. Le compte de cet opérateur est inactif.");
             RequireRoleEnum(operateur, rolesAutorises);
         }
     }

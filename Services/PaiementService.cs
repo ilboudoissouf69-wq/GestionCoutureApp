@@ -188,6 +188,12 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException(
                     "Le nom de l'opérateur est obligatoire pour la traçabilité financière.");
 
+            // Phase 1 : vérifier existence, statut Actif et rôle Boss/Secrétaire.
+            // Un Couturier ne peut pas enregistrer un paiement.
+            Helpers.AuthorizationHelper.RequireRoleByIdEnum(
+                _contextFactory, idOperateur,
+                RoleEmploye.Boss, RoleEmploye.Secretaire);
+
             lock (_verrou)
             {
                 using var context = _contextFactory.CreateDbContext();

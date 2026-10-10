@@ -88,12 +88,13 @@ Au tout premier lancement, l'application :
    ```
    C:\Users\<VotreNom>\AppData\Local\GestionCoutureApp\gestion_couture.db
    ```
-2. Crée un compte administrateur par défaut :
-   - **Identifiant** : `boss`
-   - **Mot de passe** : `boss123`
-3. Affiche une fenêtre de **changement de mot de passe obligatoire**.
+2. Affiche une **fenêtre de configuration initiale** où vous choisissez :
+   - L'**identifiant** du compte administrateur (Boss)
+   - Le **mot de passe** (10 caractères minimum, confirmation requise)
+3. Ce compte est créé immédiatement avec les informations saisies.
 
-> ⚠️ Ne communiquez jamais le mot de passe boss à une secrétaire ou un couturier.
+> ⚠️ Notez bien l'identifiant et le mot de passe que vous choisissez.
+> Ne communiquez jamais le mot de passe Boss à une secrétaire ou un couturier.
 
 ---
 

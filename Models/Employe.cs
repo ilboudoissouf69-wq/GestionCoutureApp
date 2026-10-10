@@ -36,6 +36,13 @@ namespace GestionCoutureApp.Models
         // pour rappel périodique (tous les 90 jours pour le Boss)
         public DateTime? DerniereModificationMotDePasse { get; set; }
 
+        // ── Phase 1 : Verrouillage progressif persisté en base ───────────────────
+        // NbEchecConnexion : nombre d'échecs cumulatifs depuis la dernière réussite.
+        // DateVerrouJusqua  : NULL = non verrouillé ; sinon : UTC jusqu'à quand.
+        // Colonnes ajoutées par migration Phase1_VerrouillageProgressif.
+        public int NbEchecConnexion { get; set; } = 0;
+        public DateTime? DateVerrouJusqua { get; set; }
+
         [NotMapped]
         public string NomComplet => $"{Prenom} {Nom}";
 

@@ -311,6 +311,12 @@ namespace GestionCoutureApp.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Actif");
 
+                    b.Property<int>("NbEchecConnexion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DateVerrouJusqua")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("IdEmploye");
 
                     b.HasIndex("Identifiant")

@@ -104,6 +104,7 @@ namespace GestionCoutureApp
             Services.GetRequiredService<BackupService>();
 
             // ====== Créer la base ======
+            bool configurationInitialeRequise = false;
             try
             {
                 var contextFactory = Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
@@ -250,30 +251,11 @@ namespace GestionCoutureApp
                 // démarrage pour qu'il reste actif même après une restauration.
                 context.Database.ExecuteSql($"PRAGMA journal_mode=WAL;");
 
-                // Compte Boss par défaut : créé UNE SEULE FOIS au tout premier lancement.
-                // On ne touche plus jamais à son mot de passe ensuite (sinon un Boss qui a
-                // changé son mot de passe se le voit réinitialisé à "boss123" à chaque démarrage,
-                // ce qui est à la fois une faille de sécurité et un bug fonctionnel).
-                bool aucunEmploye = !context.Employes.Any();
-                if (aucunEmploye)
-                {
-                    var boss = new Employe
-                    {
-                        Nom = "Admin",
-                        Prenom = "Boss",
-                        Identifiant = "boss",
-                        MotDePasse = PasswordHasher.Hasher("boss123"),
-                        Role = "Boss",
-                        Statut = "Actif"
-                    };
-                    context.Employes.Add(boss);
-                    context.SaveChanges();
-
-                    MessageBox.Show(
-                        "Compte administrateur créé.\nIdentifiant : boss\nMot de passe : boss123\n\n" +
-                        "IMPORTANT : changez ce mot de passe immédiatement après votre première connexion.",
-                        "Premier démarrage", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
+                // ── Configuration initiale (Phase 1) ─────────────────────────────
+                // Au premier lancement (base vide), on affiche une fenêtre de configuration
+                // qui demande l'identifiant et le mot de passe choisis par le propriétaire.
+                // Aucun mot de passe par défaut n'est plus utilisé.
+                configurationInitialeRequise = !context.Employes.Any();
 
                 // Types de vêtements initiaux avec descriptions
                 if (!context.TypesVetements.Any())
@@ -417,6 +399,45 @@ namespace GestionCoutureApp
                     "Erreur critique", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(-1);
                 return;
+            }
+
+            // ── Configuration initiale ou connexion ──────────────────────────────
+            if (configurationInitialeRequise)
+            {
+                // Première installation : aucun compte en base. On demande au
+                // propriétaire de choisir son identifiant et son mot de passe.
+                // Aucun mot de passe par défaut n'est jamais utilisé.
+                var configWindow = new ConfigurationInitialeWindow();
+                configWindow.ShowDialog();
+
+                if (!configWindow.ConfigurationReussie || configWindow.EmployeCree == null)
+                {
+                    // L'utilisateur a fermé la fenêtre sans configurer (impossible par
+                    // design, mais on se défend quand même).
+                    Shutdown(0);
+                    return;
+                }
+
+                // Persister le compte Boss créé
+                try
+                {
+                    var contextFactory = Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                    using var ctx = contextFactory.CreateDbContext();
+                    ctx.Employes.Add(configWindow.EmployeCree);
+                    ctx.SaveChanges();
+
+                    var logSvc = Services.GetService<ILogService>();
+                    logSvc?.LogInfo(
+                        $"[CONFIG-INITIALE] Compte Boss '{configWindow.EmployeCree.Identifiant}' créé.");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        "Impossible de créer le compte administrateur :\n\n" + ex.Message,
+                        "Erreur de configuration", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Shutdown(-1);
+                    return;
+                }
             }
 
             var loginWindow = new LoginWindow();
@@ -579,6 +600,7 @@ namespace GestionCoutureApp
                 EnregistrerSiIndexExiste  ("20260918000000_AjoutContrainteUniqueRecuNumero",        "IX_Paiements_RecuNumero");
                 EnregistrerSiColonneExiste("20260918000001_AjoutDerniereModificationMotDePasse",   "Employes", "DerniereModificationMotDePasse");
                 EnregistrerSiColonneExiste("20260925000000_ConsolidationFinale",                   "Commandes","EstSupprimee");
+                EnregistrerSiColonneExiste("20261010000000_Phase1_VerrouillageProgressif",         "Employes", "NbEchecConnexion");
             }
             catch (Exception ex)
             {
@@ -888,6 +910,15 @@ namespace GestionCoutureApp
                 {
                     log.LogError($"[MIGRATION T1] Erreur rattrapage DateTerminee : {ex.Message}", ex);
                 }
+            });
+
+            // ── Phase1_VerrouillageProgressif ─────────────────────────────────
+            // Ajout de NbEchecConnexion et DateVerrouJusqua sur Employes pour
+            // le verrouillage progressif persisté en base (voir AuthService).
+            AppliquerSi("20261010000000_Phase1_VerrouillageProgressif", c =>
+            {
+                AjouterCol(c, "Employes", "NbEchecConnexion", "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(c, "Employes", "DateVerrouJusqua", "TEXT NULL");
             });
         }
 

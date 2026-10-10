@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="GestionCoutureApp.Views.ConfigurationInitialeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Retouche Choco — Configuration initiale"
+        Height="560" Width="460"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="ToolWindow"
+        Background="#F8FAFC">
+    <Grid Margin="36,28,36,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Première configuration"
+                       FontSize="20" FontWeight="Bold"
+                       Foreground="#0F172A"/>
+            <TextBlock Text="Créez le compte administrateur de l'atelier."
+                       FontSize="13" Foreground="#64748B"
+                       Margin="0,4,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Identifiant -->
+        <TextBlock Grid.Row="1" Text="Identifiant de connexion"
+                   FontSize="13" FontWeight="SemiBold" Foreground="#374151"
+                   Margin="0,0,0,6"/>
+        <TextBox x:Name="TxtIdentifiant"
+                 Grid.Row="2"
+                 Height="40" FontSize="13" Padding="10,0"
+                 VerticalContentAlignment="Center"
+                 BorderBrush="#CBD5E1" BorderThickness="1"
+                 Margin="0,0,0,16"/>
+
+        <!-- Mot de passe -->
+        <TextBlock Grid.Row="3" Text="Mot de passe (10 caractères minimum)"
+                   FontSize="13" FontWeight="SemiBold" Foreground="#374151"
+                   Margin="0,0,0,6"/>
+        <PasswordBox x:Name="TxtMotDePasse"
+                     Grid.Row="4"
+                     Height="40" FontSize="13" Padding="10,0"
+                     VerticalContentAlignment="Center"
+                     BorderBrush="#CBD5E1" BorderThickness="1"
+                     Margin="0,0,0,16"/>
+
+        <!-- Confirmation -->
+        <TextBlock Grid.Row="5" Text="Confirmation du mot de passe"
+                   FontSize="13" FontWeight="SemiBold" Foreground="#374151"
+                   Margin="0,0,0,6"/>
+        <PasswordBox x:Name="TxtConfirmation"
+                     Grid.Row="6"
+                     Height="40" FontSize="13" Padding="10,0"
+                     VerticalContentAlignment="Center"
+                     BorderBrush="#CBD5E1" BorderThickness="1"
+                     Margin="0,0,0,20"/>
+
+        <!-- Message erreur -->
+        <Border x:Name="BorderErreur"
+                Grid.Row="7"
+                CornerRadius="6" Padding="12,8" Margin="0,0,0,16"
+                Visibility="Collapsed"
+                Background="#FEE2E2" BorderBrush="#FCA5A5" BorderThickness="1">
+            <TextBlock x:Name="TxtErreur"
+                       FontSize="12" Foreground="#B91C1C"
+                       TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- Bouton valider -->
+        <Button x:Name="BtnValider"
+                Grid.Row="8"
+                Content="CRÉER LE COMPTE ADMINISTRATEUR"
+                Height="46" FontSize="13" FontWeight="Bold"
+                Foreground="White" Background="#D97706"
+                BorderThickness="0" Cursor="Hand"
+                VerticalAlignment="Top"
+                Click="BtnValider_Click"/>
+    </Grid>
+</Window>
