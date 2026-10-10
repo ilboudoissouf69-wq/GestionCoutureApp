@@ -54,6 +54,11 @@ TestsBuildOut/
 build_output.txt
 build2.txt
 
+# ── Sorties de build/tests brutes ────────────────────────────────────────────
+*_out.txt
+*_tests.txt
+*.output.txt
+
 # ── Secrets OAuth (ne JAMAIS committer — voir docs/PURGE_HISTORIQUE.md) ─────
 client_secret*.json
 

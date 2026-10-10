@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <NoWarn>$(NoWarn);NU1701</NoWarn>
     <!-- Permet dotnet run sur une app WPF (UseWindowsShell=true lance le processus via l'OS) -->
     <UseWindowsShellExecute>true</UseWindowsShellExecute>
   </PropertyGroup>
@@ -16,12 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- DETTE TECHNIQUE : AForge.Video / AForge.Video.DirectShow (v2.2.5, 2013)
-         Non maintenus depuis 2013 (API DirectShow COM).
-         Migration recommandee : OpenCvSharp4.Windows ou Windows.Media.Capture.
-         Impact : Views/WebcamCaptureWindow.cs uniquement. -->
-    <PackageReference Include="AForge.Video" Version="2.2.5" NoWarn="NU1701" />
-    <PackageReference Include="AForge.Video.DirectShow" Version="2.2.5" NoWarn="NU1701" />
+    <!-- Webcam migrée vers OpenCvSharp4 -->
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.75.0.4218" />
     <!-- CommunityToolkit.Mvvm retire : non utilise (app 100% code-behind).
          A reintroduire lors d une migration MVVM progressive. -->
