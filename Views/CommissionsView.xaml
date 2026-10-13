@@ -124,10 +124,10 @@
                 <!-- 1 — Total encaissé client -->
                 <Border CornerRadius="8" Padding="14,12" Margin="0,0,6,0" Background="#1A1A1A">
                     <StackPanel>
-                        <TextBlock Text="TOTAL ENCAISSÉ CLIENT" FontSize="9" FontWeight="Bold" Foreground="#B0A8A4"/>
+                        <TextBlock Text="TOTAL FACTURÉ CLIENT" FontSize="9" FontWeight="Bold" Foreground="#B0A8A4"/>
                         <TextBlock x:Name="TxtCaEncaisseTotal" Text="0"
                                    FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA — paiements reçus (couture + matériaux)" FontSize="10" Foreground="#B0A8A4" TextWrapping="Wrap"/>
+                        <TextBlock Text="FCFA — couture + matériaux (paiements ou non)" FontSize="10" Foreground="#B0A8A4" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
 
@@ -376,6 +376,36 @@
                                                    VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding ResteAtelierAffiche}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- ⚠️ Colonne Impayé : visible uniquement quand CaEncaisse < CaTotal
+                                 Signale que la commission est calculée sur du travail non encore payé -->
+                            <DataGridTemplateColumn Header="⚠️ Impayé" Width="95" MinWidth="85">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="5" Padding="6,3"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <!-- Visible dès que l'encaissé couture < couture totale -->
+                                                        <DataTrigger Binding="{Binding AImpaye}" Value="True">
+                                                            <Setter Property="Background" Value="#FEF3C7"/>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding ImPayeAffiche}"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       Foreground="#B45309"
+                                                       HorizontalAlignment="Center"
+                                                       ToolTip="Montant de couture non encore encaissé. La commission sur cette part sera calculée sur de l'argent pas encore reçu."/>
+                                        </Border>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>

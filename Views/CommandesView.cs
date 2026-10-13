@@ -80,49 +80,72 @@ namespace GestionCoutureApp.Views
                 : (0, string.Empty);
         }
 
+        // ─────────────────────────────────────────────────────────────────
+        // CONTRÔLE UNIFORME DES CHANGEMENTS DE STATUT
+        //
+        // Règle commune (identique dans CommandesView et StatutView) :
+        //   • En cours → Terminée : confirmation obligatoire (déclenche commission,
+        //     irréversible sauf Boss avec motif)
+        //   • Terminée → Livrée  : commande soldée requise. Si non soldée :
+        //       - Secrétaire/Couturier → bloqué totalement
+        //       - Boss → motif obligatoire + mot de passe
+        //   • Rétrogradation       : Boss + motif obligatoire
+        // ─────────────────────────────────────────────────────────────────
+
         private bool AvecControleLivraison(Action<string?> action)
+            => AppliquerRegleStatut(action);
+
+        private bool AvecControleStatut(Action<string?> action)
+            => AppliquerRegleStatut(action);
+
+        /// <summary>
+        /// Point d'entrée unique pour tout changement de statut.
+        /// Gère les trois cas : livraison non soldée, rétrogradation avec motif, autres erreurs.
+        /// </summary>
+        private bool AppliquerRegleStatut(Action<string?> action)
         {
-            try { action(null); return true; }
+            try
+            {
+                action(null);
+                return true;
+            }
             catch (LivraisonNonSoldeeException ex) when (ex.PeutForcer)
             {
-                var rep = MessageBox.Show(
-                    ex.Message + "\n\nAutoriser quand même la livraison ?",
-                    "Livraison non soldée", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                // Boss uniquement — paiements non soldés
+                var msg = $"⚠️ Livraison bloquée — solde restant : {ex.ResteAPayer:N0} FCFA\n\n" +
+                          "Le client n'a pas encore réglé la totalité de cette commande.\n\n" +
+                          "En tant que Boss, vous pouvez forcer la livraison.\n" +
+                          "Cela sera tracé dans le journal d'audit.\n\n" +
+                          "Voulez-vous forcer quand même la livraison ?";
+                var rep = MessageBox.Show(msg, "Livraison — Paiement incomplet",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning);
                 if (rep != MessageBoxResult.Yes) return false;
-                string? motif = DemanderMotif("Motif de la livraison non soldée");
+
+                string? motif = DemanderMotif("Motif de la livraison non soldée (obligatoire)");
                 if (string.IsNullOrWhiteSpace(motif)) return false;
+
+                if (!DemanderMotDePasse()) return false;
+
                 action(motif);
                 return true;
             }
-        }
-
-        // ──────────────────────────────────────────────────────────────
-        // Gère à la fois :
-        //   • LivraisonNonSoldeeException (commande non soldée → Boss avec motif)
-        //   • InvalidOperationException contenant "motif est obligatoire" (rétrogradation statut)
-        // Présente DemanderMotif() dans les deux cas afin que le Boss puisse saisir
-        // le motif requis par VerifierFluxStatut() ou VerifierLivraisonSoldee().
-        // ──────────────────────────────────────────────────────────────
-        private bool AvecControleStatut(Action<string?> action)
-        {
-            try { action(null); return true; }
-            catch (LivraisonNonSoldeeException ex) when (ex.PeutForcer)
+            catch (LivraisonNonSoldeeException ex) when (!ex.PeutForcer)
             {
-                var rep = MessageBox.Show(
-                    ex.Message + "\n\nAutoriser quand même la livraison ?",
-                    "Livraison non soldée", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (rep != MessageBoxResult.Yes) return false;
-                string? motif = DemanderMotif("Motif de la livraison non soldée");
-                if (string.IsNullOrWhiteSpace(motif)) return false;
-                action(motif);
-                return true;
+                MessageBox.Show(
+                    $"⛔ Livraison impossible — solde restant : {ex.ResteAPayer:N0} FCFA\n\n" +
+                    "Le client n'a pas réglé la totalité de cette commande.\n" +
+                    "Encaissez d'abord le solde dans le module Paiements,\n" +
+                    "ou demandez au Boss d'autoriser la livraison.",
+                    "Livraison — Paiement incomplet",
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return false;
             }
             catch (InvalidOperationException ex) when (
                 ex.Message.Contains("motif est obligatoire") ||
+                ex.Message.Contains("rétrograder") ||
                 ex.Message.Contains("rétrograder"))
             {
-                // Le service demande un motif pour la rétrogradation → on le demande à l'utilisateur
-                string? motif = DemanderMotif("Motif de la rétrogradation de statut");
+                string? motif = DemanderMotif("Motif de la rétrogradation (obligatoire)");
                 if (string.IsNullOrWhiteSpace(motif)) return false;
                 action(motif);
                 return true;
@@ -2268,6 +2291,24 @@ namespace GestionCoutureApp.Views
                     if (carte.IdPieceCommande.HasValue && carte.IdPieceCommande.Value > 0)
                     {
                         pieceObj.IdPieceCommande = carte.IdPieceCommande.Value;
+
+                        // Confirmation obligatoire avant passage En cours → Terminée
+                        // (déclenche le calcul de commission — irréversible sauf Boss)
+                        var pieceActuelle = _commandeEnEdition.Pieces
+                            .FirstOrDefault(p => p.IdPieceCommande == carte.IdPieceCommande.Value);
+                        if (pieceActuelle?.Statut == "En cours" && pieceObj.Statut == "Terminee")
+                        {
+                            var rep = MessageBox.Show(
+                                $"⚠️ Passage en « Terminée » — {pieceObj.TypeVetement}\n\n" +
+                                "Cette action déclenchera le calcul de la commission du couturier " +
+                                "lors de la prochaine clôture de période.\n\n" +
+                                "Cette opération est irréversible (seul le Boss peut revenir en arrière " +
+                                "avec motif obligatoire).\n\nConfirmer ?",
+                                "Confirmation — Pièce Terminée",
+                                MessageBoxButton.YesNo, MessageBoxImage.Question);
+                            if (rep != MessageBoxResult.Yes) return;
+                        }
+
                         if (!AvecControleStatut(motif =>
                                 _commandeService.ModifierPiece(pieceObj, mesures, idOp, nomOp, motif)))
                             return;
@@ -2351,6 +2392,19 @@ namespace GestionCoutureApp.Views
             btnOk.Click += (s, ev) =>
             {
                 string statut = cmb.SelectedItem?.ToString() ?? "";
+                // Confirmation avant forçage vers Terminée
+                if (statut == "Terminee")
+                {
+                    var rep = MessageBox.Show(
+                        "⚠️ Vous allez passer TOUTES les pièces en « Terminée ».\n\n" +
+                        "Cette action déclenchera le calcul des commissions couturiers " +
+                        "lors de la prochaine clôture de période.\n\n" +
+                        "Cette opération est irréversible (seul le Boss peut revenir en arrière " +
+                        "avec motif obligatoire).\n\nConfirmer ?",
+                        "Confirmation — Forcer Terminée",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (rep != MessageBoxResult.Yes) return;
+                }
                 try
                 {
                     var (opId, opNom) = OperateurConnecte();

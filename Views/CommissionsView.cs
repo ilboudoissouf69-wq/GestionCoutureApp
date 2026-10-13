@@ -162,23 +162,24 @@ namespace GestionCoutureApp.Views
             decimal totalCommissions = _dernierApercu.Sum(a => a.Commission);
             decimal totalPrimes      = _dernierApercu.Sum(a => a.PrimeQualite);
 
-            // ── CORRECTIF BUG 4 ──────────────────────────────────────────────
-            // TotalEncaisse est désormais l'encaissé COUTURE uniquement (hors matériaux).
-            // resteAtelierGlobal = encaissé couture - commissions - primes
-            // → représente la part couture qui reste à l'atelier après paiement
-            //   des couturiers. Les matériaux sont affichés séparément en KPI
-            //   "dont matériaux" pour information, SANS entrer dans ce calcul.
-            // 5 cartes KPI
-            decimal totalEncaisseGlobal   = _dernierApercu.Sum(a => a.TotalEncaisse); // couture seule
-            decimal totalMateriauxGlobal  = _dernierApercu.Sum(a => a.TotalMateriaux); // info seulement
-            decimal totalCoutureGlobal    = _dernierApercu.Sum(a => a.CaTotal);
-            decimal resteAtelierGlobal    = totalEncaisseGlobal - totalCommissions - totalPrimes;
-            // Note : totalMateriauxGlobal N'EST PAS soustrait de resteAtelierGlobal.
-            // Les matériaux sont un flux séparé (achat refacturé client → dépense atelier).
+            // KPI globaux :
+            // - CaTotal    = valeur couture totale des pièces terminées (base commission)
+            // - TotalEncaisse = argent couture réellement reçu (peut être < CaTotal si impayé)
+            // - TotalMateriaux = matériaux (informatif)
+            // - ResteAtelier = couture facturée - commissions (ce que l'atelier garde)
+            //   NB : on utilise CaTotal (pas TotalEncaisse) car la commission est calculée
+            //   sur le travail terminé, même si le client n'a pas encore payé.
+            decimal totalEncaisseGlobal   = _dernierApercu.Sum(a => a.TotalEncaisse); // encaissé réel
+            decimal totalMateriauxGlobal  = _dernierApercu.Sum(a => a.TotalMateriaux);
+            decimal totalCoutureGlobal    = _dernierApercu.Sum(a => a.CaTotal);       // couture facturée
+            // Reste atelier = couture facturée (pas juste encaissée) - commissions
+            // car le couturier est payé sur le travail terminé
+            decimal resteAtelierGlobal    = totalCoutureGlobal - totalCommissions - totalPrimes;
 
-            // Carte 1 = vrai total encaissé client (couture + matériaux)
-            decimal totalEncaisseBrut = totalEncaisseGlobal + totalMateriauxGlobal;
-            TxtCaEncaisseTotal.Text   = totalEncaisseBrut.ToString("N0");
+            // Carte 1 = total facturé au client (couture + matériaux), qu'il ait payé ou non
+            // → donne une vue complète du chiffre d'affaires généré sur la période
+            decimal totalFactureClient = totalCoutureGlobal + totalMateriauxGlobal;
+            TxtCaEncaisseTotal.Text   = totalFactureClient.ToString("N0");
             TxtTotalMateriauxKpi.Text = totalMateriauxGlobal.ToString("N0");
             TxtCaTotal.Text           = totalCoutureGlobal.ToString("N0");
             TxtTotalCommissions.Text  = totalCommissions.ToString("N0");

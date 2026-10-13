@@ -288,6 +288,21 @@ namespace GestionCoutureApp.Views
                 _                        => null
             };
             if (suivant == null) return;
+
+            // Confirmation obligatoire avant En cours → Terminée
+            if (suivant == "Terminee")
+            {
+                var rep = MessageBox.Show(
+                    $"⚠️ Passage en « Terminée » — CMD #{cmd.IdCommande}\n\n" +
+                    "Cette action déclenchera le calcul de la commission du couturier " +
+                    "lors de la prochaine clôture de période.\n\n" +
+                    "Cette opération est irréversible (seul le Boss peut revenir en arrière " +
+                    "avec motif obligatoire).\n\nConfirmer ?",
+                    "Confirmation — Pièce Terminée",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (rep != MessageBoxResult.Yes) return;
+            }
+
             await ForcerStatutCommande(cmd.IdCommande, suivant);
         }
 
@@ -330,7 +345,26 @@ namespace GestionCoutureApp.Views
             menu.Items.Add(new MenuItem { Header = $"Commande #{cmd.IdCommande} — {cmd.TypeVetementAffiche}", IsEnabled = false, FontWeight = FontWeights.Bold });
             menu.Items.Add(new Separator());
 
-            void Add(string lbl, string s) { var it = new MenuItem { Header = lbl }; it.Click += async (x, y) => await ForcerStatutCommande(cmd.IdCommande, s); menu.Items.Add(it); }
+            void Add(string lbl, string s)
+            {
+                var it = new MenuItem { Header = lbl };
+                it.Click += async (x, y) =>
+                {
+                    // Confirmation avant Terminée
+                    if (s == "Terminee")
+                    {
+                        var rep = MessageBox.Show(
+                            $"⚠️ Passage en « Terminée » — CMD #{cmd.IdCommande}\n\n" +
+                            "Cette action déclenchera le calcul des commissions.\n" +
+                            "Irréversible sauf Boss avec motif.\n\nConfirmer ?",
+                            "Confirmation — Terminée",
+                            MessageBoxButton.YesNo, MessageBoxImage.Question);
+                        if (rep != MessageBoxResult.Yes) return;
+                    }
+                    await ForcerStatutCommande(cmd.IdCommande, s);
+                };
+                menu.Items.Add(it);
+            }
             Add("⬜  À faire",  "A faire");
             Add("🟡  En cours",  "En cours");
             Add("🟢  Terminée",  "Terminee");
@@ -357,22 +391,47 @@ namespace GestionCoutureApp.Views
             if (ok) await ChargerCommandes();
         }
 
-        // ── AvecControleLivraison ─────────────────────────────────────
+        // ── AvecControleLivraison — règle uniforme avec CommandesView ────
         private async Task<bool> AvecControleLivraison(Func<string?, Task> action)
         {
             try { await action(null); return true; }
             catch (LivraisonNonSoldeeException ex) when (ex.PeutForcer)
             {
-                _actionEnAttente         = action;
-                TxtInfoSoldeRestant.Text = $"Cette commande présente un solde restant de {ex.ResteAPayer:N0} FCFA.";
-                TxtMotifLivraison.Text   = string.Empty;
-                ModalLivraisonNonSoldee.Visibility = Visibility.Visible;
-                TxtMotifLivraison.Focus();
-                return false;
+                // Boss uniquement — paiements non soldés
+                var msg = $"⚠️ Livraison bloquée — solde restant : {ex.ResteAPayer:N0} FCFA\n\n" +
+                          "Le client n'a pas encore réglé la totalité de cette commande.\n\n" +
+                          "En tant que Boss, vous pouvez forcer la livraison.\n" +
+                          "Cela sera tracé dans le journal d'audit.\n\n" +
+                          "Voulez-vous forcer quand même la livraison ?";
+                var rep = MessageBox.Show(msg, "Livraison — Paiement incomplet",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (rep != MessageBoxResult.Yes) return false;
+
+                string? motif = DemanderMotif("Motif de la livraison non soldée (obligatoire)");
+                if (string.IsNullOrWhiteSpace(motif)) return false;
+
+                if (!DemanderMotDePasse()) return false;
+
+                try
+                {
+                    await action(motif);
+                    return true;
+                }
+                catch (LivraisonNonSoldeeException ex2) when (!ex2.PeutForcer)
+                {
+                    MessageBox.Show(ex2.Message, "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
             }
             catch (LivraisonNonSoldeeException ex) when (!ex.PeutForcer)
             {
-                MessageBox.Show(ex.Message, "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(
+                    $"⛔ Livraison impossible — solde restant : {ex.ResteAPayer:N0} FCFA\n\n" +
+                    "Le client n'a pas réglé la totalité de cette commande.\n" +
+                    "Encaissez d'abord le solde dans le module Paiements,\n" +
+                    "ou demandez au Boss d'autoriser la livraison.",
+                    "Livraison — Paiement incomplet",
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
                 return false;
             }
             catch (InvalidOperationException ex)
@@ -387,29 +446,72 @@ namespace GestionCoutureApp.Views
             }
         }
 
+        private string? DemanderMotif(string titre)
+        {
+            string? resultat = null;
+            var dialog = new Window
+            {
+                Title = titre, Width = 440, SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize, Background = System.Windows.Media.Brushes.White
+            };
+            var panel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+            panel.Children.Add(new TextBlock { Text = "Motif :", FontSize = 13, Margin = new Thickness(0, 0, 0, 8) });
+            var txtMotif = new TextBox
+            {
+                Height = 70, FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                AcceptsReturn = true, Margin = new Thickness(0, 0, 0, 12)
+            };
+            panel.Children.Add(txtMotif);
+            var message = new TextBlock
+            {
+                FontSize = 12, Height = 18, Margin = new Thickness(0, 0, 0, 12),
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26))
+            };
+            panel.Children.Add(message);
+            var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var btnOk = new Button
+            {
+                Content = "Confirmer", Width = 110, Height = 36, FontSize = 13,
+                FontWeight = FontWeights.Bold, Foreground = System.Windows.Media.Brushes.White,
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x05, 0x96, 0x69)),
+                BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            var btnAnnuler = new Button
+            {
+                Content = "Annuler", Width = 100, Height = 36, FontSize = 13,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Cursor = Cursors.Hand
+            };
+            btnOk.Click += (s, ev) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtMotif.Text)) { message.Text = "Motif obligatoire."; return; }
+                resultat = txtMotif.Text.Trim();
+                dialog.DialogResult = true; dialog.Close();
+            };
+            btnAnnuler.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+            btnPanel.Children.Add(btnOk); btnPanel.Children.Add(btnAnnuler);
+            panel.Children.Add(btnPanel);
+            dialog.Content = panel;
+            dialog.Owner = Window.GetWindow(this);
+            dialog.ShowDialog();
+            return resultat;
+        }
+
         private async void BtnConfirmerLivraisonNonSoldee_Click(object sender, RoutedEventArgs e)
         {
-            string motif = TxtMotifLivraison.Text.Trim();
-            if (string.IsNullOrWhiteSpace(motif))
-            {
-                MessageBox.Show("Le motif est obligatoire.", "Motif manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (_actionEnAttente == null) { FermerModal(); return; }
-            var action = _actionEnAttente;
+            // Ce bouton n'est plus utilisé — la logique est dans AvecControleLivraison
+            // via messagebox + motif + mot de passe. On le garde pour compatibilité XAML.
             FermerModal();
-            try
-            {
-                await action(motif);
-                await ChargerCommandes();
-            }
-            catch (LivraisonNonSoldeeException ex) when (!ex.PeutForcer)
-            {
-                MessageBox.Show(ex.Message, "Livraison impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-            catch (InvalidOperationException ex) { MessageBox.Show(ex.Message, "Opération impossible", MessageBoxButton.OK, MessageBoxImage.Warning); }
-            catch (UnauthorizedAccessException ex) { MessageBox.Show(ex.Message, "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning); }
-            catch (Exception ex) { MessageBox.Show("Erreur : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
         private void BtnAnnulerLivraisonNonSoldee_Click(object sender, RoutedEventArgs e) => FermerModal();
@@ -419,6 +521,89 @@ namespace GestionCoutureApp.Views
             ModalLivraisonNonSoldee.Visibility = Visibility.Collapsed;
             TxtMotifLivraison.Text = string.Empty;
             _actionEnAttente       = null;
+        }
+
+        /// <summary>
+        /// Demande le mot de passe du Boss pour confirmer une action sensible.
+        /// Retourne true si le mot de passe est correct.
+        /// </summary>
+        private bool DemanderMotDePasse()
+        {
+            var dialog = new Window
+            {
+                Title = "Vérification d'identité Boss", Width = 400,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize, Background = System.Windows.Media.Brushes.White
+            };
+            var mainPanel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+            mainPanel.Children.Add(new TextBlock
+            {
+                Text = "Confirmation requise — saisissez votre mot de passe :",
+                FontSize = 13, Margin = new Thickness(0, 0, 0, 14),
+                TextWrapping = TextWrapping.Wrap
+            });
+            var passwordBox = new PasswordBox
+            {
+                Height = 38, FontSize = 14,
+                Padding = new Thickness(10, 0, 10, 0),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            mainPanel.Children.Add(passwordBox);
+            var message = new TextBlock
+            {
+                Text = "", FontSize = 12,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26)),
+                Margin = new Thickness(0, 0, 0, 16), Height = 18
+            };
+            mainPanel.Children.Add(message);
+            var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var btnOk = new Button
+            {
+                Content = "Confirmer", Width = 110, Height = 38, FontSize = 13,
+                FontWeight = FontWeights.Bold, Foreground = System.Windows.Media.Brushes.White,
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x05, 0x96, 0x69)),
+                BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, 10, 0),
+                Cursor = Cursors.Hand
+            };
+            var btnAnnuler = new Button
+            {
+                Content = "Annuler", Width = 100, Height = 38, FontSize = 13,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xE2, 0xE8, 0xF0)),
+                Cursor = Cursors.Hand
+            };
+            btnOk.Click += (s, ev) =>
+            {
+                var authService = App.Services.GetRequiredService<IAuthService>();
+                string mdp = passwordBox.Password.Trim();
+                var user = authService.UtilisateurConnecte;
+                bool mdpValide = user != null &&
+                    (GestionCoutureApp.Helpers.PasswordHasher.EstAncienFormatSha256(user.MotDePasse)
+                        ? user.MotDePasse == GestionCoutureApp.Helpers.PasswordHasher.HasherAncienSha256(mdp)
+                        : GestionCoutureApp.Helpers.PasswordHasher.Verifier(mdp, user.MotDePasse));
+                if (mdpValide) { dialog.DialogResult = true; dialog.Close(); }
+                else { message.Text = "Mot de passe incorrect !"; passwordBox.Clear(); passwordBox.Focus(); }
+            };
+            btnAnnuler.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+            passwordBox.KeyDown += (s, ev) =>
+            {
+                if (ev.Key == Key.Enter) btnOk.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            };
+            btnPanel.Children.Add(btnOk);
+            btnPanel.Children.Add(btnAnnuler);
+            mainPanel.Children.Add(btnPanel);
+            dialog.Content = mainPanel;
+            dialog.Owner = Window.GetWindow(this);
+            return dialog.ShowDialog() == true;
         }
 
         private void Page_KeyDown(object sender, KeyEventArgs e)

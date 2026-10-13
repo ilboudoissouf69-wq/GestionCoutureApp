@@ -1262,22 +1262,32 @@ namespace GestionCoutureApp.Services
 
             var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
 
-            // Vérifier qu'aucune pièce n'est verrouillée par une commission
-            // (on ne force pas le statut d'une pièce commissionnée)
-            var verrouillees = pieces.Where(p => p.IdCommission.HasValue).ToList();
-            if (verrouillees.Any())
+            // Une pièce commissionnée peut avancer de Terminee → Livree (la commission
+            // est déjà calculée, il n'y a plus de risque). En revanche, la rétrogradation
+            // d'une pièce commissionnée reste bloquée (géré par VerifierFluxStatut).
+            // On filtre les pièces déjà livrées (rien à faire pour elles).
+            var piecesATraiter = nouveauStatut == "Livree"
+                ? pieces.Where(p => p.Statut != "Livree").ToList()
+                : pieces.ToList();
+
+            // Bloquer rétrogradation sur pièces commissionnées seulement
+            if (nouveauStatut != "Livree")
             {
-                throw new InvalidOperationException(
-                    $"{verrouillees.Count} pièce(s) sont rattachées à une commission et ne peuvent " +
-                    "pas voir leur statut modifié par un forçage en cascade.");
+                var verrouillees = piecesATraiter.Where(p => p.IdCommission.HasValue).ToList();
+                if (verrouillees.Any())
+                    throw new InvalidOperationException(
+                        $"{verrouillees.Count} pièce(s) sont rattachées à une commission et ne peuvent " +
+                        "pas voir leur statut rétrogradé. Annulez d'abord la commission si nécessaire.");
             }
+
+            if (piecesATraiter.Count == 0) return;
 
             // Livraison : même règle que pour une pièce seule
             decimal? resteLivraisonForcee = null;
-            if (nouveauStatut == "Livree" && pieces.Any(p => p.Statut != "Livree"))
+            if (nouveauStatut == "Livree" && piecesATraiter.Any())
                 resteLivraisonForcee = VerifierLivraisonSoldee(commande!, operateur, motifLivraisonNonSoldee);
 
-            foreach (var piece in pieces)
+            foreach (var piece in piecesATraiter)
             {
                 string ancienStatut = piece.Statut;
                 // Tâche 5 : flux strict — Boss peut forcer en arrière avec motif
@@ -1436,12 +1446,14 @@ namespace GestionCoutureApp.Services
                 .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
 
-            // Les pièces rattachées à une commission ne changent pas de statut en cascade
-            if (piece.IdCommission.HasValue)
+            // Une pièce commissionnée peut avancer vers Livree (la commission est déjà calculée).
+            // En revanche toute autre modification (rétrogradation, changement vers autre statut)
+            // reste bloquée : il faudrait d'abord annuler la commission.
+            if (piece.IdCommission.HasValue && nouveauStatut != "Livree")
                 throw new InvalidOperationException(
                     "Cette pièce est rattachée à une commission déjà calculée. " +
-                    "Son statut ne peut pas être modifié directement. " +
-                    "Annulez d'abord la commission si nécessaire.");
+                    "Son statut ne peut pas être modifié. " +
+                    "Seul le passage en \"Livrée\" est autorisé pour une pièce commissionnée.");
 
             string ancienStatut = piece.Statut;
             if (ancienStatut == nouveauStatut) return; // rien à faire

@@ -151,9 +151,10 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// Pièces non terminées / non livrées dont le RDV est déjà dépassé,
-        /// pour les commandes NON supprimées. TypeAlerte = "Retard".
-        /// Tri : RDV le plus ancien en premier.
+        /// Pièces non livrées dont le RDV est déjà dépassé, pour les commandes NON supprimées.
+        /// Inclut les pièces Terminées dont le client n'est pas encore venu récupérer
+        /// (RDV dépassé = urgence retrait, priorité maximale dans les alertes).
+        /// TypeAlerte = "Retard". Tri : RDV le plus ancien en premier.
         /// </summary>
         public async Task<List<AlerteRendezVous>> ObtenirRetards()
         {
@@ -165,8 +166,7 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Couturier)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree"
-                         && p.Statut != "Terminee"
+                .Where(p => p.Statut != "Livree"          // Livrées exclues : affaire réglée
                          && p.Commande != null
                          && p.Commande.EstSupprimee == false)
                 .AsNoTracking()
@@ -179,7 +179,10 @@ namespace GestionCoutureApp.Services
                 var dateRdv  = ObtenirDateRendezVous(piece, commande);
                 if (dateRdv >= maintenant) continue; // RDV non encore dépassé
 
-                resultat.Add(ConstruireAlerte(piece, commande, dateRdv, maintenant, "Retard"));
+                var alerte = ConstruireAlerte(piece, commande, dateRdv, maintenant, "Retard");
+                // WhatsApp proposé si Terminée et RDV dépassé (client pas venu)
+                alerte.ProposerContactWhatsApp = piece.Statut == "Terminee";
+                resultat.Add(alerte);
             }
 
             return resultat

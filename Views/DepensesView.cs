@@ -99,13 +99,13 @@ namespace GestionCoutureApp.Views
             {
                 var stats = _depenseService.ObtenirStats(_debutPeriode, _finPeriode);
 
-                TxtCaEncaisse.Text    = stats.CaEncaisse.ToString("N0");
+                TxtCaEncaisse.Text    = stats.CaEncaisseCouture.ToString("N0");
                 TxtCharges.Text       = stats.ChargesExploitation.ToString("N0");
                 TxtChargesDetail.Text = $"FCFA (dépenses {stats.TotalDepenses:N0} + salaire {stats.SalaireSecretaire:N0})";
 
-                // Marge Brute = CA − matériaux − commissions (avant charges fixes)
+                // Marge Brute = CA couture − commissions (avant charges fixes)
                 TxtMargeBrute.Text = stats.MargeBrute.ToString("N0");
-                TxtMargeBruteDetail.Text = $"FCFA (chiffre d'affaires {stats.CaEncaisse:N0} − matériaux {stats.TotalMateriaux:N0} − commissions {stats.TotalCommissions:N0})";
+                TxtMargeBruteDetail.Text = $"FCFA (CA couture {stats.CaEncaisseCouture:N0} − commissions {stats.TotalCommissions:N0})";
 
                 // Bénéfice Net = Marge Brute − charges d'exploitation
                 TxtBeneficeNet.Text = stats.BeneficeNet.ToString("N0");
@@ -377,9 +377,9 @@ namespace GestionCoutureApp.Views
                 sb.AppendLine();
                 sb.AppendLine($";;BILAN PÉRIODE {_debutPeriode:dd/MM/yyyy} → {_finPeriode:dd/MM/yyyy};;;");
                 var stats = _depenseService.ObtenirStats(_debutPeriode, _finPeriode);
-                sb.AppendLine($";;CA Encaissé;{stats.CaEncaisse:N0};;");
+                sb.AppendLine($";;CA Couture (hors matériaux);{stats.CaEncaisseCouture:N0};;");
+                sb.AppendLine($";;Dont matériaux (remboursés);{stats.TotalMateriaux:N0};;");
                 sb.AppendLine($";;Commissions;{stats.TotalCommissions:N0};;");
-                sb.AppendLine($";;Matériaux (informatif);{stats.TotalMateriaux:N0};;");
                 sb.AppendLine($";;Dépenses;{stats.TotalDepenses:N0};;");
                 sb.AppendLine($";;Salaire Secrétaire;{stats.SalaireSecretaire:N0};;");
                 sb.AppendLine($";;BÉNÉFICE NET;{stats.BeneficeNet:N0};;");

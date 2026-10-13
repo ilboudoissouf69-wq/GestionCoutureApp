@@ -96,12 +96,13 @@ namespace GestionCoutureApp.Views
         {
             var maintenant = DateTime.Now;
 
-            // 1. Union dédoublonnée (IdPieceCommande) — priorité : production
-            //    d'abord, retrait ensuite, retards en dernier pour les pièces
-            //    qui seraient dans plusieurs listes.
-            var toutes = _alertesProduction
+            // 1. Union dédoublonnée (IdPieceCommande).
+            // Priorité d'ordre : retards d'abord (RDV dépassé = plus urgent),
+            // puis retrait, puis production — pour que la déduplification
+            // garde la version "retard" quand une pièce est dans plusieurs listes.
+            var toutes = _alertesRetard
                 .Concat(_alertesRetrait)
-                .Concat(_alertesRetard)
+                .Concat(_alertesProduction)
                 .GroupBy(a => a.IdPieceCommande)
                 .Select(g => g.First())
                 .ToList();
@@ -114,31 +115,33 @@ namespace GestionCoutureApp.Views
 
             foreach (var a in toutes)
             {
-                // Priorité 1 — Prêtes : pièce Terminee (peu importe le RDV)
+                // Priorité 1 — EN RETARD : RDV dépassé (que la pièce soit Terminée ou non).
+                // Une pièce Terminée avec RDV dépassé = client pas venu → urgence maximale.
+                // NiveauAlerte == "retard" pour les non-terminées.
+                // Pour les Terminées dont le RDV est dépassé : TypeAlerte == "Retard".
+                bool rdvDepasse = a.DateRendezVous < maintenant;
+                if (rdvDepasse)
+                {
+                    retards.Add(a);
+                    continue;
+                }
+
+                // Priorité 2 — PRÊTS À RETIRER : pièce Terminée avec RDV futur ou aujourd'hui
                 if (a.PiecePrete)
                 {
                     prets.Add(a);
                     continue;
                 }
 
-                // Priorité 2 — En retard : RDV dépassé et non terminée
-                if (a.NiveauAlerte == "retard")
-                {
-                    retards.Add(a);
-                    continue;
-                }
-
-                // Priorité 3 — Aujourd'hui : RDV date == aujourd'hui, non terminée
+                // Priorité 3 — AUJOURD'HUI : RDV ce jour, non terminée
                 if (a.DateRendezVous.Date == maintenant.Date)
                 {
                     auJourdhui.Add(a);
                     continue;
                 }
 
-                // Priorité 4 — À venir 7 jours : RDV dans la fenêtre > aujourd'hui
-                //   et <= +7 jours. Exception : colis stagnant (TypeAlerte ==
-                //   "PasEncorePriseEnCharge") dont le RDV dépasse la fenêtre →
-                //   affiché quand même pour ne pas être perdu.
+                // Priorité 4 — À VENIR 7 JOURS : RDV dans la fenêtre > aujourd'hui
+                // et <= +7 jours. Exception : colis stagnant hors fenêtre affiché quand même.
                 bool rdvSemaine = a.DateRendezVous.Date > maintenant.Date
                                && a.DateRendezVous.Date <= maintenant.AddDays(7).Date;
                 bool stagnantHorsFenetre = a.TypeAlerte == "PasEncorePriseEnCharge"
@@ -151,17 +154,21 @@ namespace GestionCoutureApp.Views
             }
 
             // 3. Tris par section
+            // Retards : Terminées (client pas venu) en premier, puis les autres par date
+            retards    = retards
+                .OrderByDescending(a => a.PiecePrete)   // Terminées en tête (prêtes mais pas venues)
+                .ThenBy(a => a.DateRendezVous)           // puis par ancienneté du RDV
+                .ToList();
             prets      = prets
                 .OrderByDescending(a => a.ProposerContactWhatsApp)
                 .ThenBy(a => a.DateRendezVous)
                 .ToList();
-            retards    = retards.OrderBy(a => a.DateRendezVous).ToList();
             auJourdhui = auJourdhui.OrderBy(a => a.DateRendezVous).ToList();
             imminentes = imminentes.OrderBy(a => a.DateRendezVous).ToList();
 
             // 4. Groupement en cartes
             var cartesPrets      = Grouper(prets,      "💬 Prévenir : commande prête");
-            var cartesRetards    = Grouper(retards,    "💬 Informer Client");
+            var cartesRetards    = Grouper(retards,    "💬 Relancer le client");
             var cartesAujourdhui = Grouper(auJourdhui, "💬 Rappel RDV");
             var cartesImminentes = Grouper(imminentes, ""); // pas de bouton WhatsApp
 
@@ -177,8 +184,9 @@ namespace GestionCoutureApp.Views
             AppliquerSection(ListeAujourdhui, TxtZeroAujourdhui, cartesAujourdhui);
             AppliquerSection(ListeImminentes, TxtZeroImminentes, cartesImminentes);
 
-            // 7. Badge menu principal (en pièces, retards + aujourd'hui)
-            int totalBadge = toutes.Count(a => a.NiveauAlerte is "retard" or "jourbj");
+            // 7. Badge menu principal : retards (RDV dépassé, toutes pièces) + livraisons du jour
+            // Les Terminées avec RDV dépassé comptent aussi (client pas venu = urgence)
+            int totalBadge = toutes.Count(a => a.DateRendezVous < maintenant || a.NiveauAlerte == "jourbj");
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.MettreAJourBadgeAlertes(totalBadge);
         }

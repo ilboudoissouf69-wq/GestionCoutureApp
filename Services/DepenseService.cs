@@ -131,14 +131,17 @@ namespace GestionCoutureApp.Services
                 .AsEnumerable()
                 .Sum(c => c.MontantCommission + c.PrimeQualite);
 
-            // Les matériaux sont un flux de trésorerie informatif (atelier avance → client rembourse)
-            // et ne sont pas déduits du bénéfice atelier. TotalMateriaux est affiché séparément.
+            // Les matériaux ne sont comptés que sur les commandes ayant au moins un paiement reçu.
+            // Une commande terminée sans aucun paiement ne doit pas faire gonfler les matériaux
+            // affichés dans les stats — ils ne sont pas encore remboursés par le client.
             decimal totalMateriaux = context.MaterielsSupplements
                 .Include(m => m.Commande)
+                    .ThenInclude(c => c!.Paiements)
                 .Where(m => m.Commande != null &&
                             m.Commande.DateFin.Date >= debut.Date &&
                             m.Commande.DateFin.Date <= fin.Date)
                 .AsEnumerable()
+                .Where(m => m.Commande!.Paiements.Any(p => !p.EstAnnule))   // au moins 1 paiement réel
                 .Sum(m => m.Quantite * m.PrixUnitaire);
 
             // Matériaux non remboursés : matériaux sur commandes non soldées ou abandonnées

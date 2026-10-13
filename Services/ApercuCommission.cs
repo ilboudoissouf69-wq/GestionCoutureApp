@@ -61,6 +61,16 @@ namespace GestionCoutureApp.Services
         public string PrimeQualiteAffiche   => PrimeQualite > 0
             ? "+" + PrimeQualite.ToString("N0") : "—";
         public string TotalAffiche          => TotalAvecPrime.ToString("N0");
+
+        // ⚠️ Impayé : vrai quand le couturier a du travail terminé mais pas encore encaissé.
+        // CaEncaisse = part couture réellement payée par le client.
+        // CaTotal    = valeur totale de couture des pièces terminées.
+        // Quand CaEncaisse < CaTotal → partie du travail non encore payée.
+        // La commission sur la différence est calculée sur de l'argent pas encore reçu
+        // (uniquement en mode "base = total couture", pas en mode "base = encaissé").
+        public bool    AImpaye       => CaEncaisse < CaTotal - 0.01m;
+        public decimal MontantImpaye => Math.Max(0m, CaTotal - CaEncaisse);
+        public string  ImPayeAffiche => AImpaye ? MontantImpaye.ToString("N0") + " ⚠" : "";
     }
 
     public interface ICommissionService

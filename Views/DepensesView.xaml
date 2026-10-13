@@ -62,12 +62,12 @@
                         </LinearGradientBrush>
                     </Border.Background>
                     <StackPanel>
-                        <TextBlock Text="CHIFFRE D'AFFAIRES ENCAISSÉ" FontSize="9" FontWeight="Bold"
+                        <TextBlock Text="CHIFFRE D'AFFAIRES COUTURE" FontSize="9" FontWeight="Bold"
                                    Foreground="#94A3B8"/>
                         <TextBlock x:Name="TxtCaEncaisse" Text="0"
                                    FontSize="22" FontWeight="Bold" Foreground="White"
                                    Margin="0,4,0,2"/>
-                        <TextBlock Text="FCFA — tout l'argent reçu des clients"
+                        <TextBlock Text="FCFA — couture uniquement (hors matériaux)"
                                    FontSize="10" Foreground="#64748B" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
