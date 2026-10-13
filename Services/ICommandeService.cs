@@ -20,6 +20,18 @@ namespace GestionCoutureApp.Services
         Task<PagedResult<Commande>> ObtenirPageLightAsync(int page, int pageSize);
 
         /// <summary>
+        /// Version avec tous les filtres : recherche, statut, couturier,
+        /// période de dépôt (dateDebut/dateFin sur DateDebut).
+        /// </summary>
+        Task<PagedResult<Commande>> ObtenirPageLightAsync(
+            int page, int pageSize,
+            string? motCle,
+            string? statut,
+            int? idCouturier,
+            DateTime? dateDebut,
+            DateTime? dateFin);
+
+        /// <summary>
         /// Crée une nouvelle commande avec sa première pièce et ses mesures.
         /// <paramref name="idOperateur"/> et <paramref name="nomOperateur"/> sont
         /// automatiquement renseignés depuis <c>AuthService.UtilisateurConnecte</c>
@@ -48,6 +60,13 @@ namespace GestionCoutureApp.Services
         /// <param name="nomOperateur">Nom pour l'audit.</param>
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
             int idOperateur, string nomOperateur);
+
+        /// <summary>
+        /// Modifie UNIQUEMENT les métadonnées de la commande (client, dates, heures)
+        /// sans toucher aux pièces. À utiliser depuis la modale multi-pièces.
+        /// </summary>
+        void ModifierInfosCommande(int idCommande, int idClient, DateTime dateFin,
+            TimeSpan heureDebut, TimeSpan? heureFin, int idOperateur, string nomOperateur);
 
         // Suppression logique avec autorisation Boss et traçabilité
         Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null);

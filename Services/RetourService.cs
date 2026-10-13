@@ -47,6 +47,69 @@ namespace GestionCoutureApp.Services
             return AvecIncludes(context).FirstOrDefault(r => r.IdRetour == id);
         }
 
+        public async Task<PagedResult<Retour>> ObtenirPageAsync(
+            int page, int pageSize,
+            string? motCle = null,
+            string? statut = null,
+            DateTime? dateDebut = null,
+            DateTime? dateFin = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            var query = context.Retours
+                .Include(r => r.Commande).ThenInclude(c => c!.Client)
+                .Include(r => r.PieceCommande)
+                .Include(r => r.Couturier)
+                .AsQueryable();
+
+            // Filtre texte
+            if (!string.IsNullOrWhiteSpace(motCle))
+            {
+                string m = motCle.Trim().ToLower();
+                query = query.Where(r =>
+                    (r.Commande != null && r.Commande.Client != null &&
+                     (r.Commande.Client.Nom.ToLower().Contains(m) ||
+                      r.Commande.Client.Prenom.ToLower().Contains(m))) ||
+                    (r.PieceCommande != null && r.PieceCommande.TypeVetement.ToLower().Contains(m)) ||
+                    r.DescriptionProbleme.ToLower().Contains(m) ||
+                    (r.Couturier != null && (r.Couturier.Nom + " " + r.Couturier.Prenom).ToLower().Contains(m)));
+            }
+
+            // Filtre statut — mappe les libellés affichés vers valeurs DB
+            if (!string.IsNullOrEmpty(statut) && statut != "Tous")
+            {
+                string statutDb = statut switch
+                {
+                    "Signalé"         => "Signale",
+                    "Prêt ✓"          => "Pret",
+                    "Rendu au client" => "Rendu",
+                    _                 => statut
+                };
+                query = query.Where(r => r.Statut == statutDb && !r.EstAnnule);
+            }
+
+            // Filtre période sur DateSignalement
+            if (dateDebut.HasValue)
+                query = query.Where(r => r.DateSignalement.Date >= dateDebut.Value.Date);
+            if (dateFin.HasValue)
+                query = query.Where(r => r.DateSignalement.Date <= dateFin.Value.Date);
+
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(r => r.DateSignalement)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PagedResult<Retour>
+            {
+                Items      = items,
+                TotalCount = totalCount,
+                Page       = page,
+                PageSize   = pageSize
+            };
+        }
+
         public void Ajouter(Retour retour)
         {
             using var context = _contextFactory.CreateDbContext();

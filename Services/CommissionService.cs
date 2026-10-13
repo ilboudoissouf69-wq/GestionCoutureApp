@@ -97,10 +97,17 @@ namespace GestionCoutureApp.Services
                 decimal base_ = surMontantEncaisse ? caEncaisse : caTotal;
                 decimal commission = Math.Round(base_ * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero);
 
-                // Matériaux rattachés aux pièces de ce couturier (exclus de la commission)
+                // Matériaux rattachés aux COMMANDES de ce couturier (exclus de la commission).
+                // Les MaterielSupplement sont rattachés à la Commande (pas aux PieceCommande),
+                // donc on remonte aux commandes parentes pour obtenir le vrai total matériaux.
+                // Ce montant est affiché en KPI "dont matériaux" pour la transparence —
+                // il n'entre JAMAIS dans le calcul de la commission ni dans ResteAtelier.
                 decimal totalMateriaux = piecesCouturier
-                    .SelectMany(p => p.MaterielSupplements ?? new List<MaterielSupplement>())
-                    .Sum(m => m.Quantite * m.PrixUnitaire);
+                    .Select(p => p.Commande)
+                    .Where(c => c != null)
+                    .Distinct()
+                    .SelectMany(c => c!.MaterielSupplements ?? new List<MaterielSupplement>())
+                    .Sum(m => m.Montant);
 
                 // TotalEncaisse représente l'encaissé couture uniquement (hors matériaux).
                 // Les matériaux sont un flux distinct refacturé au client et n'entrent

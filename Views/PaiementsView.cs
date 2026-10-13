@@ -26,9 +26,17 @@ namespace GestionCoutureApp.Views
         private Employe?   _operateurConnecte;
         private Commande?  _commandeSelectionnee;   // commande active dans la modale encaissement
 
+        // ── Cache commandes encaissables (pour la recherche) ────────
+        private sealed record CommandeItem(int IdCommande, string DisplayText);
+        private List<CommandeItem> _toutesCommandesEncaissables = new();
+
         // ── Pagination ──────────────────────────────────────────────
         private const int PAGE_SIZE  = 15;
         private int       _currentPage = 1;
+
+        // ── Filtres date ─────────────────────────────────────────────
+        private DateTime? _filtreDate1 = null;
+        private DateTime? _filtreDate2 = null;
 
         // ── Anti double-clic ────────────────────────────────────────
         private bool _enCoursEnregistrement = false;
@@ -150,7 +158,8 @@ namespace GestionCoutureApp.Views
                         : StatutFiltrePaiement.Valides;
 
                 var result = await _paiementService.ObtenirPageLightAsync(
-                    _currentPage, PAGE_SIZE, recherche, filtre);
+                    _currentPage, PAGE_SIZE, recherche, filtre,
+                    _filtreDate1, _filtreDate2);
 
                 GridPaiements.ItemsSource = result.Items;
 
@@ -219,8 +228,62 @@ namespace GestionCoutureApp.Views
 
         private async void FiltreStatut_Changed(object sender, RoutedEventArgs e)
         {
-            // Guard : peut être déclenché par InitializeComponent avant que les contrôles soient prêts
             if (_rechercheTimer == null) return;
+            _currentPage = 1;
+            await ChargerPaiements();
+        }
+
+        // ── Handlers filtres DATE ──────────────────────────────────
+
+        private async void BtnFiltreAujourdhui_Click(object sender, RoutedEventArgs e)
+        {
+            bool dejaActif = _filtreDate1 == DateTime.Today && _filtreDate2 == DateTime.Today;
+            if (dejaActif)
+            {
+                _filtreDate1 = null;
+                _filtreDate2 = null;
+                DpFiltreDebut.SelectedDate  = null;
+                DpFiltreFin.SelectedDate    = null;
+                TxtBtnAujourdhui.Text       = "Aujourd'hui";
+                BtnFiltreAujourdhui.Opacity = 1.0;
+                BtnEffacerDate.Visibility   = Visibility.Collapsed;
+            }
+            else
+            {
+                _filtreDate1 = DateTime.Today;
+                _filtreDate2 = DateTime.Today;
+                DpFiltreDebut.SelectedDate  = DateTime.Today;
+                DpFiltreFin.SelectedDate    = DateTime.Today;
+                TxtBtnAujourdhui.Text       = "✓ Aujourd'hui";
+                BtnFiltreAujourdhui.Opacity = 0.75;
+                BtnEffacerDate.Visibility   = Visibility.Visible;
+            }
+            _currentPage = 1;
+            await ChargerPaiements();
+        }
+
+        private async void FiltreDate_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (DpFiltreDebut == null || DpFiltreFin == null) return;
+            _filtreDate1 = DpFiltreDebut.SelectedDate;
+            _filtreDate2 = DpFiltreFin.SelectedDate;
+            TxtBtnAujourdhui.Text       = "Aujourd'hui";
+            BtnFiltreAujourdhui.Opacity = 1.0;
+            bool avecDate = _filtreDate1.HasValue || _filtreDate2.HasValue;
+            BtnEffacerDate.Visibility = avecDate ? Visibility.Visible : Visibility.Collapsed;
+            _currentPage = 1;
+            await ChargerPaiements();
+        }
+
+        private async void BtnEffacerDate_Click(object sender, RoutedEventArgs e)
+        {
+            _filtreDate1 = null;
+            _filtreDate2 = null;
+            DpFiltreDebut.SelectedDate  = null;
+            DpFiltreFin.SelectedDate    = null;
+            TxtBtnAujourdhui.Text       = "Aujourd'hui";
+            BtnFiltreAujourdhui.Opacity = 1.0;
+            BtnEffacerDate.Visibility   = Visibility.Collapsed;
             _currentPage = 1;
             await ChargerPaiements();
         }
@@ -239,21 +302,60 @@ namespace GestionCoutureApp.Views
                     .Where(c => !c.EstSupprimee && c.ResteAPayer > 0.01m)
                     .ToList();
 
-                CmbCommandesNonSoldees.ItemsSource = commandes.Select(c => new
-                {
+                _toutesCommandesEncaissables = commandes.Select(c => new CommandeItem(
                     c.IdCommande,
-                    DisplayText = (c.Client?.Prenom ?? "") + " " + (c.Client?.Nom ?? "")
-                                  + " — " + (c.TypeVetementAffiche ?? "(aucun vêtement)")
-                                  + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA"
-                                  + " · reste : " + c.ResteAPayer.ToString("N0") + " FCFA)"
-                }).ToList();
+                    $"CMD #{c.IdCommande}  —  "
+                        + (c.Client?.Prenom ?? "") + " " + (c.Client?.Nom ?? "")
+                        + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA"
+                        + " · reste : " + c.ResteAPayer.ToString("N0") + " FCFA)"
+                )).ToList();
+
+                CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
                 CmbCommandesNonSoldees.SelectedValuePath = "IdCommande";
+
+                // Réinitialiser la zone de recherche si elle existe
+                if (TxtRechercheCommande != null)
+                    TxtRechercheCommande.Text = "";
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        // ── Recherche par numéro ou nom dans la liste des commandes ──
+        private void TxtRechercheCommande_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            string saisie = TxtRechercheCommande?.Text?.Trim() ?? "";
+
+            if (string.IsNullOrEmpty(saisie))
+            {
+                CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
+                return;
+            }
+
+            string recherche = saisie.ToLowerInvariant();
+            var filtres = _toutesCommandesEncaissables
+                .Where(item => item.DisplayText.ToLowerInvariant().Contains(recherche))
+                .ToList();
+
+            CmbCommandesNonSoldees.ItemsSource = filtres;
+
+            // Si un seul résultat correspond → sélectionner automatiquement
+            if (filtres.Count == 1)
+            {
+                CmbCommandesNonSoldees.SelectedIndex = 0;
+                CmbCommande_SelectionChanged(CmbCommandesNonSoldees, null!);
+            }
+        }
+
+        private void BtnEffacerRechercheCommande_Click(object sender, RoutedEventArgs e)
+        {
+            if (TxtRechercheCommande != null)
+                TxtRechercheCommande.Text = "";
+            CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
+            CmbCommandesNonSoldees.SelectedIndex = -1;
         }
 
         // ================================================================
@@ -544,6 +646,7 @@ namespace GestionCoutureApp.Views
 
             var commande = _context.Commandes
                 .Include(c => c.Client)
+                .Include(c => c.Paiements)               // ← nécessaire pour MontantEncaisse et StatutPaiement
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
                 .Include(c => c.MaterielSupplements)

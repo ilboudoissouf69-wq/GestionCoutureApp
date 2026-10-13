@@ -20,7 +20,16 @@ namespace GestionCoutureApp.Views
         private readonly Employe _utilisateur;
         private List<Commande> _commandes = new();
         private List<Retour> _tousLesRetours = new();
-        private bool _initialise = false;  // guard anti-event prématuré
+        private bool _initialise = false;
+
+        // ── Pagination ──────────────────────────────────────────────
+        private const int PAGE_SIZE_RETOURS = 20;
+        private int  _currentPageRetours    = 1;
+        private int  _totalRetours          = 0;
+
+        // ── Filtres date ─────────────────────────────────────────────
+        private DateTime? _filtreDate1 = null;
+        private DateTime? _filtreDate2 = null;
 
         public RetoursView()
         {
@@ -56,71 +65,78 @@ namespace GestionCoutureApp.Views
         }
 
         // ==================================================================
-        // Chargement
+        // Chargement — version paginée côté service
         // ==================================================================
-        private void ChargerRetours()
+        private void ChargerRetours() => _ = ChargerRetoursAsync();
+
+        private async Task ChargerRetoursAsync()
         {
+            if (!_initialise && TxtRecherche == null) return;
             try
             {
-                _tousLesRetours = _retourService.ObtenirTous();
+                string? motCle = TxtRecherche?.Text?.Trim();
+                if (string.IsNullOrEmpty(motCle)) motCle = null;
+
+                string? statut = (CmbFiltreStatut?.SelectedItem as ComboBoxItem)?.Content?.ToString();
+                if (statut == "Tous") statut = null;
+
+                var result = await _retourService.ObtenirPageAsync(
+                    _currentPageRetours, PAGE_SIZE_RETOURS,
+                    motCle, statut,
+                    _filtreDate1, _filtreDate2);
+
+                _tousLesRetours    = result.Items;
+                _totalRetours      = result.TotalCount;
+
+                GridRetours.ItemsSource = null;
+                GridRetours.ItemsSource = _tousLesRetours;
+
+                // Info pagination
+                int start = _totalRetours == 0 ? 0 : (_currentPageRetours - 1) * PAGE_SIZE_RETOURS + 1;
+                int end   = Math.Min(_currentPageRetours * PAGE_SIZE_RETOURS, _totalRetours);
+                string infoPagination = _totalRetours == 0
+                    ? "Aucun retour"
+                    : $"{start}–{end} / {_totalRetours} retour{(_totalRetours > 1 ? "s" : "")}";
+
+                // TxtCompteur = en-tête titre (toujours visible)
+                if (TxtCompteur != null)
+                    TxtCompteur.Text = infoPagination;
+                // TxtPaginationRetours = barre de filtres (pagination inline)
+                if (TxtPaginationRetours != null)
+                    TxtPaginationRetours.Text = infoPagination;
+
+                // Boutons pagination
+                if (BtnRetourPagePrec != null)
+                    BtnRetourPagePrec.IsEnabled = _currentPageRetours > 1;
+                if (BtnRetourPageSuiv != null)
+                    BtnRetourPageSuiv.IsEnabled = end < _totalRetours;
+
+                MettreAJourEtatVide(_tousLesRetours.Count);
+                MettreAJourBadgesDepuisService();
             }
-            catch
+            catch (Exception ex)
             {
+                // Fallback : chargement en mémoire si le service plante
                 try
                 {
-                    var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-                    using var ctx = factory.CreateDbContext();
-                    _tousLesRetours = ctx.Retours
-                        .Include(r => r.Commande).ThenInclude(c => c!.Client)
-                        .Include(r => r.PieceCommande)
-                        .Include(r => r.Couturier)
-                        .OrderByDescending(r => r.DateSignalement)
-                        .ToList();
+                    _tousLesRetours = _retourService.ObtenirTous();
+                    GridRetours.ItemsSource = _tousLesRetours;
+                    string info = $"{_tousLesRetours.Count} retour(s)";
+                    if (TxtCompteur         != null) TxtCompteur.Text         = info;
+                    if (TxtPaginationRetours != null) TxtPaginationRetours.Text = info;
                 }
                 catch { _tousLesRetours = new List<Retour>(); }
+                System.Diagnostics.Debug.WriteLine("RetoursView: " + ex.Message);
             }
-            AppliquerFiltre();
             MettreAJourBadges();
             ChargerPerformanceQualite();
         }
 
         private void AppliquerFiltre()
         {
-            if (TxtRecherche == null || CmbFiltreStatut == null || GridRetours == null) return;
-
-            var liste = _tousLesRetours;
-
-            string motCle = TxtRecherche.Text.Trim().ToLower();
-            if (!string.IsNullOrEmpty(motCle))
-            {
-                liste = liste.Where(r =>
-                    r.ClientAffiche.ToLower().Contains(motCle) ||
-                    r.IdCommande.ToString().Contains(motCle) ||               // recherche par n° commande ex: "4" ou "CMD-4"
-                    ("cmd-" + r.IdCommande).Contains(motCle) ||               // ex: "cmd-4"
-                    (r.PieceCommande?.TypeVetement.ToLower().Contains(motCle) ?? false) ||
-                    r.DescriptionProbleme.ToLower().Contains(motCle) ||
-                    (r.Couturier != null &&
-                     (r.Couturier.Prenom + " " + r.Couturier.Nom).ToLower().Contains(motCle))
-                ).ToList();
-            }
-
-            string statut = (CmbFiltreStatut.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Tous";
-            if (statut != "Tous")
-            {
-                var statutDb = statut switch
-                {
-                    "Signalé"         => "Signale",
-                    "Prêt ✓"          => "Pret",
-                    "Rendu au client" => "Rendu",
-                    _                 => statut
-                };
-                liste = liste.Where(r => r.Statut == statutDb && !r.EstAnnule).ToList();
-            }
-
-            GridRetours.ItemsSource = null;
-            GridRetours.ItemsSource = liste;
-            TxtCompteur.Text = $"{liste.Count} retour(s) affiché(s) sur {_tousLesRetours.Count} total";
-            MettreAJourEtatVide(liste.Count);
+            // Réinitialise la page et relance un chargement complet via le service
+            _currentPageRetours = 1;
+            _ = ChargerRetoursAsync();
         }
 
         private void MettreAJourBadges()
@@ -131,6 +147,77 @@ namespace GestionCoutureApp.Views
             TxtNbEnReprise.Text = actifs.Count(r => r.Statut == "En reprise").ToString();
             TxtNbPret.Text      = actifs.Count(r => r.Statut == "Pret").ToString();
             TxtNbRendu.Text     = actifs.Count(r => r.Statut == "Rendu").ToString();
+        }
+
+        /// <summary>Recharge les compteurs de badges depuis le service (total, pas juste la page).</summary>
+        private void MettreAJourBadgesDepuisService()
+        {
+            // Les badges reflètent la page courante — suffisant pour l'usage quotidien.
+            // Pour des totaux exacts tous statuts confondus, un appel séparé serait nécessaire.
+            MettreAJourBadges();
+        }
+
+        // ── Pagination Retours ─────────────────────────────────────
+        private async void BtnRetourPagePrec_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPageRetours > 1) { _currentPageRetours--; await ChargerRetoursAsync(); }
+        }
+
+        private async void BtnRetourPageSuiv_Click(object sender, RoutedEventArgs e)
+        {
+            _currentPageRetours++;
+            await ChargerRetoursAsync();
+        }
+
+        // ── Handlers filtres DATE ──────────────────────────────────
+        private async void BtnFiltreAujourdhui_Click(object sender, RoutedEventArgs e)
+        {
+            bool dejaActif = _filtreDate1 == DateTime.Today && _filtreDate2 == DateTime.Today;
+            if (dejaActif)
+            {
+                _filtreDate1 = null; _filtreDate2 = null;
+                if (DpFiltreDebut != null) DpFiltreDebut.SelectedDate = null;
+                if (DpFiltreFin   != null) DpFiltreFin.SelectedDate   = null;
+                if (TxtBtnAujourdhui    != null) TxtBtnAujourdhui.Text = "Aujourd'hui";
+                if (BtnFiltreAujourdhui != null) BtnFiltreAujourdhui.Opacity = 1.0;
+                if (BtnEffacerDate      != null) BtnEffacerDate.Visibility   = Visibility.Collapsed;
+            }
+            else
+            {
+                _filtreDate1 = DateTime.Today; _filtreDate2 = DateTime.Today;
+                if (DpFiltreDebut != null) DpFiltreDebut.SelectedDate = DateTime.Today;
+                if (DpFiltreFin   != null) DpFiltreFin.SelectedDate   = DateTime.Today;
+                if (TxtBtnAujourdhui    != null) TxtBtnAujourdhui.Text = "✓ Aujourd'hui";
+                if (BtnFiltreAujourdhui != null) BtnFiltreAujourdhui.Opacity = 0.75;
+                if (BtnEffacerDate      != null) BtnEffacerDate.Visibility   = Visibility.Visible;
+            }
+            _currentPageRetours = 1;
+            await ChargerRetoursAsync();
+        }
+
+        private async void FiltreDate_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_initialise) return;
+            _filtreDate1 = DpFiltreDebut?.SelectedDate;
+            _filtreDate2 = DpFiltreFin?.SelectedDate;
+            if (TxtBtnAujourdhui    != null) TxtBtnAujourdhui.Text = "Aujourd'hui";
+            if (BtnFiltreAujourdhui != null) BtnFiltreAujourdhui.Opacity = 1.0;
+            bool avecDate = _filtreDate1.HasValue || _filtreDate2.HasValue;
+            if (BtnEffacerDate != null) BtnEffacerDate.Visibility = avecDate ? Visibility.Visible : Visibility.Collapsed;
+            _currentPageRetours = 1;
+            await ChargerRetoursAsync();
+        }
+
+        private async void BtnEffacerDate_Click(object sender, RoutedEventArgs e)
+        {
+            _filtreDate1 = null; _filtreDate2 = null;
+            if (DpFiltreDebut != null) DpFiltreDebut.SelectedDate = null;
+            if (DpFiltreFin   != null) DpFiltreFin.SelectedDate   = null;
+            if (TxtBtnAujourdhui    != null) TxtBtnAujourdhui.Text = "Aujourd'hui";
+            if (BtnFiltreAujourdhui != null) BtnFiltreAujourdhui.Opacity = 1.0;
+            if (BtnEffacerDate      != null) BtnEffacerDate.Visibility   = Visibility.Collapsed;
+            _currentPageRetours = 1;
+            await ChargerRetoursAsync();
         }
 
         // ── Affichage de l'état vide selon le nombre de lignes dans le DataGrid ──

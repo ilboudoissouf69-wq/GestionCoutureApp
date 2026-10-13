@@ -111,6 +111,78 @@ namespace GestionCoutureApp.Services
             };
         }
 
+        /// <summary>
+        /// Surcharge complète avec filtres : recherche texte, statut, couturier, période.
+        /// Utilisée par CommandesView pour "Aujourd'hui" et le sélecteur de dates.
+        /// </summary>
+        public async Task<PagedResult<Commande>> ObtenirPageLightAsync(
+            int page, int pageSize,
+            string? motCle,
+            string? statut,
+            int? idCouturier,
+            DateTime? dateDebut,
+            DateTime? dateFin)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            DateTime maintenant = DateTime.Now;
+
+            var query = context.Commandes
+                .Where(c => !c.EstSupprimee)
+                .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
+                .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .AsQueryable();
+
+            // Filtre texte
+            if (!string.IsNullOrWhiteSpace(motCle))
+                query = query.Where(c =>
+                    (c.Client != null && (c.Client.Nom.Contains(motCle) || c.Client.Prenom.Contains(motCle))) ||
+                    c.Pieces.Any(p => p.TypeVetement.Contains(motCle)));
+
+            // Filtre statut (logique même qu'ObtenirPageCommandesStatutAsync)
+            if (!string.IsNullOrEmpty(statut))
+            {
+                if (statut == "Retard")
+                    query = query.Where(c =>
+                        c.DateFin < maintenant &&
+                        c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
+                else
+                    query = query.Where(c => c.Pieces.Any(p => p.Statut == statut));
+            }
+
+            // Filtre couturier
+            if (idCouturier.HasValue)
+                query = query.Where(c => c.Pieces.Any(p => p.IdCouturier == idCouturier.Value));
+
+            // Filtre période — sur DateDebut (date de dépôt)
+            if (dateDebut.HasValue)
+                query = query.Where(c => c.DateDebut.Date >= dateDebut.Value.Date);
+            if (dateFin.HasValue)
+                query = query.Where(c => c.DateDebut.Date <= dateFin.Value.Date);
+
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(c => c.DateDebut)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            // Affinage statut en mémoire si filtre exact
+            if (!string.IsNullOrEmpty(statut) && statut != "Retard")
+                items = items.Where(c =>
+                    c.StatutGlobal == statut ||
+                    c.StatutGlobal.Replace(" partiellement", "") == statut).ToList();
+
+            return new PagedResult<Commande>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
         public Commande? ObtenirParId(int id)
         {
             using var context = _contextFactory.CreateDbContext();
@@ -587,7 +659,39 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// Suppression logique d'une commande avec autorisation Boss, traçabilité complète et audit.
+        /// Modifie UNIQUEMENT les métadonnées de la commande (client, dates, heures)
+        /// sans toucher aux pièces. Utilisé depuis la modale multi-pièces pour éviter
+        /// de corrompre les pièces avec une pièce fantôme vide.
+        /// </summary>
+        public void ModifierInfosCommande(int idCommande, int idClient, DateTime dateFin,
+            TimeSpan heureDebut, TimeSpan? heureFin, int idOperateur, string nomOperateur)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+
+            var existante = context.Commandes
+                .Include(c => c.Paiements)
+                .FirstOrDefault(c => c.IdCommande == idCommande);
+            if (existante == null) return;
+
+            // Secrétaire : ne peut changer le client qu'avant tout paiement
+            bool peutChangerClient = operateur.RoleEnum == RoleEmploye.Boss
+                || !existante.Paiements.Any(p => !p.EstAnnule);
+            if (peutChangerClient)
+                existante.IdClient = idClient;
+
+            existante.DateFin    = dateFin;
+            existante.HeureDebut = heureDebut;
+            existante.HeureFin   = heureFin;
+
+            context.SaveChanges();
+
+            _logger.LogInformation(
+                "ModifierInfosCommande — Commande #{IdCommande} par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
+                idCommande, nomOperateur, idOperateur, DateTime.Now);
+        }
+
+
         /// Une commande ne doit jamais être supprimée physiquement si elle a un historique
         /// financier (paiements, même annulés). La suppression logique masque la commande
         /// de l'UI normale tout en conservant une trace immuable.

@@ -248,9 +248,14 @@ namespace GestionCoutureApp
                     catch { /* déjà présente */ }
                 }
 
-                // Mode WAL + foreign_keys activés à chaque démarrage.
+                // Mode WAL + foreign_keys.
                 // journal_mode=WAL est persistant mais on le réapplique après restauration.
-                // foreign_keys doit être activé à chaque connexion (non persistant en SQLite).
+                // foreign_keys : réglage propre à CHAQUE connexion SQLite. Le PRAGMA
+                // ci-dessous ne couvre que la connexion de ce contexte de démarrage ;
+                // les connexions créées ensuite par la factory ont malgré tout les FK
+                // actives car Microsoft.Data.Sqlite active foreign_keys par défaut à
+                // l'ouverture (True). Le test Phase3_SchemaTests.SYS02_PRAGMA_ForeignKeys
+                // verrouille ce comportement.
                 context.Database.ExecuteSql($"PRAGMA journal_mode=WAL;");
                 context.Database.ExecuteSql($"PRAGMA foreign_keys=ON;");
 

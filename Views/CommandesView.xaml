@@ -180,7 +180,7 @@
                                 </TextBlock>
                             </Grid>
 
-                            <!-- Filtres alignés à droite : Statut + Couturier -->
+                            <!-- Filtres alignés à droite : Statut + Couturier + Date -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal"
                                         VerticalAlignment="Center">
 
@@ -210,7 +210,8 @@
                                 <ComboBox x:Name="CmbFiltreCouturier"
                                           Width="150" Height="32" FontSize="11"
                                           SelectedValuePath="IdEmploye"
-                                          SelectionChanged="CmbFiltreCouturier_SelectionChanged">
+                                          SelectionChanged="CmbFiltreCouturier_SelectionChanged"
+                                          Margin="0,0,20,0">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock>
@@ -224,6 +225,43 @@
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
+
+                                <!-- Filtres date : Du … Au … -->
+                                <TextBlock Text="Du :"
+                                           FontSize="11" Foreground="#64748B"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,4,0"/>
+                                <DatePicker x:Name="DpFiltreDebut"
+                                            Width="120" Height="32" FontSize="11"
+                                            Margin="0,0,8,0"
+                                            SelectedDateChanged="FiltreDate_Changed"/>
+                                <TextBlock Text="Au :"
+                                           FontSize="11" Foreground="#64748B"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,4,0"/>
+                                <DatePicker x:Name="DpFiltreFin"
+                                            Width="120" Height="32" FontSize="11"
+                                            Margin="0,0,8,0"
+                                            SelectedDateChanged="FiltreDate_Changed"/>
+
+                                <!-- Bouton Aujourd'hui (toggle) -->
+                                <Button x:Name="BtnFiltreAujourdhui"
+                                        Height="32" Padding="10,0" FontSize="11"
+                                        Margin="0,0,6,0" Cursor="Hand"
+                                        Click="BtnFiltreAujourdhui_Click">
+                                    <TextBlock x:Name="TxtBtnAujourdhui" Text="Aujourd'hui"/>
+                                </Button>
+
+                                <!-- Bouton effacer date (visible seulement si date active) -->
+                                <Button x:Name="BtnEffacerDate"
+                                        Height="32" Padding="10,0" FontSize="11"
+                                        Visibility="Collapsed" Cursor="Hand"
+                                        Click="BtnEffacerDate_Click"
+                                        ToolTip="Effacer le filtre date">
+                                    <TextBlock Text="✕ Date"/>
+                                </Button>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -732,10 +770,31 @@
 
                                     <!-- Client -->
                                     <TextBlock Text="Client *" Style="{StaticResource FieldLabel}"/>
+                                    <!-- Zone recherche client (TextBox filtre + ComboBox résultats) -->
+                                    <Grid x:Name="GridRechercheClient" Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="TxtRechercheClient"
+                                                 Grid.Column="0"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 Height="34" FontSize="12"
+                                                 Tag="🔍  Nom, téléphone ou #ID..."
+                                                 TextChanged="TxtRechercheClient_TextChanged"
+                                                 KeyDown="TxtRechercheClient_KeyDown"/>
+                                        <Button Grid.Column="1"
+                                                Height="34" Width="34" Margin="4,0,0,0"
+                                                FontSize="12" Cursor="Hand"
+                                                ToolTip="Effacer"
+                                                Click="BtnEffacerRechercheClient_Click"
+                                                Content="✕"/>
+                                    </Grid>
                                     <ComboBox x:Name="CmbModalClient"
                                               Style="{StaticResource ModernComboBox}"
                                               SelectedValuePath="IdClient"
-                                              Margin="0,0,0,10">
+                                              Margin="0,0,0,4"
+                                              SelectionChanged="CmbModalClient_SelectionChanged">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate>
                                                 <TextBlock>
@@ -749,6 +808,15 @@
                                             </DataTemplate>
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
+                                    <!-- Bandeau confirmation client sélectionné -->
+                                    <Border x:Name="BandeauClientSelectionne"
+                                            CornerRadius="6" Padding="10,6" Margin="0,0,0,8"
+                                            BorderThickness="1" Visibility="Collapsed"
+                                            Background="#F0FDF4" BorderBrush="#86EFAC">
+                                        <TextBlock x:Name="TxtClientSelectionne"
+                                                   FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="#166534" TextWrapping="Wrap"/>
+                                    </Border>
 
                                     <!-- Date + heure -->
                                     <Grid Margin="0,0,0,4">

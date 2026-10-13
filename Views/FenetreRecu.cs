@@ -260,36 +260,66 @@ namespace GestionCoutureApp.Views
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 6);
 
-            // Montants financiers
-            decimal montantCoutureTotale = _commande.Pieces.Sum(p2 => p2.MontantCouture);
-            decimal montantMateriauxTotal = (_commande.MaterielSupplements ?? new List<MaterielSupplement>()).Sum(m => m.Montant);
-            decimal montantTotal = montantCoutureTotale + montantMateriauxTotal;
+            // ── Calcul des montants financiers ────────────────────────────
+            //
+            // Sources disponibles :
+            //   • _paiement.MontantTotalCommande  → snapshot au moment du paiement
+            //   • _paiement.ResteAvantPaiement    → snapshot du reste avant CE paiement
+            //   • _paiement.MontantPaye           → montant de CE paiement
+            //   • calcul live depuis _commande    → données actuelles (peuvent avoir changé)
+            //
+            // RÈGLE DE COHÉRENCE : MontantTotalCommande doit être >= ResteAvantPaiement.
+            // Si ce n'est pas le cas, le snapshot est erroné (ancien bug couture seule).
+            // Dans ce cas on utilise le calcul live pour montantTotal.
 
-            // Si le reçu a été créé avant l'ajout des matériaux, on utilise
-            // MontantTotalCommande (couture seule) + matériaux actuels
-            if (_paiement.MontantTotalCommande > 0 && montantTotal <= 0)
-                montantTotal = _paiement.MontantTotalCommande;
+            decimal montantCoutureLive   = _commande.Pieces.Sum(p2 => p2.MontantCouture);
+            decimal montantMateriauxLive = (_commande.MaterielSupplements ?? new List<MaterielSupplement>())
+                                           .Sum(m => m.Montant);
+            decimal montantTotalLive = montantCoutureLive + montantMateriauxLive;
 
-            decimal resteAvant   = _paiement.ResteAvantPaiement;
+            // Snapshot cohérent si MontantTotalCommande >= ResteAvantPaiement et > 0
+            bool snapshotCoherent = _paiement.MontantTotalCommande > 0
+                                 && _paiement.MontantTotalCommande >= _paiement.ResteAvantPaiement - 0.01m;
+
+            decimal montantTotal = snapshotCoherent
+                ? _paiement.MontantTotalCommande
+                : (montantTotalLive > 0 ? montantTotalLive : _paiement.ResteAvantPaiement);
+
+            // Ventilation couture/matériaux pour l'affichage détaillé (toujours live)
+            decimal montantCoutureTotale  = montantCoutureLive;
+            decimal montantMateriauxTotal = montantMateriauxLive;
+
+            // Snapshots fiables
+            decimal resteAvant   = _paiement.ResteAvantPaiement;   // reste AVANT ce paiement
             decimal montantCePai = _paiement.MontantPaye;
             decimal resteApres   = Math.Max(0m, resteAvant - montantCePai);
-            decimal totalPaye    = montantTotal - resteApres;
 
+            // Déjà encaissé AVANT ce paiement = total − reste avant
+            // (0 si premier paiement, > 0 si acompte précédent)
+            decimal dejaEncaisseAvant = Math.Max(0m, montantTotal - resteAvant);
+
+            // Total encaissé après CE paiement
+            decimal totalPayeApres = dejaEncaisseAvant + montantCePai;
+
+            // Affichage détaillé couture + matériaux si matériaux présents
             if (montantMateriauxTotal > 0)
             {
                 LigneMontant(p, "Frais couture", Fcfa(montantCoutureTotale), 10, Noir);
                 LigneMontant(p, "Materiaux", Fcfa(montantMateriauxTotal), 10, Gris);
             }
             LigneMontant(p, "TOTAL FACTURE", Fcfa(montantTotal), 11, Noir, true);
+            Espace(p, 2);
+            if (dejaEncaisseAvant > 0)
+                LigneMontant(p, "Deja encaisse", Fcfa(dejaEncaisseAvant), 10, Gris);
             LigneMontant(p, "Reste avant paiement", Fcfa(resteAvant), 10, Orange);
             LigneMontant(p, "Ce paiement", Fcfa(montantCePai), 10, Vert, true);
             LigneMontant(p, "Mode", " " + _paiement.ModePaiement, 10, Gris);
-            LigneMontant(p, "Total paye", Fcfa(totalPaye), 10, Noir);
+            LigneMontant(p, "Total encaisse", Fcfa(totalPayeApres), 10, Noir, true);
             Espace(p, 4);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 4);
 
-            // ===== RESTE A PAYER =====
+            // ===== RESTE A PAYER APRÈS CE PAIEMENT =====
             Brush cReste = resteApres <= 0 ? Vert : Rouge;
             string tReste = resteApres <= 0 ? "  SOLDE !" : Fcfa(resteApres);
             Ligne(p, Pad("RESTE A PAYER", 17) + " : " + tReste.Trim(),

@@ -16,6 +16,11 @@ namespace GestionCoutureApp.Views
         private readonly IWhatsAppService _whatsAppService;
         private string _roleConnecte = string.Empty;
 
+        // Pagination du tableau "Dernières commandes"
+        private const int DASH_PAGE_SIZE = 10;
+        private int _dashPage = 1;
+        private int _dashTotal = 0;
+
         public DashboardView()
         {
             InitializeComponent();
@@ -445,31 +450,56 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // 5 dernières commandes
+        // Dernières commandes — paginées (10 par page)
         // ------------------------------------------------------------------
-        private void ChargerDernieresCommandes()
-        {
-            // Include(Pieces) indispensable : TypeVetementAffiche, MontantTotalCalcule
-            // et StatutGlobalAffiche sont [NotMapped] et calculés depuis Pieces en mémoire.
-            // Sans ce Include, les 3 colonnes afficheraient "(aucune pièce)", "0 FCFA", "A faire".
-            var dernieres = _context.Commandes
-                .Include(c => c.Client)
-                .Include(c => c.Pieces)
-                .OrderByDescending(c => c.IdCommande)
-                .Take(5)
-                .AsEnumerable()          // bascule en mémoire pour les propriétés calculées
-                .Select(c => new
-                {
-                    Client = c.Client != null ? c.Client.Nom + " " + c.Client.Prenom : "-",
-                    Type = c.TypeVetementAffiche,
-                    Montant = c.MontantTotalCalcule.ToString("N0") + " FCFA",
-                    Statut = c.StatutGlobalAffiche,
-                    DateFin = c.DateFin != default(DateTime)
-                        ? c.DateFin.ToString("dd/MM/yyyy") : "-"
-                })
-                .ToList();
+        private void ChargerDernieresCommandes() => _ = ChargerDernieresCommandesAsync();
 
-            GridDernieresCommandes.ItemsSource = dernieres;
+        private async Task ChargerDernieresCommandesAsync()
+        {
+            try
+            {
+                var result = await _commandeService.ObtenirPageLightAsync(_dashPage, DASH_PAGE_SIZE);
+                _dashTotal = result.TotalCount;
+
+                GridDernieresCommandes.ItemsSource = result.Items
+                    .Select(c => new
+                    {
+                        Client  = c.Client != null ? c.Client.Nom + " " + c.Client.Prenom : "-",
+                        Type    = c.TypeVetementAffiche,
+                        Montant = c.MontantTotalCalcule.ToString("N0") + " FCFA",
+                        Statut  = c.StatutGlobalAffiche,
+                        DateFin = c.DateFin != default ? c.DateFin.ToString("dd/MM/yyyy") : "-"
+                    })
+                    .ToList();
+
+                int start = _dashTotal == 0 ? 0 : (_dashPage - 1) * DASH_PAGE_SIZE + 1;
+                int end   = Math.Min(_dashPage * DASH_PAGE_SIZE, _dashTotal);
+
+                if (TxtDashPaginationInfo != null)
+                    TxtDashPaginationInfo.Text = _dashTotal == 0
+                        ? "Aucune commande"
+                        : $"{start}–{end} / {_dashTotal}";
+
+                if (BtnDashPagePrec != null)
+                    BtnDashPagePrec.IsEnabled = _dashPage > 1;
+                if (BtnDashPageSuiv != null)
+                    BtnDashPageSuiv.IsEnabled = end < _dashTotal;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("DashboardView.ChargerDernières: " + ex.Message);
+            }
+        }
+
+        private async void BtnDashPagePrec_Click(object sender, RoutedEventArgs e)
+        {
+            if (_dashPage > 1) { _dashPage--; await ChargerDernieresCommandesAsync(); }
+        }
+
+        private async void BtnDashPageSuiv_Click(object sender, RoutedEventArgs e)
+        {
+            _dashPage++;
+            await ChargerDernieresCommandesAsync();
         }
     }
 }

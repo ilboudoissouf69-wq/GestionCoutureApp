@@ -602,7 +602,7 @@
 
                     <DataGrid x:Name="GridDernieresCommandes"
                               Style="{StaticResource ModernGrid}"
-                              MaxHeight="280">
+                              MaxHeight="320">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Client"
                                                 Binding="{Binding Client}"
@@ -626,6 +626,59 @@
                                                 ElementStyle="{StaticResource DataGridCellText}"/>
                         </DataGrid.Columns>
                     </DataGrid>
+
+                    <!-- Pagination du tableau commandes -->
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="BtnDashPagePrec"
+                                Grid.Column="0"
+                                Height="30" Width="30"
+                                IsEnabled="False"
+                                Cursor="Hand"
+                                Click="BtnDashPagePrec_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="White"
+                                            BorderBrush="{StaticResource DashBorderBrush}"
+                                            BorderThickness="1" CornerRadius="6">
+                                        <TextBlock Text="‹" FontSize="16" Foreground="{StaticResource SlateMuted}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <TextBlock x:Name="TxtDashPaginationInfo"
+                                   Grid.Column="1"
+                                   Text="—"
+                                   FontSize="11"
+                                   Foreground="{StaticResource SlateMuted}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+
+                        <Button x:Name="BtnDashPageSuiv"
+                                Grid.Column="2"
+                                Height="30" Width="30"
+                                IsEnabled="False"
+                                Cursor="Hand"
+                                Click="BtnDashPageSuiv_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="White"
+                                            BorderBrush="{StaticResource DashBorderBrush}"
+                                            BorderThickness="1" CornerRadius="6">
+                                        <TextBlock Text="›" FontSize="16" Foreground="{StaticResource SlateMuted}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
                 </StackPanel>
             </Border>
 

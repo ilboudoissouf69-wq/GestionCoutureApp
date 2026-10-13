@@ -142,6 +142,41 @@
                     </Grid><!-- fin Grid loupe+champ -->
                 </Border>
 
+                <!-- Filtres date : Du … Au … + Aujourd'hui -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Margin="12,0">
+                    <TextBlock Text="Du :"
+                               FontSize="11" Foreground="#64748B" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <DatePicker x:Name="DpFiltreDebut"
+                                Width="120" Height="34" FontSize="11"
+                                Margin="0,0,8,0"
+                                SelectedDateChanged="FiltreDate_Changed"/>
+                    <TextBlock Text="Au :"
+                               FontSize="11" Foreground="#64748B" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <DatePicker x:Name="DpFiltreFin"
+                                Width="120" Height="34" FontSize="11"
+                                Margin="0,0,8,0"
+                                SelectedDateChanged="FiltreDate_Changed"/>
+                    <Button x:Name="BtnFiltreAujourdhui"
+                            Height="34" Padding="10,0" FontSize="11"
+                            Margin="0,0,6,0" Cursor="Hand"
+                            Click="BtnFiltreAujourdhui_Click">
+                        <TextBlock x:Name="TxtBtnAujourdhui" Text="Aujourd'hui"/>
+                    </Button>
+                    <Button x:Name="BtnEffacerDate"
+                            Height="34" Padding="10,0" FontSize="11"
+                            Visibility="Collapsed" Cursor="Hand"
+                            Click="BtnEffacerDate_Click"
+                            ToolTip="Effacer le filtre date">
+                        <TextBlock Text="✕ Date"/>
+                    </Button>
+                </StackPanel>
+
                 <!-- Filtres : "Afficher :" + pills -->
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
@@ -469,18 +504,46 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- MONTANT ENCAISSÉ -->
+                        <!-- MONTANT ENCAISSÉ + RESTE APRÈS -->
                         <DataGridTemplateColumn Header="MONTANT ENCAISSÉ"
-                                                Width="140" MinWidth="120"
+                                                Width="160" MinWidth="140"
                                                 SortMemberPath="MontantPaye">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding MontantPaye, StringFormat={}{0:N0} FCFA}"
-                                               FontSize="14" FontWeight="Bold"
-                                               Foreground="#0F172A"
-                                               HorizontalAlignment="Right"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,16,0"/>
+                                    <StackPanel Margin="8,7">
+                                        <!-- Montant encaissé en gras -->
+                                        <TextBlock Text="{Binding MontantPaye, StringFormat={}{0:N0} FCFA}"
+                                                   FontSize="13" FontWeight="Bold"
+                                                   Foreground="#0F172A"
+                                                   HorizontalAlignment="Right"/>
+                                        <!-- Reste après ce paiement — ou Soldé -->
+                                        <TextBlock FontSize="10" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="0,2,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <!-- Reste impayé → rouge -->
+                                                    <Setter Property="Foreground" Value="#DC2626"/>
+                                                    <Setter Property="Text"
+                                                            Value="{Binding ResteApresCalcule,
+                                                                    StringFormat={}Reste : {0:N0} FCFA}"/>
+                                                    <Style.Triggers>
+                                                        <!-- Soldé → vert -->
+                                                        <DataTrigger Binding="{Binding ResteApresCalcule}"
+                                                                     Value="0">
+                                                            <Setter Property="Foreground" Value="#059669"/>
+                                                            <Setter Property="Text" Value="Soldé ✓"/>
+                                                        </DataTrigger>
+                                                        <!-- Paiement annulé → grisé -->
+                                                        <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                            <Setter Property="Foreground" Value="#94A3B8"/>
+                                                            <Setter Property="Text" Value="Annulé"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
@@ -797,6 +860,25 @@
                         <StackPanel Margin="24,20,24,4">
 
                             <TextBlock Text="Commande *" Style="{StaticResource FieldLabel}"/>
+                            <!-- Recherche commande en temps réel -->
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtRechercheCommande"
+                                         Grid.Column="0"
+                                         Style="{StaticResource ModernTextBox}"
+                                         Height="34" FontSize="12"
+                                         Tag="🔍  Rechercher par n°, nom client..."
+                                         TextChanged="TxtRechercheCommande_TextChanged"/>
+                                <Button Grid.Column="1"
+                                        Height="34" Width="34" Margin="4,0,0,0"
+                                        FontSize="12" Cursor="Hand"
+                                        ToolTip="Effacer la recherche"
+                                        Click="BtnEffacerRechercheCommande_Click"
+                                        Content="✕"/>
+                            </Grid>
                             <ComboBox x:Name="CmbCommandesNonSoldees"
                                       Style="{StaticResource ModernComboBox}"
                                       DisplayMemberPath="DisplayText"

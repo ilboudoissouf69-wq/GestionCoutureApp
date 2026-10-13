@@ -24,6 +24,11 @@ namespace GestionCoutureApp.Services
         // ✅ RECHERCHE + FILTRE : surcharge additive (n'altère pas la signature existante)
         Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize,
             string? recherche, StatutFiltrePaiement filtre);
+
+        /// <summary>Surcharge complète avec filtres date.</summary>
+        Task<PagedResult<Paiement>> ObtenirPageLightAsync(int page, int pageSize,
+            string? recherche, StatutFiltrePaiement filtre,
+            DateTime? dateDebut, DateTime? dateFin);
         
         List<Paiement> ObtenirParCommande(int idCommande);
         void Ajouter(Paiement paiement, int idOperateur, string nomOperateur);

@@ -48,6 +48,9 @@ namespace GestionCoutureApp.Views
         private string _currentSearch = "";
         private string? _filtreStatut = null;
         private int? _filtreCouturierId = null;
+        // Filtre date — null = pas de filtre actif
+        private DateTime? _filtreDate1 = null;
+        private DateTime? _filtreDate2 = null;
 
         // Date RDV par défaut
         private DateTime _dateRdvDefaut = DateTime.Today.AddDays(1);
@@ -64,6 +67,8 @@ namespace GestionCoutureApp.Views
         // Liste partagée des couturiers disponibles (utilisée dans AjouterCarte)
         private List<Employe> _couturiers = new();
 
+        // Liste complète des clients (pour le filtre temps réel du combobox modal)
+        private List<Client> _tousLesClients = new();
         // ================================================================
         // HELPER OPÉRATEUR
         // ================================================================
@@ -85,6 +90,39 @@ namespace GestionCoutureApp.Views
                     "Livraison non soldée", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                 if (rep != MessageBoxResult.Yes) return false;
                 string? motif = DemanderMotif("Motif de la livraison non soldée");
+                if (string.IsNullOrWhiteSpace(motif)) return false;
+                action(motif);
+                return true;
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Gère à la fois :
+        //   • LivraisonNonSoldeeException (commande non soldée → Boss avec motif)
+        //   • InvalidOperationException contenant "motif est obligatoire" (rétrogradation statut)
+        // Présente DemanderMotif() dans les deux cas afin que le Boss puisse saisir
+        // le motif requis par VerifierFluxStatut() ou VerifierLivraisonSoldee().
+        // ──────────────────────────────────────────────────────────────
+        private bool AvecControleStatut(Action<string?> action)
+        {
+            try { action(null); return true; }
+            catch (LivraisonNonSoldeeException ex) when (ex.PeutForcer)
+            {
+                var rep = MessageBox.Show(
+                    ex.Message + "\n\nAutoriser quand même la livraison ?",
+                    "Livraison non soldée", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (rep != MessageBoxResult.Yes) return false;
+                string? motif = DemanderMotif("Motif de la livraison non soldée");
+                if (string.IsNullOrWhiteSpace(motif)) return false;
+                action(motif);
+                return true;
+            }
+            catch (InvalidOperationException ex) when (
+                ex.Message.Contains("motif est obligatoire") ||
+                ex.Message.Contains("rétrograder"))
+            {
+                // Le service demande un motif pour la rétrogradation → on le demande à l'utilisateur
+                string? motif = DemanderMotif("Motif de la rétrogradation de statut");
                 if (string.IsNullOrWhiteSpace(motif)) return false;
                 action(motif);
                 return true;
@@ -170,9 +208,9 @@ namespace GestionCoutureApp.Views
                 BtnSupprimerPiece.Visibility = Visibility.Visible;
 
             // ── Remplir CmbClient (legacy) et CmbModalClient ──
-            var clients = _clientService.ObtenirTous();
-            CmbClient.ItemsSource      = clients;
-            CmbModalClient.ItemsSource = clients;
+            _tousLesClients = _clientService.ObtenirTous();
+            CmbClient.ItemsSource      = _tousLesClients;
+            CmbModalClient.ItemsSource = _tousLesClients;
 
             // ── Couturiers (filtre rôle Couturier + Boss) ──
             _couturiers = _context.Employes
@@ -271,6 +309,145 @@ namespace GestionCoutureApp.Views
             }
         }
 
+        // ================================================================
+        // ================================================================
+        // RECHERCHE CLIENT — TextBox séparé + ComboBox normal
+        // ================================================================
+        // Architecture :
+        //  1. TxtRechercheClient  → filtre _tousLesClients en temps réel
+        //  2. CmbModalClient      → dropdown avec résultats, l'utilisateur clique pour sélectionner
+        //  3. TxtClientSelectionne → affiche le client choisi (lecture seule, fond coloré)
+        //
+        // La sélection réelle est toujours portée par CmbModalClient.SelectedValue (IdClient).
+        // On ne remet la liste complète que quand l'utilisateur re-saisit dans TxtRechercheClient.
+
+        private void TxtRechercheClient_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            string saisie = TxtRechercheClient.Text?.Trim() ?? "";
+
+            if (string.IsNullOrEmpty(saisie))
+            {
+                CmbModalClient.ItemsSource    = _tousLesClients;
+                CmbModalClient.IsDropDownOpen = false;
+                // Si on efface la recherche, effacer aussi la sélection affichée
+                CmbModalClient.SelectedIndex  = -1;
+                MettreAJourAffichageClientSelectionne(null);
+                return;
+            }
+
+            List<Client> filtres;
+
+            // "#5" → ID exact uniquement
+            if (saisie.StartsWith("#") && int.TryParse(saisie.Substring(1), out int idExact))
+            {
+                filtres = _tousLesClients.Where(c => c.IdClient == idExact).ToList();
+            }
+            else
+            {
+                string recherche     = saisie.ToLowerInvariant();
+                string saisieChiffre = new string(saisie.Where(char.IsDigit).ToArray());
+
+                filtres = _tousLesClients.Where(c =>
+                    (c.Nom    ?? "").ToLowerInvariant().Contains(recherche) ||
+                    (c.Prenom ?? "").ToLowerInvariant().Contains(recherche) ||
+                    (!string.IsNullOrEmpty(saisieChiffre) &&
+                     new string((c.Telephone ?? "").Where(char.IsDigit).ToArray()).Contains(saisieChiffre)) ||
+                    (int.TryParse(saisie, out int idNum) && c.IdClient == idNum)
+                ).ToList();
+            }
+
+            // Mettre à jour la liste du combo SANS changer la sélection courante
+            CmbModalClient.ItemsSource    = filtres;
+            CmbModalClient.IsDropDownOpen = filtres.Count > 0;
+
+            // Résultat unique → sélectionner automatiquement sans ouvrir le dropdown
+            if (filtres.Count == 1)
+            {
+                CmbModalClient.SelectedIndex  = 0;
+                CmbModalClient.IsDropDownOpen = false;
+            }
+        }
+
+        private void TxtRechercheClient_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Down && CmbModalClient.Items.Count > 0)
+            {
+                CmbModalClient.IsDropDownOpen = true;
+                CmbModalClient.Focus();
+            }
+        }
+
+        private void BtnEffacerRechercheClient_Click(object sender, RoutedEventArgs e)
+        {
+            TxtRechercheClient.Text       = "";
+            CmbModalClient.ItemsSource    = _tousLesClients;
+            CmbModalClient.SelectedIndex  = -1;
+            MettreAJourAffichageClientSelectionne(null);
+        }
+
+        private void CmbModalClient_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CmbModalClient.SelectedItem is Client client)
+            {
+                // Afficher le client sélectionné dans le bandeau de confirmation
+                MettreAJourAffichageClientSelectionne(client);
+                // NE PAS remettre la liste complète ici — ça effacerait la sélection.
+                // La liste sera remise la prochaine fois que l'utilisateur saisira dans TxtRechercheClient.
+            }
+            else
+            {
+                MettreAJourAffichageClientSelectionne(null);
+            }
+        }
+
+        // Met à jour le bandeau "client sélectionné" sous le ComboBox
+        private void MettreAJourAffichageClientSelectionne(Client? client, bool verrouille = false)
+        {
+            if (TxtClientSelectionne == null) return;
+            if (client == null)
+            {
+                TxtClientSelectionne.Text               = "";
+                TxtClientSelectionne.Visibility         = Visibility.Collapsed;
+                if (BandeauClientSelectionne != null)
+                    BandeauClientSelectionne.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            string tel = string.IsNullOrEmpty(client.Telephone) ? "" : $"  ·  📞 {client.Telephone}";
+
+            if (verrouille)
+            {
+                // Mode édition : bandeau orange/ambre avec cadenas
+                TxtClientSelectionne.Text       = $"🔒  #{client.IdClient}  —  {client.Prenom} {client.Nom}{tel}  (client verrouillé)";
+                TxtClientSelectionne.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#92400E"));
+                if (BandeauClientSelectionne != null)
+                {
+                    BandeauClientSelectionne.Background   = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFBEB"));
+                    BandeauClientSelectionne.BorderBrush  = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FCD34D"));
+                }
+            }
+            else
+            {
+                // Mode création : bandeau vert standard
+                TxtClientSelectionne.Text       = $"✅  #{client.IdClient}  —  {client.Prenom} {client.Nom}{tel}";
+                TxtClientSelectionne.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#166534"));
+                if (BandeauClientSelectionne != null)
+                {
+                    BandeauClientSelectionne.Background  = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F0FDF4"));
+                    BandeauClientSelectionne.BorderBrush = new System.Windows.Media.SolidColorBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#86EFAC"));
+                }
+            }
+
+            TxtClientSelectionne.Visibility         = Visibility.Visible;
+            if (BandeauClientSelectionne != null)
+                BandeauClientSelectionne.Visibility = Visibility.Visible;
+        }
 
         // ================================================================
         // CHARGEMENT COMMANDES + FILTRES + PAGINATION
@@ -284,25 +461,26 @@ namespace GestionCoutureApp.Views
                 GridCommandes.IsEnabled     = false;
 
                 PagedResult<Commande> result;
-                if (_filtreStatut != null || _filtreCouturierId != null)
+
+                // Si un filtre date est actif, on utilise la surcharge complète
+                // qui centralise tous les filtres (texte, statut, couturier, période).
+                bool avecDate = _filtreDate1.HasValue || _filtreDate2.HasValue;
+
+                if (avecDate || _filtreStatut != null || _filtreCouturierId != null
+                    || !string.IsNullOrWhiteSpace(_currentSearch))
                 {
-                    result = await _commandeService.ObtenirPageCommandesStatutAsync(
-                        _filtreStatut, _currentPage, PAGE_SIZE,
-                        string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch);
-                    if (_filtreCouturierId.HasValue)
-                        result = new PagedResult<Commande>
-                        {
-                            Items      = result.Items.Where(c =>
-                                c.Pieces.Any(p => p.IdCouturier == _filtreCouturierId.Value)).ToList(),
-                            TotalCount = result.TotalCount,
-                            Page       = result.Page,
-                            PageSize   = result.PageSize
-                        };
+                    result = await _commandeService.ObtenirPageLightAsync(
+                        _currentPage, PAGE_SIZE,
+                        string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch,
+                        _filtreStatut,
+                        _filtreCouturierId,
+                        _filtreDate1,
+                        _filtreDate2);
                 }
-                else if (!string.IsNullOrWhiteSpace(_currentSearch))
-                    result = await _commandeService.RechercherPageLightAsync(_currentSearch, _currentPage, PAGE_SIZE);
                 else
+                {
                     result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
+                }
 
                 // Filtrer les pièces vides (sans type) pour l'affichage
                 foreach (var c in result.Items)
@@ -403,6 +581,68 @@ namespace GestionCoutureApp.Views
         {
             _filtreStatut = _filtreStatut == "Retard" ? null : "Retard";
             _currentPage  = 1;
+            await ChargerCommandes();
+        }
+
+        // ── Handlers filtres DATE ─────────────────────────────────────
+
+        private async void BtnFiltreAujourdhui_Click(object sender, RoutedEventArgs e)
+        {
+            // Bascule : si déjà filtré sur aujourd'hui, effacer ; sinon activer.
+            bool dejaActif = _filtreDate1 == DateTime.Today && _filtreDate2 == DateTime.Today;
+            if (dejaActif)
+            {
+                _filtreDate1 = null;
+                _filtreDate2 = null;
+                DpFiltreDebut.SelectedDate = null;
+                DpFiltreFin.SelectedDate   = null;
+                TxtBtnAujourdhui.Text      = "Aujourd'hui";
+                BtnFiltreAujourdhui.Opacity = 1.0;
+                BtnEffacerDate.Visibility  = Visibility.Collapsed;
+            }
+            else
+            {
+                _filtreDate1 = DateTime.Today;
+                _filtreDate2 = DateTime.Today;
+                DpFiltreDebut.SelectedDate = DateTime.Today;
+                DpFiltreFin.SelectedDate   = DateTime.Today;
+                TxtBtnAujourdhui.Text      = "✓ Aujourd'hui";
+                BtnFiltreAujourdhui.Opacity = 0.75;
+                BtnEffacerDate.Visibility  = Visibility.Visible;
+            }
+            _currentPage = 1;
+            await ChargerCommandes();
+        }
+
+        private async void FiltreDate_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            // Guard : déclenché par InitializeComponent avant que les contrôles soient prêts
+            if (DpFiltreDebut == null || DpFiltreFin == null) return;
+
+            _filtreDate1 = DpFiltreDebut.SelectedDate;
+            _filtreDate2 = DpFiltreFin.SelectedDate;
+
+            // Si on sélectionne une date dans les pickers, désactiver le bouton "Aujourd'hui"
+            TxtBtnAujourdhui.Text     = "Aujourd'hui";
+            BtnFiltreAujourdhui.Opacity = 1.0;
+
+            bool avecDate = _filtreDate1.HasValue || _filtreDate2.HasValue;
+            BtnEffacerDate.Visibility = avecDate ? Visibility.Visible : Visibility.Collapsed;
+
+            _currentPage = 1;
+            await ChargerCommandes();
+        }
+
+        private async void BtnEffacerDate_Click(object sender, RoutedEventArgs e)
+        {
+            _filtreDate1 = null;
+            _filtreDate2 = null;
+            DpFiltreDebut.SelectedDate  = null;
+            DpFiltreFin.SelectedDate    = null;
+            TxtBtnAujourdhui.Text       = "Aujourd'hui";
+            BtnFiltreAujourdhui.Opacity = 1.0;
+            BtnEffacerDate.Visibility   = Visibility.Collapsed;
+            _currentPage = 1;
             await ChargerCommandes();
         }
 
@@ -625,6 +865,19 @@ namespace GestionCoutureApp.Views
             OverlayModalCommande.Visibility = Visibility.Collapsed;
             _cartesPieces.Clear();
             _commandeEnEdition = null;
+
+            // Toujours remettre le champ client en état actif après fermeture
+            // (qu'on vienne de création ou d'édition)
+            if (TxtRechercheClient != null)
+            {
+                TxtRechercheClient.Text = "";
+            }
+            GridRechercheClient.IsEnabled = true;
+            GridRechercheClient.Opacity   = 1.0;
+            CmbModalClient.IsEnabled     = true;
+            CmbModalClient.ItemsSource   = _tousLesClients;
+            CmbModalClient.SelectedIndex = -1;
+            MettreAJourAffichageClientSelectionne(null);
         }
 
         private void OuvrirModalCreation()
@@ -638,7 +891,13 @@ namespace GestionCoutureApp.Views
             TxtBtnValider.Text     = "Valider la Commande";
 
             // Réinitialiser les champs de la modale
-            CmbModalClient.SelectedIndex    = -1;
+            CmbModalClient.ItemsSource    = _tousLesClients;
+            CmbModalClient.SelectedIndex  = -1;
+            CmbModalClient.IsEnabled      = true;
+            GridRechercheClient.IsEnabled = true;
+            GridRechercheClient.Opacity   = 1.0;
+            if (TxtRechercheClient != null) TxtRechercheClient.Text = "";
+            MettreAJourAffichageClientSelectionne(null);
             var (dateRdv, heureRdv)         = CalculerRdvParDefaut();
             DpModalDateFin.SelectedDate     = dateRdv;
             TxtHeureDebut.Text              = DateTime.Now.ToString("HH:mm");
@@ -678,7 +937,22 @@ namespace GestionCoutureApp.Views
             TxtBtnValider.Text     = "Enregistrer les modifications";
 
             // Pré-remplir en-tête
-            CmbModalClient.SelectedValue    = _commandeEnEdition.IdClient;
+            // Restaurer la liste complète avant de sélectionner (filtre peut l'avoir réduite)
+            CmbModalClient.ItemsSource   = _tousLesClients;
+            CmbModalClient.SelectedValue = _commandeEnEdition.IdClient;
+
+            // ── Verrouiller la zone client en mode édition ──
+            // Le client d'une commande existante ne doit pas être changé depuis la modale
+            // (sinon les données chargées ne correspondraient plus à la commande).
+            GridRechercheClient.IsEnabled = false;
+            GridRechercheClient.Opacity   = 0.45;
+            CmbModalClient.IsEnabled      = false;
+
+            // Afficher le bandeau orange avec cadenas (client verrouillé en édition)
+            if (CmbModalClient.SelectedItem is Client cliEdit)
+                MettreAJourAffichageClientSelectionne(cliEdit, verrouille: true);
+            else
+                MettreAJourAffichageClientSelectionne(null);
             DpModalDateFin.SelectedDate     = _commandeEnEdition.DateFin;
             TxtHeureDebut.Text              = _commandeEnEdition.HeureDebut.ToString(@"hh\:mm");
             TxtModalHeure.Text              = _commandeEnEdition.HeureFin?.ToString(@"hh\:mm") ?? "";
@@ -1230,15 +1504,19 @@ namespace GestionCoutureApp.Views
                     txtPrixMat.Focus(); return;
                 }
 
+                // Déduire l'ID de la commande : en mode édition depuis _commandeEnEdition,
+                // sinon depuis la sélection dans le grid (_commandeSelectionneeId)
+                int idCmdCourant = _commandeEnEdition?.IdCommande ?? _commandeSelectionneeId;
+
                 // Si la pièce est déjà en base → sauver directement
-                if (carte.IdPieceCommande.HasValue && _commandeSelectionneeId > 0)
+                if (carte.IdPieceCommande.HasValue && carte.IdPieceCommande.Value > 0 && idCmdCourant > 0)
                 {
                     try
                     {
                         var (idOp, nomOp) = OperateurConnecte();
                         var mat = new MaterielSupplement
                         {
-                            IdCommande = _commandeSelectionneeId,
+                            IdCommande      = idCmdCourant,
                             IdPieceCommande = carte.IdPieceCommande.Value,
                             Designation = desig, Quantite = qte, PrixUnitaire = prixMat
                         };
@@ -1848,14 +2126,8 @@ namespace GestionCoutureApp.Views
                 pieces.Add((pieceObj, CollecterMesuresCarte(carte)));
             }
 
-            // 3. Confirmation Secrétaire
-            if (_roleUtilisateur == "Secretaire")
-            {
-                var rep = MessageBox.Show(
-                    "Attention : l'enregistrement de cette commande est irréversible.\n\nConfirmer la création ?",
-                    "Confirmation", MessageBoxButton.OKCancel, MessageBoxImage.Information);
-                if (rep != MessageBoxResult.OK) return;
-            }
+            // 3. Récapitulatif complet avant sauvegarde (Boss et Secrétaire)
+            if (!AfficherRecapitulatif(pieces.Select(p => p.piece).ToList(), mode: "creation")) return;
 
             // 4. Construire Commande
             var commande = new Commande
@@ -1966,52 +2238,57 @@ namespace GestionCoutureApp.Views
 
             if (CmbModalClient.SelectedValue == null)
             { MessageBox.Show("Sélectionnez un client.", "Champ manquant", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-            if (DpModalDateFin.SelectedDate != null && DpModalDateFin.SelectedDate < DateTime.Today)
+            if (DpModalDateFin.SelectedDate == null)
+            { MessageBox.Show("Sélectionnez une date de rendez-vous.", "Champ manquant", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+            if (DpModalDateFin.SelectedDate < DateTime.Today)
             { MessageBox.Show("La date de RDV ne peut pas être dans le passé.", "Date invalide", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+            if (_cartesPieces.Count == 0)
+            { MessageBox.Show("La commande doit avoir au moins une pièce.", "Pièce manquante", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
 
-            var rep = MessageBox.Show("Enregistrer les modifications de la commande ?",
-                "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (rep != MessageBoxResult.Yes) return;
+            // 1. Lire et valider TOUTES les cartes avant toute écriture en base
+            var pieces = new List<(Cartepiece carte, PieceCommande piece, List<Mesure> mesures)>();
+            foreach (var carte in _cartesPieces)
+            {
+                var pieceObj = LireCartePiece(carte);
+                if (pieceObj == null) return;   // validation échouée, message déjà affiché
+                pieces.Add((carte, pieceObj, CollecterMesuresCarte(carte)));
+            }
+
+            // 2. Récapitulatif complet avant sauvegarde
+            if (!AfficherRecapitulatif(pieces.Select(p => p.piece).ToList(), mode: "edition")) return;
 
             BtnValiderNouvelleCommande.IsEnabled = false;
             try
             {
                 var (idOp, nomOp) = OperateurConnecte();
 
-                // Modifier les pièces existantes et créer les nouvelles
-                foreach (var carte in _cartesPieces)
+                // 3. Modifier chaque pièce (existante → ModifierPiece, nouvelle → AjouterPiece)
+                foreach (var (carte, pieceObj, mesures) in pieces)
                 {
-                    var pieceObj = LireCartePiece(carte);
-                    if (pieceObj == null) return;
-                    var mesures = CollecterMesuresCarte(carte);
-
                     if (carte.IdPieceCommande.HasValue && carte.IdPieceCommande.Value > 0)
                     {
                         pieceObj.IdPieceCommande = carte.IdPieceCommande.Value;
-                        if (!AvecControleLivraison(motif =>
+                        if (!AvecControleStatut(motif =>
                                 _commandeService.ModifierPiece(pieceObj, mesures, idOp, nomOp, motif)))
                             return;
                     }
                     else
                     {
-                        // Nouvelle pièce ajoutée en mode édition
+                        // Nouvelle pièce ajoutée en mode édition — matériaux depuis le buffer de la carte
                         _commandeService.AjouterPiece(_commandeEnEdition.IdCommande, pieceObj, mesures,
-                            _roleUtilisateur == "Boss", null, new List<MaterielSupplement>(), idOp, nomOp);
+                            _roleUtilisateur == "Boss", null, carte.MateriauxBuffer.ToList(), idOp, nomOp);
                     }
                 }
 
-                // Modifier le niveau commande (client, dates)
-                var commandeModif = new Commande
-                {
-                    IdCommande = _commandeEnEdition.IdCommande,
-                    IdClient   = (int)(CmbModalClient.SelectedValue ?? _commandeEnEdition.IdClient),
-                    DateFin    = DpModalDateFin.SelectedDate ?? _commandeEnEdition.DateFin,
-                    HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? _commandeEnEdition.HeureDebut,
-                    HeureFin   = ParseHeure(TxtModalHeure.Text)
-                };
-                _commandeService.Modifier(commandeModif,
-                    new PieceCommande { TypeVetement = string.Empty, MontantCouture = 0, Statut = string.Empty },
-                    new List<Mesure>(), idOp, nomOp);
+                // 4. Modifier UNIQUEMENT les métadonnées de la commande (client, dates)
+                //    → ModifierInfosCommande ne touche pas aux pièces : aucune corruption possible
+                _commandeService.ModifierInfosCommande(
+                    _commandeEnEdition.IdCommande,
+                    (int)CmbModalClient.SelectedValue,
+                    DpModalDateFin.SelectedDate.Value,
+                    ParseHeure(TxtHeureDebut.Text) ?? _commandeEnEdition.HeureDebut,
+                    ParseHeure(TxtModalHeure.Text),
+                    idOp, nomOp);
 
                 FermerModal();
                 await ChargerCommandes();
@@ -2077,7 +2354,7 @@ namespace GestionCoutureApp.Views
                 try
                 {
                     var (opId, opNom) = OperateurConnecte();
-                    if (!AvecControleLivraison(motif =>
+                    if (!AvecControleStatut(motif =>
                             _commandeService.ForcerStatutToutesPieces(idCmd, statut, opId, opNom, motif)))
                         return;
                     dialog.DialogResult = true;
@@ -2265,6 +2542,222 @@ namespace GestionCoutureApp.Views
             if (string.IsNullOrWhiteSpace(texte)) return null;
             if (TimeSpan.TryParse(texte, out var r)) return r;
             return null;
+        }
+
+        // ================================================================
+        // RÉCAPITULATIF AVANT VALIDATION (création ET édition)
+        // ================================================================
+        // RÉCAPITULATIF MULTI-PIÈCES — reprend l'architecture visuelle de l'ancienne version
+        // Blocs : Commande / Détail couture (N pièces) / Mesures / Matériaux / Total général
+        // Paramètre pieces = liste des (carte, PieceCommande, mesures) issues de LireCartePiece
+        // ================================================================
+        private bool AfficherRecapitulatif(List<PieceCommande> pieces, string mode)
+        {
+            // ── Récupérer le nom du client ──────────────────────────────
+            string clientNom = "";
+            if (CmbModalClient.SelectedItem is Client cSel)
+                clientNom = $"{cSel.Prenom} {cSel.Nom}".Trim();
+            else if (CmbModalClient.SelectedValue != null)
+            {
+                int idC = (int)CmbModalClient.SelectedValue;
+                var cFound = _tousLesClients.FirstOrDefault(x => x.IdClient == idC);
+                clientNom = cFound != null ? $"{cFound.Prenom} {cFound.Nom}".Trim() : $"Client #{idC}";
+            }
+            string dateRdv = DpModalDateFin.SelectedDate?.ToString("dd/MM/yyyy") ?? "—";
+            string heureRetrait = TxtModalHeure.Text.Trim();
+            bool estCreation = mode == "creation";
+
+            // ── Fenêtre ─────────────────────────────────────────────────
+            var dialog = new Window
+            {
+                Title = "Récapitulatif — Confirmer la commande",
+                Width = 520,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.White,
+                SizeToContent = SizeToContent.Height,
+                Owner = Window.GetWindow(this)
+            };
+            var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 620 };
+            var root = new StackPanel { Margin = new Thickness(28, 24, 28, 20) };
+
+            // Titre + barre rouge
+            root.Children.Add(new TextBlock
+            {
+                Text = "Récapitulatif de la commande",
+                FontSize = 16, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+            root.Children.Add(new Border
+            {
+                Height = 3, Width = 48, CornerRadius = new CornerRadius(2),
+                Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 18)
+            });
+
+            // Bloc Commande
+            var blcCmd = CreerBlocRecap("📌  Commande");
+            AjouterLigneRecap(blcCmd, "Client",   clientNom);
+            AjouterLigneRecap(blcCmd, "Date RDV", dateRdv + (string.IsNullOrEmpty(heureRetrait) ? "" : $"  à {heureRetrait}"));
+            AjouterLigneRecap(blcCmd, "Pièces",   pieces.Count.ToString());
+            root.Children.Add(blcCmd);
+
+            // Bloc Couture — une ligne par pièce
+            decimal totalCouture = 0;
+            var blcCouture = CreerBlocRecap("🧵  Détail couture");
+            for (int i = 0; i < pieces.Count; i++)
+            {
+                var p = pieces[i];
+                string nomCout = "Non assigné";
+                if (p.IdCouturier.HasValue)
+                {
+                    var emp = _couturiers.FirstOrDefault(e => e.IdEmploye == p.IdCouturier.Value);
+                    nomCout = emp != null ? $"{emp.Prenom} {emp.Nom}".Trim() : $"#{p.IdCouturier}";
+                }
+                string labelPiece = $"Pièce {i + 1} — {p.TypeVetement}";
+                string valPiece   = $"{p.MontantCouture:N0} FCFA  ({nomCout})";
+                if (!string.IsNullOrWhiteSpace(p.DescriptionPrecision))
+                    valPiece += $"\n  ↳ {p.DescriptionPrecision}";
+                AjouterLigneRecap(blcCouture, labelPiece, valPiece);
+                totalCouture += p.MontantCouture;
+            }
+            AjouterLigneRecap(blcCouture, "S/T Couture", $"{totalCouture:N0} FCFA", gras: true);
+            root.Children.Add(blcCouture);
+
+            // Blocs Mesures — une par pièce si elle en a
+            for (int i = 0; i < _cartesPieces.Count; i++)
+            {
+                var mesuresCarte = CollecterMesuresCarte(_cartesPieces[i]);
+                if (mesuresCarte.Count == 0) continue;
+                string titreMes = pieces.Count > 1 ? $"📐  Mesures — Pièce {i + 1}" : "📐  Mesures";
+                var blcMes = CreerBlocRecap(titreMes);
+                foreach (var m in mesuresCarte)
+                    AjouterLigneRecap(blcMes, m.NomMesure, m.Valeur + " cm");
+                root.Children.Add(blcMes);
+            }
+
+            // Bloc Matériaux — tous les matériaux de toutes les cartes
+            decimal totalMat = 0;
+            bool aDesMat = false;
+            var blcMat = CreerBlocRecap("📦  Matériaux");
+
+            for (int i = 0; i < _cartesPieces.Count; i++)
+            {
+                var carte = _cartesPieces[i];
+                // Mode création : matériaux dans le buffer de la carte
+                // Mode édition pièce existante : matériaux déjà en base → lire via service
+                List<MaterielSupplement> mats;
+                if (carte.IdPieceCommande.HasValue && carte.IdPieceCommande.Value > 0)
+                    mats = _materielService.ObtenirParPiece(carte.IdPieceCommande.Value);
+                else
+                    mats = carte.MateriauxBuffer;
+
+                if (mats.Count == 0) continue;
+                string prefixe = pieces.Count > 1 ? $"Pièce {i + 1} — " : "";
+                foreach (var mat in mats)
+                {
+                    AjouterLigneRecap(blcMat,
+                        prefixe + mat.Designation,
+                        $"{mat.Quantite} × {mat.PrixUnitaire:N0} = {mat.Montant:N0} FCFA");
+                    totalMat += mat.Montant;
+                    aDesMat = true;
+                }
+            }
+
+            if (!aDesMat)
+                ((StackPanel)blcMat.Child).Children.Add(new TextBlock
+                {
+                    Text = "Aucun matériau — 0 FCFA",
+                    FontSize = 12, FontStyle = FontStyles.Italic,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))
+                });
+            root.Children.Add(blcMat);
+
+            // Acompte (création uniquement)
+            if (estCreation)
+            {
+                decimal.TryParse(TxtModalAcompte.Text?.Trim().Replace(" ", ""), out decimal acompte);
+                if (acompte > 0)
+                {
+                    var blcAcompte = CreerBlocRecap("💰  Acompte");
+                    string mode_ = (CmbModalModePaiement.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Espèces";
+                    AjouterLigneRecap(blcAcompte, "Acompte immédiat", $"{acompte:N0} FCFA  ({mode_})");
+                    root.Children.Add(blcAcompte);
+                }
+            }
+
+            // Total général
+            decimal totalGen = totalCouture + totalMat;
+            var blcTotal = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16, 12, 16, 12),
+                Margin = new Thickness(0, 8, 0, 20)
+            };
+            var spTotal = new StackPanel();
+            var rowT = new Grid();
+            rowT.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            rowT.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var lblT = new TextBlock
+            {
+                Text = "TOTAL GÉNÉRAL", FontSize = 13, FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xA8, 0xA4)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var valT = new TextBlock
+            {
+                Text = $"{totalGen:N0} FCFA", FontSize = 18, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(lblT, 0); Grid.SetColumn(valT, 1);
+            rowT.Children.Add(lblT); rowT.Children.Add(valT);
+            if (totalMat > 0)
+            {
+                var rowDetail = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+                rowDetail.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowDetail.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                rowDetail.Children.Add(new TextBlock
+                {
+                    Text = $"  dont couture : {totalCouture:N0}  +  matériaux : {totalMat:N0} FCFA",
+                    FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                spTotal.Children.Add(rowDetail);
+            }
+            spTotal.Children.Insert(0, rowT);
+            blcTotal.Child = spTotal;
+            root.Children.Add(blcTotal);
+
+            // Boutons
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var btnCorr = new Button
+            {
+                Content = "✎  Corriger", Width = 110, Height = 38, FontSize = 13,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
+                BorderThickness = new Thickness(1), BorderBrush = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                Cursor = Cursors.Hand, Margin = new Thickness(0, 0, 10, 0)
+            };
+            var btnConf = new Button
+            {
+                Content = estCreation ? "✔  Créer la commande" : "✔  Confirmer les modifications",
+                Width = 200, Height = 38, FontSize = 13, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                BorderThickness = new Thickness(0), Cursor = Cursors.Hand
+            };
+            btnCorr.Click += (s, ev) => { dialog.DialogResult = false; dialog.Close(); };
+            btnConf.Click += (s, ev) => { dialog.DialogResult = true;  dialog.Close(); };
+            btnRow.Children.Add(btnCorr);
+            btnRow.Children.Add(btnConf);
+            root.Children.Add(btnRow);
+
+            scroll.Content = root;
+            dialog.Content = scroll;
+            return dialog.ShowDialog() == true;
         }
 
         private string? DemanderMotif(string titre)

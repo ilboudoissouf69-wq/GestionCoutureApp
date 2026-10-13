@@ -93,6 +93,15 @@ namespace GestionCoutureApp.Services
         // ✅ SURCHARGE ADDITIVE : recherche + filtre côté base, tri DatePaiement desc conservé
         public async Task<PagedResult<Paiement>> ObtenirPageLightAsync(
             int page, int pageSize, string? recherche, StatutFiltrePaiement filtre)
+            => await ObtenirPageLightAsync(page, pageSize, recherche, filtre, null, null);
+
+        /// <summary>Surcharge complète avec filtres date (période de paiement).</summary>
+        public async Task<PagedResult<Paiement>> ObtenirPageLightAsync(
+            int page, int pageSize,
+            string? recherche,
+            StatutFiltrePaiement filtre,
+            DateTime? dateDebut,
+            DateTime? dateFin)
         {
             using var context = _contextFactory.CreateDbContext();
 
@@ -108,10 +117,10 @@ namespace GestionCoutureApp.Services
             {
                 StatutFiltrePaiement.Valides  => query.Where(p => !p.EstAnnule),
                 StatutFiltrePaiement.Annules  => query.Where(p => p.EstAnnule),
-                _                             => query   // Tous
+                _                             => query
             };
 
-            // Recherche texte (côté base via EF/SQLite)
+            // Recherche texte
             if (!string.IsNullOrWhiteSpace(recherche))
             {
                 string r = recherche.Trim();
@@ -123,6 +132,12 @@ namespace GestionCoutureApp.Services
                         p.Commande.Client.Prenom.Contains(r))));
             }
 
+            // Filtre période sur DatePaiement
+            if (dateDebut.HasValue)
+                query = query.Where(p => p.DatePaiement.Date >= dateDebut.Value.Date);
+            if (dateFin.HasValue)
+                query = query.Where(p => p.DatePaiement.Date <= dateFin.Value.Date);
+
             query = query.OrderByDescending(p => p.DatePaiement);
 
             var totalCount = await query.CountAsync();
@@ -133,10 +148,10 @@ namespace GestionCoutureApp.Services
 
             return new PagedResult<Paiement>
             {
-                Items     = items,
+                Items      = items,
                 TotalCount = totalCount,
-                Page      = page,
-                PageSize  = pageSize
+                Page       = page,
+                PageSize   = pageSize
             };
         }
 
@@ -235,10 +250,12 @@ namespace GestionCoutureApp.Services
                     throw new InvalidOperationException(
                         $"Montant ({paiement.MontantPaye:N0}) dépasse le reste réel ({resteReel:N0} FCFA).");
 
-                // MontantTotalCommande sur le reçu = couture seule
-                // (la commission sera calculée sur cette base uniquement)
-                paiement.MontantTotalCommande = montantCouture;
-                paiement.ResteAvantPaiement = resteReel;
+                // MontantTotalCommande snapshot = montant total facturé au client (couture + matériaux).
+                // C'est ce montant que le reçu affiche en "TOTAL FACTURE".
+                // Note : la commission couturier se calcule sur montantCouture seul — mais ce calcul
+                // est fait dans CommissionService, pas ici. On stocke le vrai total facturé.
+                paiement.MontantTotalCommande = montantTotalFacture;
+                paiement.ResteAvantPaiement   = resteReel;
                 paiement.IdOperateur = idOperateur;
                 paiement.NomOperateur = nomOperateur;
                 paiement.DatePaiement = _clock.Now;

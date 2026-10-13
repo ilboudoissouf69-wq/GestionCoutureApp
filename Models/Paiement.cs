@@ -50,6 +50,14 @@ namespace GestionCoutureApp.Models
         [NotMapped]
         public string StatutAffichage => EstAnnule ? "ANNULE" : "Valide";
 
+        /// <summary>
+        /// Reste à payer APRÈS ce paiement, calculé depuis les snapshots.
+        /// ResteAvantPaiement - MontantPaye, jamais négatif.
+        /// Utilisé pour l'affichage dans la liste des paiements et sur le reçu.
+        /// </summary>
+        [NotMapped]
+        public decimal ResteApresCalcule => Math.Max(0m, ResteAvantPaiement - MontantPaye);
+
         [NotMapped]
         public string AffichageHistorique =>
             $"{DatePaiement:dd/MM/yyyy HH:mm}  |  {MontantPaye:N0} FCFA  |  {ModePaiement}  |  {NomOperateur}" +

@@ -357,9 +357,16 @@
         </Grid>
 
         <!-- ══════════════════════════════════════════════════════════════
-             LIGNE 2 — BARRE DE FILTRES : recherche + filtre statut
+             LIGNE 2 — BARRE DE FILTRES : recherche + filtre statut + date
         ══════════════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="2" Margin="0,0,0,14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Ligne 1 : recherche + statut -->
+            <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="14"/>
@@ -407,6 +414,146 @@
                 <ComboBoxItem Content="Prêt ✓"/>
                 <ComboBoxItem Content="Rendu au client"/>
             </ComboBox>
+            </Grid>
+
+            <!-- Ligne 2 : filtres date + pagination -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Aujourd'hui -->
+                <Button x:Name="BtnFiltreAujourdhui"
+                        Height="34" Padding="10,0"
+                        FontSize="11" FontWeight="SemiBold"
+                        Cursor="Hand" Margin="0,0,10,0"
+                        Click="BtnFiltreAujourdhui_Click"
+                        ToolTip="Retours signalés aujourd'hui">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background"      Value="#F0F9FF"/>
+                            <Setter Property="Foreground"      Value="#0369A1"/>
+                            <Setter Property="BorderBrush"     Value="#BAE6FD"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📅" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtBtnAujourdhui" Text="Aujourd'hui" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <TextBlock Text="Du" FontSize="11" Foreground="#64748B"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <DatePicker x:Name="DpFiltreDebut" Width="120" Height="34" FontSize="11"
+                            BorderBrush="#E2E8F0" SelectedDateChanged="FiltreDate_Changed"/>
+                <TextBlock Text="au" FontSize="11" Foreground="#64748B"
+                           VerticalAlignment="Center" Margin="6,0"/>
+                <DatePicker x:Name="DpFiltreFin" Width="120" Height="34" FontSize="11"
+                            BorderBrush="#E2E8F0" SelectedDateChanged="FiltreDate_Changed"/>
+
+                <Button x:Name="BtnEffacerDate"
+                        Height="34" Width="34" FontSize="13"
+                        Cursor="Hand" Margin="6,0,0,0"
+                        Visibility="Collapsed"
+                        Click="BtnEffacerDate_Click"
+                        ToolTip="Effacer le filtre de dates">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background"      Value="#FEF2F2"/>
+                            <Setter Property="Foreground"      Value="#DC2626"/>
+                            <Setter Property="BorderBrush"     Value="#FECACA"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="✕" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Button>
+
+                <!-- Espaceur -->
+                <Border Width="1" Height="20" Background="#E2E8F0" Margin="16,0" VerticalAlignment="Center"/>
+
+                <!-- Pagination inline -->
+                <Button x:Name="BtnRetourPagePrec"
+                        Height="34" Width="34" FontSize="14"
+                        Cursor="Hand" IsEnabled="False"
+                        Click="BtnRetourPagePrec_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background"      Value="White"/>
+                            <Setter Property="BorderBrush"     Value="#E2E8F0"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="6" Padding="0">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="‹" FontSize="16" Foreground="#475569"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Button>
+
+                <TextBlock x:Name="TxtPaginationRetours"
+                           Grid.Column="1"
+                           Text="—"
+                           FontSize="12" Foreground="#64748B"
+                           VerticalAlignment="Center"
+                           Margin="10,0"/>
+
+                <Button x:Name="BtnRetourPageSuiv"
+                        Height="34" Width="34" FontSize="14"
+                        Cursor="Hand" IsEnabled="False"
+                        Click="BtnRetourPageSuiv_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background"      Value="White"/>
+                            <Setter Property="BorderBrush"     Value="#E2E8F0"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="6" Padding="0">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    <TextBlock Text="›" FontSize="16" Foreground="#475569"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- ══════════════════════════════════════════════════════════════

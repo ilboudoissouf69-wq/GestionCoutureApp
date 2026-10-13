@@ -15,6 +15,17 @@ namespace GestionCoutureApp.Services
         List<Retour> Rechercher(string motCle);
         List<Retour> FiltrerParStatut(string statut);
         List<StatistiqueRetourCouturier> StatistiquesParCouturier(DateTime dateDebut, DateTime dateFin);
+
+        /// <summary>
+        /// Retourne une page paginée de retours avec filtres optionnels.
+        /// dateDebut/dateFin filtrent sur DateSignalement.
+        /// </summary>
+        Task<PagedResult<Retour>> ObtenirPageAsync(
+            int page, int pageSize,
+            string? motCle = null,
+            string? statut = null,
+            DateTime? dateDebut = null,
+            DateTime? dateFin = null);
     }
 
     public class StatistiqueRetourCouturier
