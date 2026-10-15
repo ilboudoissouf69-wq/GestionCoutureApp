@@ -30,7 +30,9 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Couturier)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree" && p.Commande != null)
+                .Where(p => p.Statut != "Livree"
+                         && p.Commande != null
+                         && p.Commande.EstSupprimee == false)
                 .AsNoTracking()
                 .ToListAsync();
 
@@ -89,7 +91,9 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Couturier)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree" && p.Commande != null)
+                .Where(p => p.Statut != "Livree"
+                         && p.Commande != null
+                         && p.Commande.EstSupprimee == false)
                 .AsNoTracking()
                 .ToListAsync();
 
@@ -122,7 +126,9 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Couturier)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree" && p.Commande != null)
+                .Where(p => p.Statut != "Livree"
+                         && p.Commande != null
+                         && p.Commande.EstSupprimee == false)
                 .AsNoTracking()
                 .ToListAsync();
 
