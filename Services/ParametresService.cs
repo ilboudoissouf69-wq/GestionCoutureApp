@@ -18,6 +18,9 @@ namespace GestionCoutureApp.Services
         public const string CleSalaireSecretaire  = "SalaireMensuelSecretaire";
         public const string CleTauxCommission     = "TauxCommissionDefaut";
         public const string ClePrimeZeroDefaut    = "PrimeZeroDefaut";
+        // Étape 2 : fenêtre d'annulation rapide d'une commande par la Secrétaire
+        public const string CleDelaiAnnulationSecretaire = "delai_annulation_secretaire_minutes";
+        public const int    DelaiAnnulationSecretaireDefautMinutes = 10;
         // Onglet 1 — Comptabilité
         public const string CleModeCA             = "ModeCA";
         public const string CleSeuilDepenses      = "SeuilAlerteDepenses";
@@ -89,6 +92,12 @@ namespace GestionCoutureApp.Services
         public Task          DefinirSeuilPrimeNbCommandes(int n)   => SetInt(CleSeuilPrimeCommandes, n);
         public Task<decimal> ObtenirMontantPrimeQualite()          => GetDecimal(CleMontantPrimeQualite, 5000m);
         public Task          DefinirMontantPrimeQualite(decimal m) => SetDec(CleMontantPrimeQualite, m);
+        // Étape 2 : délai (minutes) pendant lequel la Secrétaire peut annuler sa commande
+        public Task<int>     ObtenirDelaiAnnulationSecretaireMinutes()
+            => GetInt(CleDelaiAnnulationSecretaire, DelaiAnnulationSecretaireDefautMinutes);
+        public Task          DefinirDelaiAnnulationSecretaireMinutes(int m)
+            => m < 0 ? throw new ArgumentOutOfRangeException(nameof(m), "Le délai ne peut pas être négatif.")
+                     : SetInt(CleDelaiAnnulationSecretaire, m);
 
         // ── Onglet 1 — Comptabilité ──────────────────────────────────────
         public async Task<string>  ObtenirModeCA()         => await ObtenirValeur(CleModeCA) ?? "Encaisse";

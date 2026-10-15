@@ -140,7 +140,8 @@ namespace GestionCoutureApp
                     ["Mesures"]  = new[] { "IdMesure", "IdCommande", "NomMesure", "Valeur", "IdPieceCommande" },
                     ["Commandes"] = new[] { "IdCommande", "IdClient", "DateDebut", "DateFin",
                                            "MontantTotal", "Statut", "TypeVetement",
-                                           "EstSupprimee", "IdOperateurCreation" },
+                                           "EstSupprimee", "IdOperateurCreation",
+                                           "EstAnnulee", "DateImpressionRecu" },
                     ["Paiements"] = new[] { "IdPaiement", "IdCommande", "MontantPaye",
                                            "DatePaiement", "ModePaiement", "IdOperateur" },
                     ["Depenses"]  = new[] { "IdDepense", "TypeDepense", "Montant",
@@ -927,6 +928,16 @@ namespace GestionCoutureApp
             {
                 AjouterCol(c, "Employes", "NbEchecConnexion", "INTEGER NOT NULL DEFAULT 0");
                 AjouterCol(c, "Employes", "DateVerrouJusqua", "TEXT NULL");
+            });
+
+            // ── Étape 2 — Verrouillage suppression / modification des commandes ──
+            // EstAnnulee : annulation rapide par la Secrétaire (distincte d'une
+            // suppression Boss). DateImpressionRecu : première impression du
+            // reçu / ticket — verrouille le prix pour la Secrétaire.
+            AppliquerSi("20261015000000_Etape2_VerrouillageCommandes", c =>
+            {
+                AjouterCol(c, "Commandes", "EstAnnulee",         "INTEGER NOT NULL DEFAULT 0");
+                AjouterCol(c, "Commandes", "DateImpressionRecu", "TEXT NULL");
             });
         }
 

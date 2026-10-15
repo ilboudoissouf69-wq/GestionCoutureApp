@@ -277,5 +277,36 @@ namespace GestionCoutureApp.Services
 
             return stats;
         }
+
+        public List<IndicateurAntiFraude> ObtenirIndicateurAntiFraude(DateTime depuisUtc)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var types = ActionsAntiFraude.Toutes;
+
+            var entrees = context.JournalAudit
+                .Where(j => j.DateHeureUtc >= depuisUtc && types.Contains(j.TypeAction))
+                .Select(j => new { j.IdOperateur, j.NomOperateur, j.RoleOperateur, j.TypeAction, j.DateHeureUtc })
+                .ToList();
+
+            return entrees
+                .GroupBy(e => e.IdOperateur)
+                .Select(g =>
+                {
+                    // Nom/rôle les plus récents : un employé renommé reste sur une seule ligne.
+                    var dernier = g.OrderByDescending(e => e.DateHeureUtc).First();
+                    return new IndicateurAntiFraude
+                    {
+                        IdOperateur       = g.Key,
+                        NomOperateur      = dernier.NomOperateur,
+                        RoleOperateur     = dernier.RoleOperateur,
+                        Suppressions      = g.Count(e => e.TypeAction == ActionsAntiFraude.Suppression),
+                        Annulations       = g.Count(e => e.TypeAction == ActionsAntiFraude.Annulation),
+                        ModificationsPrix = g.Count(e => ActionsAntiFraude.ModificationsPrix.Contains(e.TypeAction))
+                    };
+                })
+                .OrderByDescending(i => i.Total)
+                .ThenBy(i => i.NomOperateur)
+                .ToList();
+        }
     }
 }

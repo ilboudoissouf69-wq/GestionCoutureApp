@@ -412,6 +412,53 @@ namespace GestionCoutureApp.Services
                 .ToList();
         }
 
+        /// <summary>
+        /// Annule une commission DANS une transaction EF déjà ouverte par l'appelant.
+        /// À utiliser uniquement depuis CommandeService.TransitionnerStatutPieceCoeur
+        /// pour l'annulation + rétrogradation atomique.
+        /// L'appelant est responsable du SaveChanges et du Commit.
+        /// </summary>
+        internal void AnnulerDansTransaction(
+            int idCommission, string motif, int idAnnulateur, string nomAnnulateur)
+        {
+            if (string.IsNullOrWhiteSpace(motif))
+                throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
+
+            using var context = _contextFactory.CreateDbContext();
+
+            var annulateur = context.Employes.Find(idAnnulateur);
+            if (annulateur == null || annulateur.Statut != "Actif")
+                throw new UnauthorizedAccessException("Opérateur introuvable ou inactif.");
+            Helpers.AuthorizationHelper.RequireRoleEnum(annulateur, RoleEmploye.Boss);
+
+            var commission = context.Commissions
+                .Include(c => c.Commandes)
+                .Include(c => c.Pieces)
+                .FirstOrDefault(c => c.IdCommission == idCommission)
+                ?? throw new InvalidOperationException("Commission introuvable.");
+
+            if (commission.EstAnnulee)
+                throw new InvalidOperationException("Cette commission est déjà annulée.");
+
+            commission.EstAnnulee = true;
+            commission.MotifAnnulation = motif.Trim();
+            commission.DateAnnulation = DateTime.Now;
+            commission.NomAnnulateur = nomAnnulateur;
+
+            foreach (var cmd in commission.Commandes)
+#pragma warning disable CS0618
+                cmd.IdCommission = null;
+#pragma warning restore CS0618
+            foreach (var piece in commission.Pieces)
+                piece.IdCommission = null;
+
+            context.SaveChanges();
+
+            _logger.LogWarning(
+                "Commission {Id} ANNULÉE (dans transaction) par {Annulateur} — {NbPieces} pièce(s) déverrouillée(s) — motif : {Motif}",
+                idCommission, nomAnnulateur, commission.Pieces.Count, motif);
+        }
+
         public void Annuler(int idCommission, string motif, int idAnnulateur, string nomAnnulateur)
         {
             if (string.IsNullOrWhiteSpace(motif))

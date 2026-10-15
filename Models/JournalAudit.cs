@@ -155,6 +155,10 @@ namespace GestionCoutureApp.Models
             "PAIEMENT_AJOUTE" => "Paiement ajouté",
             "COMMANDE_CREEE" => "Commande créée",
             "COMMANDE_MODIFIEE" => "Commande modifiée",
+            "COMMANDE_PRIX_MODIFIE" => "Prix modifié",
+            "PIECE_AJOUTEE" => "Pièce ajoutée",
+            "PIECE_SUPPRIMEE" => "Pièce supprimée",
+            "PIECE_MODIFIEE" => "Pièce modifiée",
             "DEPENSE_VALIDEE" => "Dépense validée",
             "COMMISSION_ENREGISTREE" => "Commission enregistrée",
             _ => TypeAction

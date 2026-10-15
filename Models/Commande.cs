@@ -100,6 +100,18 @@ namespace GestionCoutureApp.Models
         public int? IdOperateurSuppression { get; set; }
         public string? NomOperateurSuppression { get; set; }
 
+        // ÉTAPE 2 — Annulation rapide par la Secrétaire.
+        // Une commande annulée est AUSSI marquée EstSupprimee = true : elle sort
+        // de toutes les listes, totaux et statistiques exactement comme une
+        // suppression (aucun filtre existant à revoir). EstAnnulee permet au
+        // Boss de distinguer « annulée par la secrétaire » de « supprimée ».
+        public bool EstAnnulee { get; set; } = false;
+
+        // ÉTAPE 2 — Horodatage UTC de la PREMIÈRE impression du reçu ou de la
+        // fiche atelier (ticket). Une fois renseigné, il ne change plus : il
+        // verrouille le prix pour la Secrétaire et interdit l'annulation rapide.
+        public DateTime? DateImpressionRecu { get; set; }
+
         public List<Mesure> Mesures { get; set; } = new();
         public List<Paiement> Paiements { get; set; } = new();
         public List<MaterielSupplement> MaterielSupplements { get; set; } = new();
@@ -248,7 +260,9 @@ namespace GestionCoutureApp.Models
             StatutGlobal != "Livree partiellement";
 
         [NotMapped]
-        public string StatutGlobalAffiche => StatutGlobal switch
+        public string StatutGlobalAffiche => EstSupprimee
+            ? (EstAnnulee ? "🚫 Annulée" : "🗑️ Supprimée")
+            : StatutGlobal switch
         {
             "A faire" => "À faire",
             "En cours" => "En cours",

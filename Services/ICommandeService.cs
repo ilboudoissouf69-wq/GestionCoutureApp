@@ -22,6 +22,7 @@ namespace GestionCoutureApp.Services
         /// <summary>
         /// Version avec tous les filtres : recherche, statut, couturier,
         /// période de dépôt (dateDebut/dateFin sur DateDebut).
+        /// <paramref name="inclureSupprimees"/> : réservé au Boss (« Afficher les supprimées »).
         /// </summary>
         Task<PagedResult<Commande>> ObtenirPageLightAsync(
             int page, int pageSize,
@@ -29,7 +30,8 @@ namespace GestionCoutureApp.Services
             string? statut,
             int? idCouturier,
             DateTime? dateDebut,
-            DateTime? dateFin);
+            DateTime? dateFin,
+            bool inclureSupprimees = false);
 
         /// <summary>
         /// Crée une nouvelle commande avec sa première pièce et ses mesures.
@@ -45,8 +47,14 @@ namespace GestionCoutureApp.Services
         /// Commande, pièce, mesures et <paramref name="materiaux"/> sont enregistrés
         /// en une seule transaction : tout ou rien.
         /// </para>
+        /// <para>
+        /// <paramref name="piecesSupplementaires"/> : pièces 2..n saisies dans la modale de
+        /// création — elles font partie de la création (pas de motif exigé), contrairement
+        /// à <see cref="AjouterPiece"/> qui sert aux ajouts APRÈS création.
+        /// </para>
         void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null);
+            int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null,
+            List<(PieceCommande Piece, List<Mesure> Mesures, List<MaterielSupplement>? Materiaux)>? piecesSupplementaires = null);
 
         /// <summary>
         /// Modifie les informations de niveau commande (dates, heures) et optionnellement
@@ -59,7 +67,7 @@ namespace GestionCoutureApp.Services
         /// <param name="idOperateur">Id de l'opérateur (Boss ou Secrétaire).</param>
         /// <param name="nomOperateur">Nom pour l'audit.</param>
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur);
+            int idOperateur, string nomOperateur, string? motifModification = null);
 
         /// <summary>
         /// Modifie UNIQUEMENT les métadonnées de la commande (client, dates, heures)
@@ -68,8 +76,31 @@ namespace GestionCoutureApp.Services
         void ModifierInfosCommande(int idCommande, int idClient, DateTime dateFin,
             TimeSpan heureDebut, TimeSpan? heureFin, int idOperateur, string nomOperateur);
 
-        // Suppression logique avec autorisation Boss et traçabilité
+        // Suppression logique — BOSS UNIQUEMENT (Étape 2), motif obligatoire, audit.
         Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null);
+
+        // ===== Étape 2 — Annulation rapide par la Secrétaire =====
+
+        /// <summary>
+        /// La Secrétaire peut-elle ANNULER cette commande ? Conditions cumulatives :
+        /// elle l'a créée, moins de N minutes depuis DateCreation (Parametres
+        /// « delai_annulation_secretaire_minutes », défaut 10), aucun paiement lié
+        /// (même annulé), toutes les pièces « A faire », reçu/ticket jamais imprimé.
+        /// </summary>
+        (bool Autorise, string Raison) PeutAnnulerParSecretaire(int idCommande, int idOperateur);
+
+        /// <summary>
+        /// Annule la commande (retirée de l'activité comme une suppression, mais
+        /// marquée EstAnnulee), auditée COMMANDE_ANNULEE. Lève InvalidOperationException
+        /// (« … Demandez au Boss. ») si une condition n'est pas remplie.
+        /// </summary>
+        Task AnnulerParSecretaireAsync(int idCommande, int idOperateur, string nomOperateur, string? motif = null);
+
+        /// <summary>
+        /// Renseigne Commande.DateImpressionRecu à la PREMIÈRE impression du reçu ou
+        /// de la fiche atelier. Les réimpressions ne changent pas la date.
+        /// </summary>
+        void MarquerRecuImprime(int idCommande);
 
         [Obsolete("Utilisez SupprimerAsync avec traçabilité complète")]
         void Supprimer(int id);
@@ -90,6 +121,9 @@ namespace GestionCoutureApp.Services
         /// Ajoute une pièce supplémentaire à une commande existante.
         /// Lève InvalidOperationException si un paiement a déjà été encaissé
         /// (sauf si roleBoss=true, avec motif obligatoire).
+        /// Étape 2 : si <paramref name="idOperateur"/> est fourni, son rôle réel en base
+        /// remplace <paramref name="roleBoss"/>. Secrétaire avant paiement : motif obligatoire
+        /// (passé dans <paramref name="motifException"/>), interdit après impression du reçu.
         /// </summary>
         void AjouterPiece(int idCommande, PieceCommande piece, List<Mesure> mesures,
             bool roleBoss, string? motifException = null,
@@ -104,21 +138,31 @@ namespace GestionCoutureApp.Services
         /// <paramref name="motifLivraisonNonSoldee"/>.
         /// </para>
         /// </summary>
+        /// <para>
+        /// Étape 2 — Secrétaire : prix modifiable avant paiement uniquement, avec
+        /// <paramref name="motifModification"/> obligatoire, et plus du tout après impression
+        /// du reçu. Pièce Terminée/Livrée : lecture seule pour tous (seul un changement de
+        /// statut via le noyau reste possible).
+        /// </para>
         void ModifierPiece(PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null);
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null,
+            string? motifModification = null);
 
         /// <summary>
         /// Supprime une pièce d'une commande.
         /// Boss uniquement (UnauthorizedAccessException sinon), tracé dans l'audit.
         /// Lève InvalidOperationException si un paiement existe sur la commande.
         /// </summary>
-        void SupprimerPiece(int idPieceCommande, int idOperateur, string nomOperateur);
+        /// <para>Étape 2 — Secrétaire : <paramref name="motif"/> obligatoire, interdit après impression.</para>
+        void SupprimerPiece(int idPieceCommande, int idOperateur, string nomOperateur, string? motif = null);
 
         /// <summary>
         /// Duplique une pièce existante (sans les mesures — la secrétaire
         /// ajustera si besoin). Renvoie la nouvelle pièce créée.
         /// </summary>
-        PieceCommande DupliquerPiece(int idPieceCommandeSource);
+        /// Mêmes règles qu'un ajout de pièce (motif Secrétaire, audit PIECE_AJOUTEE).
+        PieceCommande DupliquerPiece(int idPieceCommandeSource, int idOperateur,
+            string nomOperateur, string? motif = null);
 
         /// <summary>
         /// Force le statut de toutes les pièces d'une commande.
@@ -197,6 +241,17 @@ namespace GestionCoutureApp.Services
         /// </summary>
         void ChangerStatutPiece(int idPieceCommande, string nouveauStatut,
             int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null);
+
+        /// <summary>
+        /// POINT D'ENTRÉE UNIQUE pour tout changement de statut d'une pièce.
+        /// Flux strict A faire→En cours→Terminee→Livree, sauts interdits,
+        /// Livree→autre interdit (passer par module Retour), rétrogradation Boss+motif.
+        /// Pour une rétrogradation de pièce commissionnée, passer commissionService
+        /// afin d'annuler et rétrograder dans une seule transaction atomique.
+        /// </summary>
+        void TransitionnerStatutPiece(int idPieceCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motif = null,
+            CommissionService? commissionService = null);
 
         // TÂCHE 5 — File "À attribuer"
         /// <summary>

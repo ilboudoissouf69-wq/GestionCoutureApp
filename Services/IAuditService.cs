@@ -68,6 +68,44 @@ namespace GestionCoutureApp.Services
         /// Obtient des statistiques d'audit pour une période
         /// </summary>
         StatistiquesAudit ObtenirStatistiques(DateTime debut, DateTime fin);
+
+        /// <summary>
+        /// Étape 2 — Indicateur anti-fraude du Dashboard Boss : par utilisateur,
+        /// nombre de suppressions, d'annulations et de modifications de prix
+        /// (prix d'une pièce, ajout ou suppression de pièce) depuis <paramref name="depuisUtc"/>.
+        /// Trié du plus grand total au plus petit.
+        /// </summary>
+        List<IndicateurAntiFraude> ObtenirIndicateurAntiFraude(DateTime depuisUtc);
+    }
+
+    /// <summary>
+    /// Types d'action du journal surveillés par l'indicateur anti-fraude (Étape 2).
+    /// Une seule source de vérité pour les services qui écrivent et le Dashboard qui lit.
+    /// </summary>
+    public static class ActionsAntiFraude
+    {
+        public const string Suppression    = "COMMANDE_SUPPRIMEE";
+        public const string Annulation     = "COMMANDE_ANNULEE";
+        public const string PrixModifie    = "COMMANDE_PRIX_MODIFIE";
+        public const string PieceAjoutee   = "PIECE_AJOUTEE";
+        public const string PieceSupprimee = "PIECE_SUPPRIMEE";
+
+        /// <summary>Actions comptées comme « modification de prix » (le total facturé change).</summary>
+        public static readonly string[] ModificationsPrix = { PrixModifie, PieceAjoutee, PieceSupprimee };
+
+        public static readonly string[] Toutes = { Suppression, Annulation, PrixModifie, PieceAjoutee, PieceSupprimee };
+    }
+
+    /// <summary>Une ligne de l'indicateur anti-fraude : un utilisateur sur la période.</summary>
+    public class IndicateurAntiFraude
+    {
+        public int IdOperateur { get; set; }
+        public string NomOperateur { get; set; } = string.Empty;
+        public string RoleOperateur { get; set; } = string.Empty;
+        public int Suppressions { get; set; }
+        public int Annulations { get; set; }
+        public int ModificationsPrix { get; set; }
+        public int Total => Suppressions + Annulations + ModificationsPrix;
     }
 
     /// <summary>

@@ -1950,9 +1950,12 @@ namespace GestionCoutureApp.Views
             // En mode édition, on utilise le service si la pièce est en base
             if (!_modalModeCreation && carteSource.IdPieceCommande.HasValue)
             {
+                if (!ObtenirMotifSecretaire("Motif de l'ajout d'une pièce (obligatoire)", out string? motifDup))
+                    return;
                 try
                 {
-                    _commandeService.DupliquerPiece(carteSource.IdPieceCommande.Value);
+                    var (opIdDup, opNomDup) = OperateurConnecte();
+                    _commandeService.DupliquerPiece(carteSource.IdPieceCommande.Value, opIdDup, opNomDup, motifDup);
                     var newPieces = _commandeService.ObtenirPiecesCommande(_commandeEnEdition!.IdCommande);
                     var nouvellePiece = newPieces.LastOrDefault();
                     if (nouvellePiece != null) AjouterCarte(nouvellePiece);
@@ -1992,14 +1995,21 @@ namespace GestionCoutureApp.Views
 
             if (!_modalModeCreation && carte.IdPieceCommande.HasValue)
             {
+                if (!ObtenirMotifSecretaire("Motif de la suppression de la pièce (obligatoire)", out string? motifSup))
+                    return;
                 try
                 {
                     var (opId, opNom) = OperateurConnecte();
-                    _commandeService.SupprimerPiece(carte.IdPieceCommande.Value, opId, opNom);
+                    _commandeService.SupprimerPiece(carte.IdPieceCommande.Value, opId, opNom, motifSup);
                 }
                 catch (InvalidOperationException ex)
                 {
                     MessageBox.Show(ex.Message, "Suppression impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    MessageBox.Show(ex.Message, "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
             }
@@ -2170,17 +2180,16 @@ namespace GestionCoutureApp.Views
             try
             {
                 var (idOp, nomOp) = OperateurConnecte();
-                _commandeService.Ajouter(commande, premierePiece, premieresMesures, idOp, nomOp,
-                    _cartesPieces[0].MateriauxBuffer.ToList());
-                _materiauxTemporaires.Clear();
 
-                // Pièces supplémentaires (à partir de la 2ème)
-                for (int i = 1; i < pieces.Count; i++)
-                {
-                    var (pc, mes) = pieces[i];
-                    _commandeService.AjouterPiece(commande.IdCommande, pc, mes,
-                        _roleUtilisateur == "Boss", null, _cartesPieces[i].MateriauxBuffer.ToList(), idOp, nomOp);
-                }
+                // Pièces supplémentaires (à partir de la 2ème) : elles font partie de la
+                // création → enregistrées dans la MÊME transaction, sans motif (Étape 2).
+                var piecesSup = pieces.Skip(1)
+                    .Select((p, i) => (p.piece, p.mesures,
+                        (List<MaterielSupplement>?)_cartesPieces[i + 1].MateriauxBuffer.ToList()))
+                    .ToList();
+                _commandeService.Ajouter(commande, premierePiece, premieresMesures, idOp, nomOp,
+                    _cartesPieces[0].MateriauxBuffer.ToList(), piecesSup);
+                _materiauxTemporaires.Clear();
 
                 await ChargerCommandes();
 
@@ -2309,15 +2318,29 @@ namespace GestionCoutureApp.Views
                             if (rep != MessageBoxResult.Yes) return;
                         }
 
+                        // Étape 2 : changement de prix par la Secrétaire → motif obligatoire (audité)
+                        string? motifPrix = null;
+                        if (pieceActuelle != null && pieceActuelle.MontantCouture != pieceObj.MontantCouture
+                            && !ObtenirMotifSecretaire(
+                                $"Motif du changement de prix — {pieceObj.TypeVetement} " +
+                                $"({pieceActuelle.MontantCouture:N0} → {pieceObj.MontantCouture:N0} FCFA)",
+                                out motifPrix))
+                            return;
+
                         if (!AvecControleStatut(motif =>
-                                _commandeService.ModifierPiece(pieceObj, mesures, idOp, nomOp, motif)))
+                                _commandeService.ModifierPiece(pieceObj, mesures, idOp, nomOp, motif, motifPrix)))
                             return;
                     }
                     else
                     {
-                        // Nouvelle pièce ajoutée en mode édition — matériaux depuis le buffer de la carte
+                        // Nouvelle pièce ajoutée en mode édition — matériaux depuis le buffer de la carte.
+                        // Étape 2 : après création, la Secrétaire doit motiver l'ajout.
+                        if (!ObtenirMotifSecretaire(
+                                $"Motif de l'ajout de la pièce « {pieceObj.TypeVetement} » (obligatoire)",
+                                out string? motifAjout))
+                            return;
                         _commandeService.AjouterPiece(_commandeEnEdition.IdCommande, pieceObj, mesures,
-                            _roleUtilisateur == "Boss", null, carte.MateriauxBuffer.ToList(), idOp, nomOp);
+                            _roleUtilisateur == "Boss", motifAjout, carte.MateriauxBuffer.ToList(), idOp, nomOp);
                     }
                 }
 
@@ -2812,6 +2835,19 @@ namespace GestionCoutureApp.Views
             scroll.Content = root;
             dialog.Content = scroll;
             return dialog.ShowDialog() == true;
+        }
+
+        /// <summary>
+        /// Étape 2 : la Secrétaire doit justifier tout changement du total facturé après
+        /// la création (prix, ajout/suppression de pièce). Pour le Boss, aucun motif n'est
+        /// demandé (motif = null). Renvoie false si la Secrétaire abandonne la saisie.
+        /// </summary>
+        private bool ObtenirMotifSecretaire(string titre, out string? motif)
+        {
+            motif = null;
+            if (_roleUtilisateur != "Secretaire") return true;
+            motif = DemanderMotif(titre);
+            return !string.IsNullOrWhiteSpace(motif);
         }
 
         private string? DemanderMotif(string titre)
@@ -3334,9 +3370,11 @@ namespace GestionCoutureApp.Views
         {
             if (!_pieceSelectionneeId.HasValue) return;
             if (MessageBox.Show("Dupliquer cette pièce ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            if (!ObtenirMotifSecretaire("Motif de l'ajout d'une pièce (obligatoire)", out string? motifDup)) return;
             try
             {
-                _commandeService.DupliquerPiece(_pieceSelectionneeId.Value);
+                var (opIdDup, opNomDup) = OperateurConnecte();
+                _commandeService.DupliquerPiece(_pieceSelectionneeId.Value, opIdDup, opNomDup, motifDup);
                 _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);
                 RafraichirListePieces(); _ = ChargerCommandes();
                 MessageBox.Show("Pièce dupliquée avec succès !", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);

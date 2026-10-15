@@ -8,17 +8,30 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace GestionCoutureApp.Tests
 {
     // ====================================================================
-    // TÂCHE 5 — Flux strict de statuts + file À attribuer
+    // TÂCHE 5 / ÉTAPE 1 — Flux strict de statuts
     //
-    //   T5_01 : flux normal (A faire → En cours → Terminee → Livree) autorisé
-    //   T5_02 : saut d'étape autorisé (A faire → Terminee, etc.)
+    // Flux obligatoire : A faire → En cours → Terminee → Livree
+    //
+    // Tests inclus :
+    //   T5_01 : flux normal complet autorisé (A faire → En cours → Terminee → Livree)
+    //   T5_02 : saut d'une étape en avant INTERDIT (A faire → Terminee)
+    //   T5_02b: saut de deux étapes en avant INTERDIT (A faire → Livree)
+    //   T5_02c: saut En cours → Livree INTERDIT
     //   T5_03 : retour en arrière bloqué pour la Secrétaire
     //   T5_04 : retour en arrière Boss sans motif bloqué
-    //   T5_05 : retour en arrière Boss avec motif autorisé
-    //   T5_06 : Livree bloqué si non soldée (Secrétaire)
-    //   T5_07 : ForcerStatutToutesPieces respecte flux strict
+    //   T5_05 : retour en arrière Boss avec motif autorisé + DateTerminee remise à null
+    //   T5_05b: Livree → tout statut INTERDIT pour tous (passer par module Retour)
+    //   T5_06 : Terminee → Livree bloqué si commande non soldée (Secrétaire)
+    //   T5_06b: Terminee → Livree autorisé Boss avec motif si non soldée
+    //   T5_07 : ForcerStatutToutesPieces respecte flux strict (retour Boss avec motif)
+    //   T5_07b: ForcerStatutToutesPieces retour arrière bloqué Secrétaire
+    //   T5_07c: ForcerStatutToutesPieces saut interdit (A faire → Livree)
     //   T5_08 : CompterPiecesAAttribuer retourne le bon nombre
     //   T5_09 : ObtenirCommandesAAttribuerAsync filtre correctement
+    //   T5_10 : rétrogradation pièce commissionnée lève PieceCommissionneeException
+    //   T5_11 : DateTerminee renseignée au passage Terminee et remise à null à la rétrogradation
+    //   T5_12 : DateTerminee conservée lors de Terminee → Livree
+    //   T5_13 : message d'erreur Livree→autre mentionne "module Retour"
     // ====================================================================
 
     [TestFixture]
@@ -38,7 +51,9 @@ namespace GestionCoutureApp.Tests
         {
             CommandeService.ViderCacheDoublonPourTests();
             var opts = new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseInMemoryDatabase($"T5_{Guid.NewGuid()}").Options;
+                .UseInMemoryDatabase($"T5_{Guid.NewGuid()}")
+                .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+                .Options;
             _factory = new T5DbContextFactory(opts);
             var log  = NullLoggerFactory.Instance;
             _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log));
@@ -63,12 +78,7 @@ namespace GestionCoutureApp.Tests
         public void T5_01_Flux_Normal_Autorise()
         {
             var (idCommande, idPiece) = CreerPiece();
-            // Solder la commande (montant = 10001 à cause du compteur)
-            using (var ctx = _factory.CreateDbContext())
-            {
-                var pce = ctx.PiecesCommande.Find(idPiece)!;
-                Payer(idCommande, pce.MontantCouture);
-            }
+            Payer(idCommande, PieceEnBase(idPiece).MontantCouture);
 
             Assert.DoesNotThrow(() => _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdSecretaire, "Marie FALL"));
             Assert.DoesNotThrow(() => _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdSecretaire, "Marie FALL"));
@@ -77,18 +87,39 @@ namespace GestionCoutureApp.Tests
             Assert.That(PieceEnBase(idPiece).Statut, Is.EqualTo("Livree"));
         }
 
-        // ── T5_02 : saut d'étape autorisé (avant) ────────────────────────
+        // ── T5_02 : saut d'étape interdit ────────────────────────────────
 
         [Test]
-        public void T5_02_Saut_Etape_Avance_Autorise()
+        public void T5_02_Saut_AFaire_Vers_Terminee_Interdit()
+        {
+            var (_, idPiece) = CreerPiece();
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("En cours").IgnoreCase,
+                "Le message doit indiquer l'étape manquante");
+        }
+
+        [Test]
+        public void T5_02b_Saut_AFaire_Vers_Livree_Interdit()
+        {
+            var (_, idPiece) = CreerPiece();
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "Livree", IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("Terminée").Or.Contain("En cours").IgnoreCase);
+        }
+
+        [Test]
+        public void T5_02c_Saut_EnCours_Vers_Livree_Interdit()
         {
             var (idCommande, idPiece) = CreerPiece();
-            Payer(idCommande, 10000m);
+            Payer(idCommande, PieceEnBase(idPiece).MontantCouture);
+            _commandeService.ChangerStatutPiece(idPiece, "En cours", IdBoss, "Mamadou DIALLO");
 
-            // Sauter directement à Terminee depuis A faire
-            Assert.DoesNotThrow(() =>
-                _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdSecretaire, "Marie FALL"),
-                "Un saut en avant (A faire → Terminee) doit être autorisé");
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "Livree", IdSecretaire, "Marie FALL"));
+            Assert.That(ex!.Message, Does.Contain("Terminée").IgnoreCase);
         }
 
         // ── T5_03 : retour arrière bloqué Secrétaire ─────────────────────
@@ -100,7 +131,6 @@ namespace GestionCoutureApp.Tests
             _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
-            // Secrétaire ne peut pas rétrograder
             var ex = Assert.Throws<InvalidOperationException>(() =>
                 _commandeService.ChangerStatutPiece(idPiece, "En cours", IdSecretaire, "Marie FALL"));
             Assert.That(ex!.Message, Does.Contain("Boss").IgnoreCase);
@@ -112,6 +142,7 @@ namespace GestionCoutureApp.Tests
         public void T5_04_Retour_Arriere_Boss_Sans_Motif_Bloque()
         {
             var (_, idPiece) = CreerPiece();
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -125,35 +156,78 @@ namespace GestionCoutureApp.Tests
         public void T5_05_Retour_Arriere_Boss_Avec_Motif_Autorise()
         {
             var (_, idPiece) = CreerPiece();
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
-            // motifLivraisonNonSoldee sert aussi de motif de rétrogradation
             Assert.DoesNotThrow(() =>
                 _commandeService.ChangerStatutPiece(idPiece, "En cours", IdBoss, "Mamadou DIALLO",
                     motifLivraisonNonSoldee: "Retouche complémentaire nécessaire"));
 
             Assert.That(PieceEnBase(idPiece).Statut, Is.EqualTo("En cours"));
-            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Null, "DateTerminee remise à null lors du retour arrière");
+            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Null,
+                "DateTerminee doit être remise à null lors du retour arrière");
         }
 
-        // ── T5_06 : Livree bloqué si non soldée ──────────────────────────
+        // ── T5_05b : Livree → tout statut interdit pour tous ─────────────
+
+        [Test]
+        public void T5_05b_Livree_Vers_Autre_Interdit_Pour_Tous()
+        {
+            var (idCommande, idPiece) = CreerPiece();
+            Payer(idCommande, PieceEnBase(idPiece).MontantCouture);
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Livree",   IdBoss, "Mamadou DIALLO");
+
+            // Même le Boss ne peut pas rétrograder depuis Livree
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO",
+                    motifLivraisonNonSoldee: "Test retour"));
+            Assert.That(ex!.Message, Does.Contain("Retour").Or.Contain("retour").IgnoreCase);
+        }
+
+        // ── T5_06 : Terminee → Livree bloqué si non soldée ───────────────
 
         [Test]
         public void T5_06_Livree_Bloque_Commande_Non_Soldee()
         {
             var (_, idPiece) = CreerPiece(); // aucun paiement
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
                 _commandeService.ChangerStatutPiece(idPiece, "Livree", IdSecretaire, "Marie FALL"));
             Assert.That(ex!.PeutForcer, Is.False);
         }
 
-        // ── T5_07 : ForcerStatutToutesPieces respect flux ─────────────────
+        // ── T5_06b : Terminee → Livree Boss avec motif si non soldée ─────
+
+        [Test]
+        public void T5_06b_Livree_Boss_Avec_Motif_Si_Non_Soldee()
+        {
+            var (_, idPiece) = CreerPiece(); // aucun paiement
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
+
+            // Boss lève d'abord PeutForcer=true
+            var ex1 = Assert.Throws<LivraisonNonSoldeeException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "Livree", IdBoss, "Mamadou DIALLO"));
+            Assert.That(ex1!.PeutForcer, Is.True, "Le Boss doit pouvoir forcer avec motif");
+
+            // Boss avec motif : OK
+            Assert.DoesNotThrow(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "Livree", IdBoss, "Mamadou DIALLO",
+                    motifLivraisonNonSoldee: "Client absent, livraison reportée avec accord verbal"));
+            Assert.That(PieceEnBase(idPiece).Statut, Is.EqualTo("Livree"));
+        }
+
+        // ── T5_07 : ForcerStatutToutesPieces respecte flux strict ─────────
 
         [Test]
         public void T5_07_ForcerStatutToutesPieces_Retour_Arriere_Boss_Avec_Motif()
         {
             var (idCommande, idPiece) = CreerPiece();
+            _commandeService.ForcerStatutToutesPieces(idCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ForcerStatutToutesPieces(idCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
             Assert.DoesNotThrow(() =>
@@ -167,10 +241,21 @@ namespace GestionCoutureApp.Tests
         public void T5_07b_ForcerStatutToutesPieces_Retour_Arriere_Secretaire_Bloque()
         {
             var (idCommande, _) = CreerPiece();
+            _commandeService.ForcerStatutToutesPieces(idCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ForcerStatutToutesPieces(idCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
             Assert.Throws<InvalidOperationException>(() =>
                 _commandeService.ForcerStatutToutesPieces(idCommande, "A faire", IdSecretaire, "Marie FALL"));
+        }
+
+        [Test]
+        public void T5_07c_ForcerStatutToutesPieces_Saut_Interdit()
+        {
+            var (idCommande, _) = CreerPiece();
+
+            // Saut A faire → Livree doit être interdit
+            Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ForcerStatutToutesPieces(idCommande, "Livree", IdBoss, "Mamadou DIALLO"));
         }
 
         // ── T5_08 : CompterPiecesAAttribuer ───────────────────────────────
@@ -178,11 +263,9 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void T5_08_CompterPiecesAAttribuer_Correct()
         {
-            // Pièce avec couturier → ne compte pas
-            CreerPiece(avecCouturier: true);
-            // Pièce sans couturier → compte
-            CreerPiece(avecCouturier: false);
-            CreerPiece(avecCouturier: false);
+            CreerPiece(avecCouturier: true);   // avec couturier → ne compte pas
+            CreerPiece(avecCouturier: false);  // sans couturier → compte
+            CreerPiece(avecCouturier: false);  // sans couturier → compte
 
             int nb = _commandeService.CompterPiecesAAttribuer();
             Assert.That(nb, Is.EqualTo(2));
@@ -193,14 +276,117 @@ namespace GestionCoutureApp.Tests
         [Test]
         public async Task T5_09_ObtenirCommandesAAttribuerAsync_Filtre_Correct()
         {
-            // 2 commandes sans couturier
             CreerPiece(avecCouturier: false);
             CreerPiece(avecCouturier: false);
-            // 1 commande avec couturier → ne doit pas apparaître
-            CreerPiece(avecCouturier: true);
+            CreerPiece(avecCouturier: true); // ne doit pas apparaître
 
             var result = await _commandeService.ObtenirCommandesAAttribuerAsync(1, 50);
             Assert.That(result.TotalCount, Is.EqualTo(2));
+        }
+
+        // ── T5_10 : pièce commissionnée → PieceCommissionneeException ─────
+
+        [Test]
+        public void T5_10_Retrograder_Piece_Commissionnee_Leve_Exception()
+        {
+            var (idCommande, idPiece) = CreerPiece();
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
+
+            // Simuler commission enregistrée sur la pièce
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var commission = new Commission
+                {
+                    IdEmploye = IdCouturier,
+                    NomEmployeSnapshot = "Issa CISSE",
+                    DateDebutPeriode = DateTime.UtcNow.AddDays(-30),
+                    DateFinPeriode = DateTime.UtcNow,
+                    Pourcentage = 10,
+                    BaseMontant = 10000,
+                    MontantCommission = 1000,
+                    BaseCalcul = "Total",
+                    NbCommandes = 1,
+                    DateCalcul = DateTime.UtcNow,
+                    IdOperateur = IdBoss,
+                    NomOperateur = "Mamadou DIALLO",
+                    EstAnnulee = false
+                };
+                ctx.Commissions.Add(commission);
+                ctx.SaveChanges();
+
+                var piece = ctx.PiecesCommande.Find(idPiece)!;
+                piece.IdCommission = commission.IdCommission;
+                ctx.SaveChanges();
+            }
+
+            // Sans CommissionService → lève PieceCommissionneeException
+            var ex = Assert.Throws<CommandeService.PieceCommissionneeException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "En cours", IdBoss, "Mamadou DIALLO",
+                    motifLivraisonNonSoldee: "Défaut découvert après commission"));
+            Assert.That(ex!.IdCommission, Is.GreaterThan(0));
+            Assert.That(ex.Message, Does.Contain("commission").IgnoreCase);
+        }
+
+        // ── T5_11 : DateTerminee renseignée et effacée ────────────────────
+
+        [Test]
+        public void T5_11_DateTerminee_Renseignee_Et_Effacee()
+        {
+            var (_, idPiece) = CreerPiece();
+            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Null, "Doit être null à la création");
+
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Null, "Toujours null en cours");
+
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
+            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Not.Null,
+                "DateTerminee doit être renseignée au passage Terminee");
+            Assert.That(PieceEnBase(idPiece).IdOperateurTerminee, Is.EqualTo(IdBoss));
+
+            _commandeService.ChangerStatutPiece(idPiece, "En cours", IdBoss, "Mamadou DIALLO",
+                motifLivraisonNonSoldee: "Défaut à corriger");
+            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Null,
+                "DateTerminee doit être remise à null après rétrogradation");
+            Assert.That(PieceEnBase(idPiece).IdOperateurTerminee, Is.Null);
+        }
+
+        // ── T5_12 : DateTerminee conservée lors de Terminee → Livree ─────
+
+        [Test]
+        public void T5_12_DateTerminee_Conservee_Terminee_Vers_Livree()
+        {
+            var (idCommande, idPiece) = CreerPiece();
+            Payer(idCommande, PieceEnBase(idPiece).MontantCouture);
+
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
+
+            var dateTerminee = PieceEnBase(idPiece).DateTerminee;
+            Assert.That(dateTerminee, Is.Not.Null);
+
+            _commandeService.ChangerStatutPiece(idPiece, "Livree", IdBoss, "Mamadou DIALLO");
+
+            Assert.That(PieceEnBase(idPiece).DateTerminee, Is.EqualTo(dateTerminee),
+                "DateTerminee ne doit pas changer lors du passage Terminee → Livree");
+        }
+
+        // ── T5_13 : message Livree→autre mentionne module Retour ─────────
+
+        [Test]
+        public void T5_13_Message_LivreeVersAutre_Mentionne_ModuleRetour()
+        {
+            var (idCommande, idPiece) = CreerPiece();
+            Payer(idCommande, PieceEnBase(idPiece).MontantCouture);
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(idPiece, "Livree",   IdBoss, "Mamadou DIALLO");
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.ChangerStatutPiece(idPiece, "A faire", IdBoss, "Mamadou DIALLO",
+                    motifLivraisonNonSoldee: "test"));
+            Assert.That(ex!.Message, Does.Contain("Retour").IgnoreCase,
+                "Le message doit mentionner le module Retour");
         }
 
         // ── Helpers ───────────────────────────────────────────────────────
@@ -214,7 +400,7 @@ namespace GestionCoutureApp.Tests
             var pce = new PieceCommande
             {
                 TypeVetement   = "Chemise",
-                MontantCouture = 10000m + _pieceCounter, // montant unique pour éviter anti-doublon
+                MontantCouture = 10000m + _pieceCounter,
                 IdCouturier    = avecCouturier ? IdCouturier : (int?)null
             };
             _commandeService.Ajouter(cmd, pce, new List<Mesure>(), IdBoss, "Mamadou DIALLO");

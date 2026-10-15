@@ -22,6 +22,9 @@ namespace GestionCoutureApp.Services
         Task          DefinirSeuilPrimeNbCommandes(int n);
         Task<decimal> ObtenirMontantPrimeQualite();
         Task          DefinirMontantPrimeQualite(decimal montant);
+        // Étape 2 : fenêtre d'annulation rapide par la Secrétaire (minutes, défaut 10)
+        Task<int>     ObtenirDelaiAnnulationSecretaireMinutes();
+        Task          DefinirDelaiAnnulationSecretaireMinutes(int minutes);
 
         // ── Onglet 1 — Comptabilité & Seuils ─────────────────────────────
         Task<string>  ObtenirModeCA();           // "Encaisse" | "Total"

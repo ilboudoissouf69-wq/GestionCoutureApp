@@ -27,14 +27,19 @@ namespace GestionCoutureApp.Services
         // Optionnel : null dans les tests unitaires qui ne testent pas l'audit.
         private readonly IAuditService? _auditService;
 
+        // Horloge injectée pour les tests (IClock) ; SystemClock par défaut en production.
+        private readonly IClock _clock;
+
         public CommandeService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
             ILogger<CommandeService> logger,
-            IAuditService? auditService = null)
+            IAuditService? auditService = null,
+            IClock? clock = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
             _auditService = auditService;
+            _clock = clock ?? new SystemClock();
         }
 
         public List<Commande> ObtenirTous()
@@ -121,13 +126,16 @@ namespace GestionCoutureApp.Services
             string? statut,
             int? idCouturier,
             DateTime? dateDebut,
-            DateTime? dateFin)
+            DateTime? dateFin,
+            bool inclureSupprimees = false)
         {
             using var context = _contextFactory.CreateDbContext();
             DateTime maintenant = DateTime.Now;
 
+            // Étape 2 : les commandes supprimées/annulées ne sont jamais effacées ;
+            // le Boss peut les réafficher (filtre « Afficher les supprimées »).
             var query = context.Commandes
-                .Where(c => !c.EstSupprimee)
+                .Where(c => inclureSupprimees || !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
                 .Include(c => c.MaterielSupplements)
@@ -207,7 +215,8 @@ namespace GestionCoutureApp.Services
         }
 
         public void Ajouter(Commande commande, PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null)
+            int idOperateur, string nomOperateur, List<MaterielSupplement>? materiaux = null,
+            List<(PieceCommande Piece, List<Mesure> Mesures, List<MaterielSupplement>? Materiaux)>? piecesSupplementaires = null)
         {
             // ── Validation de l'opérateur ────────────────────────────────────
             if (idOperateur <= 0)
@@ -260,17 +269,27 @@ namespace GestionCoutureApp.Services
             // Traçabilité de création — automatique, invisible pour l'opérateur
             commande.IdOperateurCreation  = idOperateur;
             commande.NomOperateurCreation = nomOperateur.Trim();
-            commande.DateCreation         = DateTime.UtcNow;
+            // IClock : la fenêtre d'annulation rapide (Étape 2) se mesure depuis ici.
+            commande.DateCreation         = _clock.UtcNow;
 
             // Le statut est TOUJOURS forcé à "A faire" à la création —
             // peu importe ce que l'écran ou l'appelant a pu mettre.
             piece.Statut = "A faire";
 
-            // Commande + pièce + mesures + matériaux en UN SEUL SaveChanges :
+            // Commande + pièce(s) + mesures + matériaux en UN SEUL SaveChanges :
             // EF Core l'exécute dans une transaction, donc une coupure de courant
             // ne peut plus laisser une commande à moitié enregistrée.
+            // Étape 2 : les pièces saisies dans la modale de création font partie
+            // de la création — elles ne passent PAS par AjouterPiece (qui, lui,
+            // exige un motif de la Secrétaire pour tout ajout APRÈS création).
             commande.Pieces.Add(piece);
             RattacherMesuresEtMateriaux(commande, piece, mesures, materiaux, idOperateur, nomOperateur);
+            foreach (var (pieceSup, mesuresSup, materiauxSup) in piecesSupplementaires ?? new())
+            {
+                pieceSup.Statut = "A faire";
+                commande.Pieces.Add(pieceSup);
+                RattacherMesuresEtMateriaux(commande, pieceSup, mesuresSup, materiauxSup, idOperateur, nomOperateur);
+            }
 
             context.Commandes.Add(commande);
             context.SaveChanges();
@@ -337,7 +356,9 @@ namespace GestionCoutureApp.Services
 
         /// <summary>
         /// Écrit dans le journal d'audit immuable (si le service est disponible).
-        /// Task.Run évite tout blocage du thread UI WPF pendant l'attente.
+        /// L'écriture est ATTENDUE (plus de tire-et-oublie) : l'indicateur anti-fraude
+        /// du Boss ne doit jamais rater une modification de prix. Task.Run + Wait
+        /// exécute l'async hors du contexte de synchronisation WPF (pas d'interblocage).
         /// </summary>
         private void Auditer(Employe operateur, string nomOperateur, string typeAction,
             string entite, int idEntite, object? avant, object? apres, string? motif)
@@ -369,18 +390,52 @@ namespace GestionCoutureApp.Services
                     _logger.LogError(ex,
                         "Échec audit — {Action} sur {Entite} #{Id}", typeAction, entite, idEntite);
                 }
-            }).ConfigureAwait(false);
+            }).Wait(TimeSpan.FromSeconds(10));
         }
 
+        // =====================================================================
+        // NOYAU DE TRANSITION — UN SEUL CHEMIN POUR TOUT CHANGEMENT DE STATUT
+        // =====================================================================
+
         /// <summary>
-        /// TÂCHE 5 — Vérifie que la transition de statut respecte le flux strict.
-        /// Flux normal  : A faire → En cours → Terminee → Livree
-        /// Retour arrière : uniquement Boss + motif obligatoire.
+        /// Point d'entrée UNIQUE pour tout changement de statut d'une pièce.
+        /// Toutes les règles métier sont ici ; aucun autre code ne modifie Piece.Statut.
+        ///
+        /// Flux strict  : A faire → En cours → Terminee → Livree
+        ///   • Sauts en avant (ex. A faire → Livree) : INTERDITS.
+        ///   • Livree → tout autre statut : INTERDIT pour tous ; passer par le module Retour.
+        ///   • Retour arrière : Boss uniquement, motif obligatoire.
+        ///   • Terminee → En cours/A faire : si IdCommission renseigné, refuse et propose
+        ///     «Annuler la commission puis rétrograder» dans la même transaction (CommissionService
+        ///     doit être passé si disponible).
+        ///
+        /// Livraison :
+        ///   • Terminee → Livree : bloqué si ResteAPayer > 0 (LivraisonNonSoldeeException).
+        ///     Boss + motif peut forcer (retourne le resteAPayer pour audit).
+        ///
+        /// DateTerminee / IClock :
+        ///   • En cours/A faire → Terminee/Livree : horodate DateTerminee (UTC) et IdOperateurTerminee.
+        ///   • Retour arrière depuis Terminee/Livree : efface DateTerminee et IdOperateurTerminee.
+        ///   • Terminee → Livree : conserve DateTerminee existante.
+        ///
+        /// ATTENTION : cette méthode ne fait PAS SaveChanges. C'est l'appelant qui commite,
+        /// pour permettre des transactions multi-pièces atomiques.
         /// </summary>
-        private static void VerifierFluxStatut(
-            string ancien, string nouveau, Employe operateur, string? motif)
+        /// <returns>
+        /// Le montant RestAAPayer si le Boss a forcé une livraison non soldée (à auditer après commit),
+        /// null sinon.
+        /// </returns>
+        private decimal? TransitionnerStatutPieceCoeur(
+            PieceCommande piece,
+            string nouveauStatut,
+            Employe operateur,
+            string? motif,
+            Commande? commande,
+            CommissionService? commissionService = null)
         {
-            // Ordre numérique des statuts
+            string ancienStatut = piece.Statut;
+            if (ancienStatut == nouveauStatut) return null; // idempotent
+
             static int Rang(string s) => s switch
             {
                 "A faire"  => 0,
@@ -390,80 +445,127 @@ namespace GestionCoutureApp.Services
                 _          => -1
             };
 
-            int r1 = Rang(ancien);
-            int r2 = Rang(nouveau);
+            int r1 = Rang(ancienStatut);
+            int r2 = Rang(nouveauStatut);
 
-            // Avance dans le flux → toujours OK (validation non soldée gérée ailleurs)
-            if (r2 > r1) return;
+            // ── 1. Livree → autre : interdit pour tous (module Retour) ────────
+            if (ancienStatut == "Livree" && r2 < r1)
+                throw new InvalidOperationException(
+                    "Une pièce Livrée ne peut pas être rétrogradée directement. " +
+                    "Utilisez le module « Retour » pour traiter ce cas.");
 
-            // Retour en arrière : Boss obligatoire + motif
+            // ── 2. Saut interdit (avance de plus d'un cran) ──────────────────
+            if (r2 > r1 + 1)
+                throw new InvalidOperationException(
+                    $"Transition interdite : \"{ancienStatut}\" → \"{nouveauStatut}\". " +
+                    $"Le flux strict est A faire → En cours → Terminée → Livrée. " +
+                    $"Passez d'abord par « {(r1 == 0 ? "En cours" : "Terminée")} ».");
+
+            // ── 3. Statut inconnu ─────────────────────────────────────────────
+            if (r2 == -1)
+                throw new InvalidOperationException($"Statut inconnu : \"{nouveauStatut}\".");
+
+            // ── 4. Retour arrière ─────────────────────────────────────────────
             if (r2 < r1)
             {
                 if (operateur.RoleEnum != RoleEmploye.Boss)
                     throw new InvalidOperationException(
                         $"Seul le Boss peut rétrograder le statut d'une pièce " +
-                        $"(\"{ancien}\" → \"{nouveau}\"). " +
+                        $"(\"{ancienStatut}\" → \"{nouveauStatut}\"). " +
                         "Contactez le Boss pour effectuer cette opération.");
 
                 if (string.IsNullOrWhiteSpace(motif))
                     throw new InvalidOperationException(
                         $"Un motif est obligatoire pour rétrograder le statut " +
-                        $"(\"{ancien}\" → \"{nouveau}\").");
-            }
-        }
+                        $"(\"{ancienStatut}\" → \"{nouveauStatut}\").");
 
-        /// <summary>
-        /// TÂCHE 5 — Met à jour DateTerminee et IdOperateurTerminee d'une pièce
-        /// lors de chaque changement de statut, quel que soit le chemin d'appel.
-        ///
-        /// Règles :
-        ///   - Passage vers "Terminee" ou "Livree" : renseigne DateTerminee (UTC)
-        ///     et IdOperateurTerminee si DateTerminee est encore null. Une pièce
-        ///     déjà commissionnée (IdCommission != null) ne doit jamais revenir en
-        ///     arrière (cette garde est faite en amont, dans ChangerStatutPiece /
-        ///     ForcerStatutToutesPieces) — ici on ne fait que horodater.
-        ///   - Retour en arrière (reprise) : remet DateTerminee à null et
-        ///     IdOperateurTerminee à null.
-        /// </summary>
-        private static void AppliquerDateTerminee(PieceCommande piece,
-            string ancienStatut, string nouveauStatut, int idOperateur)
-        {
-            bool passe_en_terminee = (nouveauStatut == "Terminee" || nouveauStatut == "Livree")
+                // Pièce commissionnée : refus OU annulation+rétrogradation dans la même transaction
+                if (piece.IdCommission.HasValue)
+                {
+                    if (commissionService == null)
+                        throw new PieceCommissionneeException(piece.IdCommission.Value, motif);
+
+                    // Annuler la commission DANS la même transaction (l'appelant gère le commit)
+                    commissionService.AnnulerDansTransaction(
+                        piece.IdCommission.Value, motif!,
+                        operateur.IdEmploye, $"{operateur.Prenom} {operateur.Nom}".Trim());
+                    // IdCommission mis à null par AnnulerDansTransaction
+                }
+            }
+
+            // ── 5. Garde livraison non soldée ─────────────────────────────────
+            decimal? resteLivraisonForcee = null;
+            if (nouveauStatut == "Livree" && commande != null)
+            {
+                decimal reste = commande.ResteAPayer;
+                if (reste > 0.01m)
+                {
+                    if (operateur.RoleEnum != RoleEmploye.Boss)
+                        throw new LivraisonNonSoldeeException(reste, peutForcer: false);
+                    if (string.IsNullOrWhiteSpace(motif))
+                        throw new LivraisonNonSoldeeException(reste, peutForcer: true);
+                    resteLivraisonForcee = reste;
+                }
+            }
+
+            // ── 6. DateTerminee via IClock ────────────────────────────────────
+            bool passeEnTerminee = (nouveauStatut == "Terminee" || nouveauStatut == "Livree")
                                    && ancienStatut != "Terminee" && ancienStatut != "Livree";
             bool reprise = (nouveauStatut == "A faire" || nouveauStatut == "En cours")
                          && (ancienStatut == "Terminee" || ancienStatut == "Livree");
 
-            if (passe_en_terminee && piece.DateTerminee == null)
+            if (passeEnTerminee && piece.DateTerminee == null)
             {
-                piece.DateTerminee = DateTime.UtcNow;
-                piece.IdOperateurTerminee = idOperateur > 0 ? idOperateur : null;
+                piece.DateTerminee = _clock.UtcNow;
+                piece.IdOperateurTerminee = operateur.IdEmploye > 0 ? operateur.IdEmploye : null;
             }
             else if (reprise)
             {
                 piece.DateTerminee = null;
                 piece.IdOperateurTerminee = null;
             }
-            // Si déjà Terminee → Livree, on conserve la DateTerminee existante
-            // (la pièce n'a pas été "refaite").
+            // Terminee → Livree : on conserve DateTerminee existante
+
+            // ── 7. Appliquer le nouveau statut ────────────────────────────────
+            piece.Statut = nouveauStatut;
+
+            return resteLivraisonForcee;
         }
 
         /// <summary>
-        /// Livraison d'une pièce alors que la commande n'est pas soldée :
-        /// interdit, sauf pour le Boss avec un motif.
-        /// Retourne le reste à payer si le Boss a forcé (à tracer après SaveChanges
-        /// via <see cref="AuditerLivraisonNonSoldee"/>), null si la commande est soldée.
+        /// Exception levée quand une pièce commissionnée est rétrogradée sans fournir
+        /// un CommissionService pour annuler atomiquement.
+        /// La vue doit proposer «Annuler commission + rétrograder» à l'écran.
+        /// </summary>
+        public sealed class PieceCommissionneeException : InvalidOperationException
+        {
+            public int IdCommission { get; }
+            public string? Motif { get; }
+
+            public PieceCommissionneeException(int idCommission, string? motif)
+                : base(
+                    $"Cette pièce est rattachée à la commission #{idCommission}. " +
+                    "Son statut ne peut pas être rétrogradé directement.\n\n" +
+                    "Option disponible pour le Boss : annuler cette commission ET rétrograder " +
+                    "la pièce en une seule opération (bouton « Annuler commission + Rétrograder »).")
+            {
+                IdCommission = idCommission;
+                Motif        = motif;
+            }
+        }
+
+        /// <summary>
+        /// Livraison d'une pièce alors que la commande n'est pas soldée.
+        /// Conservé pour rétrocompatibilité avec les vues.
         /// </summary>
         private static decimal? VerifierLivraisonSoldee(Commande commande, Employe operateur, string? motif)
         {
             decimal reste = commande.ResteAPayer;
             if (reste <= 0.01m) return null;
-
             if (operateur.RoleEnum != RoleEmploye.Boss)
                 throw new LivraisonNonSoldeeException(reste, peutForcer: false);
-
             if (string.IsNullOrWhiteSpace(motif))
                 throw new LivraisonNonSoldeeException(reste, peutForcer: true);
-
             return reste;
         }
 
@@ -474,6 +576,241 @@ namespace GestionCoutureApp.Services
                 avant: new { ResteAPayer = reste, Contexte = contexte },
                 apres: null,
                 motif: motif.Trim());
+        }
+
+        // =====================================================================
+        // ÉTAPE 2 — VERROUILLAGE SUPPRESSION / ANNULATION / MODIFICATION
+        // =====================================================================
+
+        /// <summary>Formule affichée à la Secrétaire chaque fois qu'une action lui est refusée.</summary>
+        public const string MessageDemandezAuBoss = "Demandez au Boss.";
+
+        private static bool EstTermineeOuLivree(string statut) =>
+            statut == "Terminee" || statut == "Livree";
+
+        /// <summary>
+        /// Commande Terminée/Livrée (TOUTES ses pièces) : lecture seule pour tous.
+        /// Le Boss doit d'abord rétrograder une pièce (TransitionnerStatutPiece + motif).
+        /// </summary>
+        private static bool EstEnLectureSeule(Commande commande) =>
+            commande.Pieces.Count > 0 && commande.Pieces.All(p => EstTermineeOuLivree(p.Statut));
+
+        private static bool APaiementEncaisse(Commande commande) =>
+            commande.Paiements.Any(p => !p.EstAnnule);
+
+        private static void ExigerCommandeActive(Commande commande)
+        {
+            if (commande.EstSupprimee)
+                throw new InvalidOperationException(
+                    commande.EstAnnulee
+                        ? "Cette commande a été annulée : elle n'est plus modifiable."
+                        : "Cette commande a été supprimée : elle n'est plus modifiable.");
+        }
+
+        private static void ExigerCommandeModifiable(Commande commande)
+        {
+            ExigerCommandeActive(commande);
+            if (EstEnLectureSeule(commande))
+                throw new InvalidOperationException(
+                    "Cette commande est terminée ou livrée : elle est en lecture seule. " +
+                    "Seul le Boss peut d'abord rétrograder une pièce (avec motif) pour la modifier.");
+        }
+
+        private static string ExigerMotif(string? motif, string action)
+        {
+            if (string.IsNullOrWhiteSpace(motif))
+                throw new InvalidOperationException($"Un motif est obligatoire pour {action}.");
+            return motif.Trim();
+        }
+
+        private static string Normaliser(string? s) => (s ?? string.Empty).Trim();
+
+        /// <summary>
+        /// Délai (minutes) d'annulation rapide, lu dans Parametres à chaque appel
+        /// pour qu'une modification du Boss soit prise en compte immédiatement.
+        /// </summary>
+        private static int LireDelaiAnnulationSecretaire(ApplicationDbContext context)
+        {
+            var valeur = context.Parametres.Find(ParametresService.CleDelaiAnnulationSecretaire)?.Valeur;
+            return int.TryParse(valeur, out int minutes) && minutes >= 0
+                ? minutes
+                : ParametresService.DelaiAnnulationSecretaireDefautMinutes;
+        }
+
+        /// <summary>
+        /// Raison pour laquelle la Secrétaire ne peut PAS annuler la commande, ou null si elle le peut.
+        /// Les quatre conditions du cahier sont cumulatives.
+        /// </summary>
+        private string? RaisonRefusAnnulation(ApplicationDbContext context, Commande commande, Employe operateur)
+        {
+            if (operateur.RoleEnum != RoleEmploye.Secretaire)
+                return "L'annulation rapide est réservée à la Secrétaire (le Boss utilise la suppression).";
+            if (commande.EstSupprimee)
+                return "Cette commande est déjà supprimée ou annulée.";
+            if (commande.IdOperateurCreation != operateur.IdEmploye)
+                return "Vous ne pouvez annuler que les commandes que vous avez créées vous-même.";
+
+            int delaiMinutes = LireDelaiAnnulationSecretaire(context);
+            if (_clock.UtcNow - commande.DateCreation >= TimeSpan.FromMinutes(delaiMinutes))
+                return $"Le délai d'annulation ({delaiMinutes} minute(s) après la création) est dépassé.";
+            if (commande.Paiements.Any())
+                return "Un paiement (même annulé) est lié à cette commande.";
+            if (commande.Pieces.Any(p => p.Statut != "A faire"))
+                return "Au moins une pièce a déjà dépassé le statut « À faire ».";
+            if (commande.DateImpressionRecu.HasValue)
+                return "Le reçu / ticket de cette commande a déjà été imprimé.";
+            return null;
+        }
+
+        public (bool Autorise, string Raison) PeutAnnulerParSecretaire(int idCommande, int idOperateur)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var operateur = context.Employes.Find(idOperateur);
+            var commande = context.Commandes
+                .Include(c => c.Paiements)
+                .Include(c => c.Pieces)
+                .FirstOrDefault(c => c.IdCommande == idCommande);
+            if (operateur == null || commande == null)
+                return (false, "Commande ou opérateur introuvable.");
+
+            string? raison = RaisonRefusAnnulation(context, commande, operateur);
+            return raison == null ? (true, string.Empty) : (false, raison);
+        }
+
+        public async Task AnnulerParSecretaireAsync(int idCommande, int idOperateur,
+            string nomOperateur, string? motif = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Secretaire);
+
+            var commande = context.Commandes
+                .Include(c => c.Client)
+                .Include(c => c.Paiements)
+                .Include(c => c.Pieces)
+                .FirstOrDefault(c => c.IdCommande == idCommande)
+                ?? throw new InvalidOperationException("Commande introuvable.");
+
+            string? raison = RaisonRefusAnnulation(context, commande, operateur);
+            if (raison != null)
+                throw new InvalidOperationException(
+                    $"Annulation impossible : {raison}\n\n{MessageDemandezAuBoss}");
+
+            var snapshot = new
+            {
+                commande.IdCommande,
+                Client = commande.Client?.Nom + " " + commande.Client?.Prenom,
+                commande.DateCreation,
+                MontantTotal = commande.MontantTotalAvecMateriaux,
+                Pieces = commande.Pieces.Select(p => new { p.TypeVetement, p.MontantCouture }).ToList()
+            };
+            string motifFinal = string.IsNullOrWhiteSpace(motif)
+                ? "Annulation rapide par la secrétaire"
+                : motif.Trim();
+
+            // Annulée = retirée de l'activité exactement comme une suppression
+            // (EstSupprimee), mais distinguable par le Boss (EstAnnulee).
+            commande.EstSupprimee            = true;
+            commande.EstAnnulee              = true;
+            commande.MotifSuppression        = motifFinal;
+            commande.DateSuppression         = _clock.Now;
+            commande.IdOperateurSuppression  = idOperateur;
+            commande.NomOperateurSuppression = nomOperateur;
+            context.SaveChanges();
+
+            if (_auditService != null)
+                await _auditService.EnregistrerActionAsync(
+                    idOperateur, nomOperateur, operateur.Role,
+                    ActionsAntiFraude.Annulation, "Commande", idCommande,
+                    valeursAvant: snapshot, valeursApres: null, motif: motifFinal);
+
+            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            {
+                IdCommande = idCommande,
+                TypeChangement = "CommandeAnnulee",
+                Details = motifFinal
+            });
+        }
+
+        public void MarquerRecuImprime(int idCommande)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var commande = context.Commandes.Find(idCommande);
+            // Seule la PREMIÈRE impression compte : une réimpression ne déplace pas la date.
+            if (commande == null || commande.DateImpressionRecu.HasValue) return;
+            commande.DateImpressionRecu = _clock.UtcNow;
+            context.SaveChanges();
+        }
+
+        /// <summary>
+        /// Vérifie les droits de modification d'UNE pièce et renvoie ce qui change.
+        /// Partagé par Modifier() et ModifierPiece() pour qu'aucun chemin n'y échappe.
+        /// </summary>
+        private (bool PrixModifie, bool AutresModifies) VerifierModificationPiece(
+            Employe operateur, Commande commande, PieceCommande existante,
+            PieceCommande demandee, string? motifModification)
+        {
+            bool estBoss = operateur.RoleEnum == RoleEmploye.Boss;
+            bool prixModifie = existante.MontantCouture != demandee.MontantCouture;
+            bool typeModifie = Normaliser(existante.TypeVetement) != Normaliser(demandee.TypeVetement);
+            bool autresModifies = typeModifie
+                || existante.IdCouturier != demandee.IdCouturier
+                || Normaliser(existante.DescriptionPrecision) != Normaliser(demandee.DescriptionPrecision)
+                || Normaliser(existante.CheminPhoto) != Normaliser(demandee.CheminPhoto);
+
+            ExigerCommandeActive(commande);
+
+            // Pièce Terminée/Livrée : lecture seule pour TOUS. Seul un changement
+            // de statut (rétrogradation Boss + motif via le noyau) reste possible.
+            if (EstTermineeOuLivree(existante.Statut))
+            {
+                if (!estBoss)
+                    throw new InvalidOperationException(
+                        "Cette pièce est terminée ou livrée. " +
+                        "La Secrétaire ne peut plus la modifier à ce stade. " + MessageDemandezAuBoss);
+                if (prixModifie || autresModifies)
+                    throw new InvalidOperationException(
+                        "Cette pièce est terminée ou livrée : elle est en lecture seule. " +
+                        "Rétrogradez-la d'abord (avec motif) pour pouvoir la modifier.");
+            }
+
+            if (!estBoss)
+            {
+                bool aPaiement = APaiementEncaisse(commande);
+                if (aPaiement && typeModifie)
+                    throw new InvalidOperationException(
+                        "La Secrétaire ne peut pas modifier le type de vêtement " +
+                        "après qu'un paiement a été encaissé. " + MessageDemandezAuBoss);
+
+                if (prixModifie)
+                {
+                    if (aPaiement)
+                        throw new InvalidOperationException(
+                            "Seul le Boss peut modifier le prix d'une pièce après qu'un paiement " +
+                            "a été encaissé.\n" +
+                            $"Prix actuel : {existante.MontantCouture:N0} FCFA. " + MessageDemandezAuBoss);
+                    if (commande.DateImpressionRecu.HasValue)
+                        throw new InvalidOperationException(
+                            "Le reçu de cette commande a déjà été imprimé : le prix est verrouillé. " +
+                            MessageDemandezAuBoss);
+                    ExigerMotif(motifModification, "modifier le prix d'une pièce");
+                }
+            }
+
+            return (prixModifie, autresModifies);
+        }
+
+        /// <summary>
+        /// Règles d'ajout / suppression de pièce APRÈS la création (la Secrétaire
+        /// change ainsi le total facturé) : motif obligatoire, interdit après
+        /// impression du reçu. Renvoie le motif normalisé (null si non requis).
+        /// </summary>
+        private static string? VerifierAjoutSuppressionPieceSecretaire(Commande commande, string? motif, string action)
+        {
+            if (commande.DateImpressionRecu.HasValue)
+                throw new InvalidOperationException(
+                    $"Le reçu de cette commande a déjà été imprimé : impossible de {action}. " +
+                    MessageDemandezAuBoss);
+            return ExigerMotif(motif, action);
         }
 
         /// <summary>
@@ -498,69 +835,59 @@ namespace GestionCoutureApp.Services
         }
 
         public void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur)
+            int idOperateur, string nomOperateur, string? motifModification = null)
         {
             using var context = _contextFactory.CreateDbContext();
 
             // ── Contrôle des droits : Boss et Secrétaire uniquement ──────────
             var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+            bool estBoss = operateur.RoleEnum == RoleEmploye.Boss;
 
             var existante = context.Commandes
                 .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Mesures)
                 .FirstOrDefault(c => c.IdCommande == commande.IdCommande);
 
             if (existante == null) return;
+            ExigerCommandeActive(existante);
 
-            // ── Garde champs Boss-only pour la Secrétaire ────────────────────
-            // TÂCHE 3 : règles basées sur l'état réel (paiements + statut),
-            // et non plus sur des règles fixes qui s'appliquaient toujours.
-            if (operateur.RoleEnum == RoleEmploye.Secretaire)
-            {
-                var pieceRef = existante.Pieces.FirstOrDefault();
+            // Règle 3A : dès qu'une pièce est Terminee/Livree → lecture seule pour la Secrétaire
+            if (!estBoss && existante.Pieces.Any(p => EstTermineeOuLivree(p.Statut)))
+                throw new InvalidOperationException(
+                    "Cette commande est terminée ou livrée. " +
+                    "La Secrétaire ne peut plus la modifier. " + MessageDemandezAuBoss);
 
-                // Règle 3A : après Terminee/Livree → lecture seule pour la Secrétaire
-                bool estTermineOuLivree = existante.Pieces.Any(p =>
-                    p.Statut == "Terminee" || p.Statut == "Livree");
-                if (estTermineOuLivree)
-                    throw new InvalidOperationException(
-                        "Cette commande est terminée ou livrée. " +
-                        "La Secrétaire ne peut plus la modifier. " +
-                        "Seul le Boss peut effectuer des modifications à ce stade.");
+            // Règle 3B : après paiement → client verrouillé (Boss uniquement)
+            bool clientModifie = existante.IdClient != commande.IdClient;
+            if (clientModifie && !estBoss && APaiementEncaisse(existante))
+                throw new InvalidOperationException(
+                    "La Secrétaire ne peut pas modifier le client d'une commande " +
+                    "après qu'un paiement a été encaissé. " + MessageDemandezAuBoss);
 
-                bool aPaiement = existante.Paiements.Any(p => !p.EstAnnule);
+            bool infosModifiees = clientModifie
+                || existante.DateFin != commande.DateFin
+                || existante.HeureDebut != commande.HeureDebut
+                || existante.HeureFin != commande.HeureFin;
+            if (infosModifiees)
+                ExigerCommandeModifiable(existante);
 
-                if (aPaiement)
-                {
-                    // Règle 3B : après paiement → montants, type vêtement et client verrouillés
-                    if (existante.IdClient != commande.IdClient)
-                        throw new InvalidOperationException(
-                            "La Secrétaire ne peut pas modifier le client d'une commande " +
-                            "après qu'un paiement a été encaissé.");
-
-                    if (pieceRef != null)
-                    {
-                        if (pieceRef.TypeVetement != piece.TypeVetement)
-                            throw new InvalidOperationException(
-                                "La Secrétaire ne peut pas modifier le type de vêtement " +
-                                "après qu'un paiement a été encaissé. Contactez le Boss.");
-
-                        if (pieceRef.MontantCouture != piece.MontantCouture)
-                            throw new InvalidOperationException(
-                                "La Secrétaire ne peut pas modifier le prix " +
-                                "après qu'un paiement a été encaissé. Contactez le Boss.");
-                    }
-                }
-                // Sans paiement → la Secrétaire peut tout modifier (pas de restriction)
-            }
+            var avantInfos = new { existante.IdClient, existante.DateFin, existante.HeureDebut, existante.HeureFin };
 
             // ── Mise à jour de la pièce existante ───────────────────────────
             var pieceExistante = existante.Pieces.FirstOrDefault();
+            bool prixModifie = false, autresModifies = false;
+            decimal ancienMontant = 0m;
+            object? avantPiece = null;
 
             if (pieceExistante != null)
             {
+                (prixModifie, autresModifies) = VerifierModificationPiece(
+                    operateur, existante, pieceExistante, piece, motifModification);
+                bool pieceVerrouillee = EstTermineeOuLivree(pieceExistante.Statut);
+
                 // Verrouillage commission — ni Boss ni Secrétaire ne peut changer le montant
-                if (pieceExistante.IdCommission.HasValue && pieceExistante.MontantCouture != piece.MontantCouture)
+                if (pieceExistante.IdCommission.HasValue && prixModifie)
                 {
                     throw new InvalidOperationException(
                         "Impossible de modifier le montant de cette pièce : elle est rattachée à " +
@@ -579,52 +906,37 @@ namespace GestionCoutureApp.Services
                         $"ne peut pas être inférieur au montant déjà encaissé ({dejaEncaisse:N0} FCFA).");
                 }
 
-                // La Secrétaire peut modifier : couturier, statut, description, mesures
-                // Le Boss peut modifier tout cela + type de vêtement + montant
-                // TÂCHE 3 : La Secrétaire peut AUSSI modifier type/montant si aucun paiement
-                bool secretaireSansPaiement = operateur.RoleEnum == RoleEmploye.Secretaire
-                    && !existante.Paiements.Any(p => !p.EstAnnule);
-                if (operateur.RoleEnum == RoleEmploye.Boss || secretaireSansPaiement)
+                ancienMontant = pieceExistante.MontantCouture;
+                avantPiece = new
                 {
-                    pieceExistante.TypeVetement = piece.TypeVetement;
-                    pieceExistante.MontantCouture = piece.MontantCouture;
-                }
+                    pieceExistante.TypeVetement, pieceExistante.IdCouturier,
+                    pieceExistante.DescriptionPrecision, pieceExistante.Statut
+                };
+
+                // Les droits ont été vérifiés par VerifierModificationPiece : tout
+                // champ qui diffère ici est un changement autorisé pour cet opérateur.
+                pieceExistante.TypeVetement = piece.TypeVetement;
+                pieceExistante.MontantCouture = piece.MontantCouture;
                 pieceExistante.IdCouturier = piece.IdCouturier;
                 pieceExistante.DescriptionPrecision = piece.DescriptionPrecision;
                 pieceExistante.CheminPhoto = piece.CheminPhoto;
-                if (!string.IsNullOrWhiteSpace(piece.Statut))
+                if (!string.IsNullOrWhiteSpace(piece.Statut) && piece.Statut != pieceExistante.Statut)
                 {
-                    string ancienStatutPiece = pieceExistante.Statut;
-                    AppliquerDateTerminee(pieceExistante, ancienStatutPiece, piece.Statut, idOperateur);
-                    pieceExistante.Statut = piece.Statut;
+                    // Passe par le noyau : flux strict, IClock, garde commission, garde livraison
+                    TransitionnerStatutPieceCoeur(pieceExistante, piece.Statut, operateur,
+                        null, existante);
                 }
 
-                context.Mesures.RemoveRange(pieceExistante.Mesures);
-                foreach (var mesure in mesures)
+                // Pièce terminée/livrée : ses mesures sont figées.
+                if (!pieceVerrouillee)
                 {
-                    mesure.IdPieceCommande = pieceExistante.IdPieceCommande;
-                    mesure.IdCommande = existante.IdCommande;
-                    context.Mesures.Add(mesure);
-                }
-
-                // ── Audit pour la Secrétaire ─────────────────────────────────
-                if (operateur.RoleEnum == RoleEmploye.Secretaire)
-                {
-                    Auditer(operateur, nomOperateur, "COMMANDE_MODIFIEE_SECRETAIRE", "Commande",
-                        existante.IdCommande,
-                        avant: new {
-                            DateFin = existante.DateFin,
-                            HeureDebut = existante.HeureDebut,
-                            IdCouturier = pieceExistante.IdCouturier,
-                            Statut = pieceExistante.Statut
-                        },
-                        apres: new {
-                            commande.DateFin,
-                            commande.HeureDebut,
-                            piece.IdCouturier,
-                            piece.Statut
-                        },
-                        motif: "Modification par Secrétaire");
+                    context.Mesures.RemoveRange(pieceExistante.Mesures);
+                    foreach (var mesure in mesures)
+                    {
+                        mesure.IdPieceCommande = pieceExistante.IdPieceCommande;
+                        mesure.IdCommande = existante.IdCommande;
+                        context.Mesures.Add(mesure);
+                    }
                 }
             }
             else
@@ -640,28 +952,48 @@ namespace GestionCoutureApp.Services
                 }
             }
 
-            // Mise à jour champs commande
-            // TÂCHE 3 : La Secrétaire peut changer le client si aucun paiement
-            bool secretairePeutChangerClient = operateur.RoleEnum == RoleEmploye.Secretaire
-                && !existante.Paiements.Any(p => !p.EstAnnule);
-            if (operateur.RoleEnum == RoleEmploye.Boss || secretairePeutChangerClient)
-                existante.IdClient = commande.IdClient;
-
-            existante.DateFin   = commande.DateFin;
+            existante.IdClient   = commande.IdClient;
+            existante.DateFin    = commande.DateFin;
             existante.HeureDebut = commande.HeureDebut;
-            existante.HeureFin  = commande.HeureFin;
+            existante.HeureFin   = commande.HeureFin;
 
             context.SaveChanges();
+
+            // ── Journal d'audit (Étape 2) ────────────────────────────────────
+            if (prixModifie && pieceExistante != null)
+                AuditerModificationPrix(operateur, nomOperateur, existante.IdCommande,
+                    pieceExistante.IdPieceCommande, ancienMontant, piece.MontantCouture, motifModification);
+            if (infosModifiees || autresModifies)
+                Auditer(operateur, nomOperateur, "COMMANDE_MODIFIEE", "Commande", existante.IdCommande,
+                    avant: new { Infos = avantInfos, Piece = avantPiece },
+                    apres: new
+                    {
+                        Infos = new { commande.IdClient, commande.DateFin, commande.HeureDebut, commande.HeureFin },
+                        Piece = new { piece.TypeVetement, piece.IdCouturier, piece.DescriptionPrecision, piece.Statut }
+                    },
+                    motif: string.IsNullOrWhiteSpace(motifModification) ? null : motifModification.Trim());
 
             _logger.LogInformation(
                 "Modifier — Commande #{IdCommande} par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
                 existante.IdCommande, nomOperateur, idOperateur, DateTime.Now);
         }
 
+        private void AuditerModificationPrix(Employe operateur, string nomOperateur, int idCommande,
+            int idPieceCommande, decimal ancienMontant, decimal nouveauMontant, string? motif)
+        {
+            Auditer(operateur, nomOperateur, ActionsAntiFraude.PrixModifie, "Commande", idCommande,
+                avant: new { IdPieceCommande = idPieceCommande, MontantCouture = ancienMontant },
+                apres: new { IdPieceCommande = idPieceCommande, MontantCouture = nouveauMontant },
+                motif: string.IsNullOrWhiteSpace(motif) ? null : motif.Trim());
+        }
+
         /// <summary>
         /// Modifie UNIQUEMENT les métadonnées de la commande (client, dates, heures)
         /// sans toucher aux pièces. Utilisé depuis la modale multi-pièces pour éviter
         /// de corrompre les pièces avec une pièce fantôme vide.
+        /// Étape 2 : client verrouillé après paiement (Boss uniquement), lecture
+        /// seule si la commande est Terminée/Livrée, toute modification auditée.
+        /// Un appel sans aucun changement est accepté (la modale renvoie toujours tout).
         /// </summary>
         public void ModifierInfosCommande(int idCommande, int idClient, DateTime dateFin,
             TimeSpan heureDebut, TimeSpan? heureFin, int idOperateur, string nomOperateur)
@@ -671,20 +1003,37 @@ namespace GestionCoutureApp.Services
 
             var existante = context.Commandes
                 .Include(c => c.Paiements)
+                .Include(c => c.Pieces)
                 .FirstOrDefault(c => c.IdCommande == idCommande);
             if (existante == null) return;
 
-            // Secrétaire : ne peut changer le client qu'avant tout paiement
-            bool peutChangerClient = operateur.RoleEnum == RoleEmploye.Boss
-                || !existante.Paiements.Any(p => !p.EstAnnule);
-            if (peutChangerClient)
-                existante.IdClient = idClient;
+            bool clientModifie = existante.IdClient != idClient;
+            bool modifie = clientModifie
+                || existante.DateFin != dateFin
+                || existante.HeureDebut != heureDebut
+                || existante.HeureFin != heureFin;
+            if (!modifie) return;
 
+            ExigerCommandeModifiable(existante);
+
+            if (clientModifie && operateur.RoleEnum != RoleEmploye.Boss && APaiementEncaisse(existante))
+                throw new InvalidOperationException(
+                    "La Secrétaire ne peut pas modifier le client d'une commande " +
+                    "après qu'un paiement a été encaissé. " + MessageDemandezAuBoss);
+
+            var avant = new { existante.IdClient, existante.DateFin, existante.HeureDebut, existante.HeureFin };
+
+            existante.IdClient   = idClient;
             existante.DateFin    = dateFin;
             existante.HeureDebut = heureDebut;
             existante.HeureFin   = heureFin;
 
             context.SaveChanges();
+
+            Auditer(operateur, nomOperateur, "COMMANDE_MODIFIEE", "Commande", idCommande,
+                avant: avant,
+                apres: new { IdClient = idClient, DateFin = dateFin, HeureDebut = heureDebut, HeureFin = heureFin },
+                motif: null);
 
             _logger.LogInformation(
                 "ModifierInfosCommande — Commande #{IdCommande} par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
@@ -692,15 +1041,19 @@ namespace GestionCoutureApp.Services
         }
 
 
-        /// Une commande ne doit jamais être supprimée physiquement si elle a un historique
-        /// financier (paiements, même annulés). La suppression logique masque la commande
-        /// de l'UI normale tout en conservant une trace immuable.
+        /// <summary>
+        /// Suppression LOGIQUE d'une commande — Boss uniquement (Étape 2), motif
+        /// obligatoire, audit immuable. Une commande ne doit jamais être supprimée
+        /// physiquement : son numéro n'est donc jamais réutilisé, et elle reste
+        /// consultable par le Boss (filtre « Afficher les supprimées »).
+        /// La Secrétaire n'a plus ce droit : elle dispose de
+        /// <see cref="AnnulerParSecretaireAsync"/> (fenêtre courte, conditions strictes).
         /// </summary>
         /// <param name="id">ID de la commande</param>
         /// <param name="idOperateur">ID de l'opérateur effectuant la suppression</param>
         /// <param name="nomOperateur">Nom de l'opérateur (traçabilité)</param>
         /// <param name="motif">Motif OBLIGATOIRE de la suppression</param>
-        /// <param name="auditService">Service d'audit pour enregistrer l'action</param>
+        /// <param name="auditService">Service d'audit (à défaut, celui injecté dans le service)</param>
         public async Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null)
         {
             if (string.IsNullOrWhiteSpace(motif))
@@ -709,17 +1062,16 @@ namespace GestionCoutureApp.Services
 
             using var context = _contextFactory.CreateDbContext();
 
-            // TÂCHE 3 : La Secrétaire peut supprimer si aucun paiement et statut initial.
-            // Le Boss garde tous les droits.
             var operateur = context.Employes.Find(idOperateur);
             if (operateur == null)
                 throw new UnauthorizedAccessException("Opérateur introuvable.");
 
-            bool estBoss = operateur.Role == "Boss";
-            bool estSecretaire = operateur.Role == "Secretaire";
-            if (!estBoss && !estSecretaire)
+            bool estBoss = operateur.RoleEnum == RoleEmploye.Boss;
+            if (!estBoss)
                 throw new UnauthorizedAccessException(
-                    "Seuls le Boss et la Secrétaire peuvent supprimer une commande.");
+                    "Seul le Boss peut supprimer une commande. " +
+                    "La Secrétaire peut uniquement ANNULER une commande qu'elle vient de créer " +
+                    "(aucun paiement, rien commencé, reçu non imprimé). " + MessageDemandezAuBoss);
 
             var commande = context.Commandes
                 .Include(c => c.Client)
@@ -734,28 +1086,8 @@ namespace GestionCoutureApp.Services
             if (commande.EstSupprimee)
                 throw new InvalidOperationException("Cette commande est déjà marquée comme supprimée.");
 
-            // ── Règles Secrétaire (TÂCHE 3) ────────────────────────────────
-            if (estSecretaire)
-            {
-                // Condition 1 : aucun paiement (même annulé)
-                if (commande.Paiements.Any())
-                    throw new InvalidOperationException(
-                        "La Secrétaire ne peut supprimer une commande que si aucun paiement " +
-                        "n'a été enregistré. Des paiements existent sur cette commande " +
-                        $"({commande.Paiements.Count} paiement(s)). Contactez le Boss.");
-
-                // Condition 2 : statut initial (toutes les pièces en "A faire")
-                bool statutInitial = !commande.Pieces.Any()
-                    || commande.Pieces.All(p => p.Statut == "A faire");
-                if (!statutInitial)
-                    throw new InvalidOperationException(
-                        "La Secrétaire ne peut supprimer une commande que si elle est encore " +
-                        "au statut initial (toutes les pièces \"À faire\"). " +
-                        "Contactez le Boss pour les autres cas.");
-            }
-
-            // ── Règles Boss : bloque si paiements (historique comptable) ───
-            if (estBoss && commande.Paiements.Any())
+            // ── Bloque si paiements (historique comptable) ──────────────────
+            if (commande.Paiements.Any())
             {
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette commande : des paiements y sont rattachés " +
@@ -787,26 +1119,27 @@ namespace GestionCoutureApp.Services
             // Suppression logique : marquer comme supprimée au lieu de supprimer physiquement
             commande.EstSupprimee = true;
             commande.MotifSuppression = motif.Trim();
-            commande.DateSuppression = DateTime.Now;
+            commande.DateSuppression = _clock.Now;
             commande.IdOperateurSuppression = idOperateur;
             commande.NomOperateurSuppression = nomOperateur;
 
             context.SaveChanges();
 
             // Enregistrer dans le journal d'audit immuable avec notification
+            auditService ??= _auditService;
             if (auditService != null)
             {
                 await auditService.EnregistrerActionAsync(
                     idOperateur: idOperateur,
                     nomOperateur: nomOperateur,
                     roleOperateur: operateur.Role,
-                    typeAction: "COMMANDE_SUPPRIMEE",
+                    typeAction: ActionsAntiFraude.Suppression,
                     entite: "Commande",
                     idEntite: id,
                     valeursAvant: snapshot,
                     valeursApres: null,
                     motif: motif,
-                    envoyerNotification: estBoss // notification seulement si Boss
+                    envoyerNotification: true
                 );
             }
         }
@@ -939,10 +1272,23 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             var commande = context.Commandes
                 .Include(c => c.Paiements)
+                .Include(c => c.Pieces)
                 .FirstOrDefault(c => c.IdCommande == idCommande)
                 ?? throw new InvalidOperationException("Commande introuvable.");
 
-            bool aPaiements = commande.Paiements.Any(p => !p.EstAnnule);
+            // Étape 2 : dès qu'un opérateur est identifié, son rôle RÉEL (en base)
+            // fait foi — le booléen roleBoss de l'appelant ne suffit plus.
+            Employe? operateur = null;
+            if (idOperateur > 0)
+            {
+                operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+                roleBoss = operateur.RoleEnum == RoleEmploye.Boss;
+            }
+
+            ExigerCommandeModifiable(commande);
+
+            bool aPaiements = APaiementEncaisse(commande);
+            string? motif = null;
 
             if (aPaiements)
             {
@@ -950,13 +1296,16 @@ namespace GestionCoutureApp.Services
                 {
                     throw new InvalidOperationException(
                         "Impossible d'ajouter une pièce : un acompte a déjà été encaissé sur cette commande. " +
-                        "Seul le Boss peut ajouter une pièce avec motif obligatoire.");
+                        "Seul le Boss peut ajouter une pièce avec motif obligatoire. " + MessageDemandezAuBoss);
                 }
-                if (string.IsNullOrWhiteSpace(motifException))
-                {
-                    throw new InvalidOperationException(
-                        "L'ajout d'une pièce après encaissement nécessite un motif obligatoire (Boss).");
-                }
+                motif = ExigerMotif(motifException, "ajouter une pièce après encaissement (Boss)");
+            }
+            else if (!roleBoss)
+            {
+                // Secrétaire, avant paiement : ajouter une pièce après la création
+                // change le total facturé → motif obligatoire, interdit après impression.
+                motif = VerifierAjoutSuppressionPieceSecretaire(commande, motifException,
+                    "ajouter une pièce après la création de la commande");
             }
 
             // Le statut est TOUJOURS forcé à "A faire" à l'ajout de pièce.
@@ -966,12 +1315,22 @@ namespace GestionCoutureApp.Services
             // Le motif est conservé avec la pièce pour traçabilité complète —
             // un simple message de dialogue serait perdu à la fermeture de la fenêtre.
             if (aPaiements)
-                piece.MotifAjoutApresEncaissement = motifException!.Trim();
+                piece.MotifAjoutApresEncaissement = motif;
 
             // Pièce + mesures + matériaux en un seul SaveChanges (transaction).
             RattacherMesuresEtMateriaux(commande, piece, mesures, materiaux, idOperateur, nomOperateur);
             context.PiecesCommande.Add(piece);
             context.SaveChanges();
+
+            if (operateur != null)
+                Auditer(operateur, nomOperateur, ActionsAntiFraude.PieceAjoutee, "PieceCommande",
+                    piece.IdPieceCommande, avant: null,
+                    apres: new { piece.IdCommande, piece.TypeVetement, piece.MontantCouture },
+                    motif: motif);
+            else
+                _logger.LogWarning(
+                    "AjouterPiece sans opérateur identifié — Commande #{IdCommande}, pièce #{IdPiece} non auditée.",
+                    idCommande, piece.IdPieceCommande);
 
             CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
             {
@@ -982,7 +1341,8 @@ namespace GestionCoutureApp.Services
         }
 
         public void ModifierPiece(PieceCommande piece, List<Mesure> mesures,
-            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null)
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null,
+            string? motifModification = null)
         {
             using var context = _contextFactory.CreateDbContext();
 
@@ -1000,37 +1360,24 @@ namespace GestionCoutureApp.Services
                 .FirstOrDefault(p => p.IdPieceCommande == piece.IdPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
 
+            var commande = pieceExistante.Commande
+                ?? throw new InvalidOperationException("Commande de la pièce introuvable.");
+
             decimal ancienMontant = pieceExistante.MontantCouture;
-            int? ancienCouturier = pieceExistante.IdCouturier;
-            string ancienStatut = pieceExistante.Statut;
-            bool montantModifie = ancienMontant != piece.MontantCouture;
-
-            // TÂCHE 3 : Lecture seule pour la Secrétaire après Terminee/Livree
-            if (operateur.RoleEnum == RoleEmploye.Secretaire &&
-                (ancienStatut == "Terminee" || ancienStatut == "Livree"))
+            var avantPiece = new
             {
-                throw new InvalidOperationException(
-                    "Cette pièce est terminée ou livrée. " +
-                    "La Secrétaire ne peut plus la modifier à ce stade. " +
-                    "Seul le Boss peut effectuer des modifications.");
-            }
+                pieceExistante.TypeVetement, pieceExistante.IdCouturier,
+                pieceExistante.DescriptionPrecision, pieceExistante.CheminPhoto
+            };
 
-            // Prix : règle en fonction du contexte paiement
-            // TÂCHE 3 : Sans paiement → Secrétaire peut modifier le prix.
-            //           Avec paiement → Boss uniquement.
-            var commandeRef = pieceExistante.Commande;
-            bool aPaiementEncaisse = commandeRef?.Paiements.Any(p => !p.EstAnnule) ?? false;
-
-            if (montantModifie && operateur.RoleEnum != RoleEmploye.Boss && aPaiementEncaisse)
-            {
-                throw new InvalidOperationException(
-                    "Seul le Boss peut modifier le prix d'une pièce après qu'un paiement " +
-                    "a été encaissé.\n" +
-                    $"Prix actuel : {ancienMontant:N0} FCFA.");
-            }
+            // Étape 2 : toutes les règles par rôle (lecture seule Terminée/Livrée,
+            // verrous après paiement / après impression, motif de prix) sont ici.
+            var (montantModifie, autresModifies) = VerifierModificationPiece(
+                operateur, commande, pieceExistante, piece, motifModification);
+            bool pieceVerrouillee = EstTermineeOuLivree(pieceExistante.Statut);
 
             // Verrouillage commission
-            if (pieceExistante.IdCommission.HasValue && pieceExistante.MontantCouture != piece.MontantCouture)
+            if (pieceExistante.IdCommission.HasValue && montantModifie)
             {
                 throw new InvalidOperationException(
                     "Impossible de modifier le montant de cette pièce : elle est rattachée à " +
@@ -1038,27 +1385,21 @@ namespace GestionCoutureApp.Services
             }
 
             // Garde financière : montant ne peut pas descendre sous l'encaissé total
-            var commande = pieceExistante.Commande;
-            if (commande != null)
+            decimal dejaEncaisse = commande.Paiements
+                .Where(p => !p.EstAnnule)
+                .Sum(p => p.MontantPaye);
+
+            // Total actuel de toutes les pièces (sauf celle modifiée)
+            decimal totalAutresPieces = commande.Pieces
+                .Where(p => p.IdPieceCommande != piece.IdPieceCommande)
+                .Sum(p => p.MontantCouture);
+
+            // Le client paie couture + matériaux : on compare au total facturé
+            if (totalAutresPieces + piece.MontantCouture + commande.TotalMateriaux < dejaEncaisse)
             {
-                decimal dejaEncaisse = commande.Paiements
-                    .Where(p => !p.EstAnnule)
-                    .AsEnumerable()
-                    .Sum(p => p.MontantPaye);
-
-                // Total actuel de toutes les pièces (sauf celle modifiée)
-                decimal totalAutresPieces = commande.Pieces
-                    .Where(p => p.IdPieceCommande != piece.IdPieceCommande)
-                    .AsEnumerable()
-                    .Sum(p => p.MontantCouture);
-
-                // Le client paie couture + matériaux : on compare au total facturé
-                if (totalAutresPieces + piece.MontantCouture + commande.TotalMateriaux < dejaEncaisse)
-                {
-                    throw new InvalidOperationException(
-                        $"Le montant de la pièce ({piece.MontantCouture:N0} FCFA) ferait descendre " +
-                        $"le total de la commande sous le montant déjà encaissé ({dejaEncaisse:N0} FCFA).");
-                }
+                throw new InvalidOperationException(
+                    $"Le montant de la pièce ({piece.MontantCouture:N0} FCFA) ferait descendre " +
+                    $"le total de la commande sous le montant déjà encaissé ({dejaEncaisse:N0} FCFA).");
             }
 
             pieceExistante.TypeVetement = piece.TypeVetement;
@@ -1066,37 +1407,38 @@ namespace GestionCoutureApp.Services
             pieceExistante.MontantCouture = piece.MontantCouture;
             pieceExistante.DescriptionPrecision = piece.DescriptionPrecision;
             pieceExistante.CheminPhoto = piece.CheminPhoto;
-            if (!string.IsNullOrWhiteSpace(piece.Statut))
+            decimal? resteLivraisonForcee = null;
+            if (!string.IsNullOrWhiteSpace(piece.Statut) && piece.Statut != pieceExistante.Statut)
             {
-                AppliquerDateTerminee(pieceExistante, ancienStatut, piece.Statut, idOperateur);
-                pieceExistante.Statut = piece.Statut;
+                // Passe par le noyau unique : flux strict, IClock, garde commission, garde livraison
+                resteLivraisonForcee = TransitionnerStatutPieceCoeur(
+                    pieceExistante, piece.Statut, operateur, motifLivraisonNonSoldee, commande);
             }
 
-            // Livraison : la commande doit être soldée (calculé avec le nouveau prix)
-            decimal? resteLivraisonForcee = null;
-            if (pieceExistante.Statut == "Livree" && ancienStatut != "Livree" && commande != null)
-                resteLivraisonForcee = VerifierLivraisonSoldee(commande, operateur, motifLivraisonNonSoldee);
-
-            // Remplacement des mesures
-            context.Mesures.RemoveRange(pieceExistante.Mesures);
-            foreach (var mesure in mesures)
+            // Remplacement des mesures — figées une fois la pièce terminée/livrée.
+            if (!pieceVerrouillee)
             {
-                mesure.IdPieceCommande = pieceExistante.IdPieceCommande;
-                mesure.IdCommande = pieceExistante.IdCommande;
-                context.Mesures.Add(mesure);
+                context.Mesures.RemoveRange(pieceExistante.Mesures);
+                foreach (var mesure in mesures)
+                {
+                    mesure.IdPieceCommande = pieceExistante.IdPieceCommande;
+                    mesure.IdCommande = pieceExistante.IdCommande;
+                    context.Mesures.Add(mesure);
+                }
             }
 
             context.SaveChanges();
 
-            // ── Journal d'audit : prix et couturier (impact argent / commissions) ──
-            if (montantModifie || ancienCouturier != piece.IdCouturier)
-            {
+            // ── Journal d'audit ──────────────────────────────────────────────
+            if (montantModifie)
+                AuditerModificationPrix(operateur, nomOperateur, pieceExistante.IdCommande,
+                    pieceExistante.IdPieceCommande, ancienMontant, piece.MontantCouture, motifModification);
+            if (autresModifies)
                 Auditer(operateur, nomOperateur, "PIECE_MODIFIEE", "PieceCommande",
                     pieceExistante.IdPieceCommande,
-                    avant: new { MontantCouture = ancienMontant, IdCouturier = ancienCouturier },
-                    apres: new { piece.MontantCouture, piece.IdCouturier },
-                    motif: null);
-            }
+                    avant: avantPiece,
+                    apres: new { piece.TypeVetement, piece.IdCouturier, piece.DescriptionPrecision, piece.CheminPhoto },
+                    motif: string.IsNullOrWhiteSpace(motifModification) ? null : motifModification.Trim());
             if (resteLivraisonForcee.HasValue)
             {
                 AuditerLivraisonNonSoldee(operateur, nomOperateur, pieceExistante.IdCommande,
@@ -1116,7 +1458,8 @@ namespace GestionCoutureApp.Services
             }
         }
 
-        public void SupprimerPiece(int idPieceCommande, int idOperateur, string nomOperateur)
+        public void SupprimerPiece(int idPieceCommande, int idOperateur, string nomOperateur,
+            string? motif = null)
         {
             using var context = _contextFactory.CreateDbContext();
 
@@ -1127,6 +1470,8 @@ namespace GestionCoutureApp.Services
             var piece = context.PiecesCommande
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces)
                 .Include(p => p.Mesures)
                 .Include(p => p.MaterielSupplements)
                 .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
@@ -1136,8 +1481,11 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette pièce : elle est rattachée à une commission.");
 
-            var commande = piece.Commande;
-            bool aPaiement = commande != null && commande.Paiements.Any(p => !p.EstAnnule);
+            var commande = piece.Commande
+                ?? throw new InvalidOperationException("Commande de la pièce introuvable.");
+            ExigerCommandeModifiable(commande);
+            bool aPaiement = APaiementEncaisse(commande);
+            string? motifFinal = string.IsNullOrWhiteSpace(motif) ? null : motif.Trim();
 
             // Secrétaire : conditions strictes (pièce vierge uniquement)
             if (operateur.RoleEnum == RoleEmploye.Secretaire)
@@ -1145,13 +1493,16 @@ namespace GestionCoutureApp.Services
                 if (aPaiement)
                     throw new InvalidOperationException(
                         "La Secrétaire ne peut supprimer une pièce que si aucun paiement " +
-                        "n'a été encaissé sur la commande. Contactez le Boss.");
+                        "n'a été encaissé sur la commande. " + MessageDemandezAuBoss);
 
                 if (piece.Statut != "A faire")
                     throw new InvalidOperationException(
                         "La Secrétaire ne peut supprimer que les pièces encore au statut " +
                         "\"À faire\" (vierges). Cette pièce est déjà en cours ou terminée. " +
-                        "Contactez le Boss.");
+                        MessageDemandezAuBoss);
+
+                // Étape 2 : change le total facturé → motif obligatoire, interdit après impression
+                motifFinal = VerifierAjoutSuppressionPieceSecretaire(commande, motif, "supprimer une pièce");
             }
             else
             {
@@ -1185,8 +1536,8 @@ namespace GestionCoutureApp.Services
             context.PiecesCommande.Remove(piece);
             context.SaveChanges();
 
-            Auditer(operateur, nomOperateur, "PIECE_SUPPRIMEE", "PieceCommande",
-                idPieceCommande, avant: snapshot, apres: null, motif: null);
+            Auditer(operateur, nomOperateur, ActionsAntiFraude.PieceSupprimee, "PieceCommande",
+                idPieceCommande, avant: snapshot, apres: null, motif: motifFinal);
 
             CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
             {
@@ -1196,20 +1547,34 @@ namespace GestionCoutureApp.Services
             });
         }
 
-        public PieceCommande DupliquerPiece(int idPieceCommandeSource)
+        public PieceCommande DupliquerPiece(int idPieceCommandeSource, int idOperateur,
+            string nomOperateur, string? motif = null)
         {
             using var context = _contextFactory.CreateDbContext();
+            var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+
             var source = context.PiecesCommande
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
+                .Include(p => p.Commande)
+                    .ThenInclude(c => c!.Pieces)
                 .FirstOrDefault(p => p.IdPieceCommande == idPieceCommandeSource)
                 ?? throw new InvalidOperationException("Pièce source introuvable.");
+            var commande = source.Commande
+                ?? throw new InvalidOperationException("Commande de la pièce introuvable.");
 
-            if (source.Commande != null && source.Commande.Paiements.Any(p => !p.EstAnnule))
+            ExigerCommandeModifiable(commande);
+            if (APaiementEncaisse(commande))
             {
                 throw new InvalidOperationException(
                     "Impossible de dupliquer : des paiements ont été encaissés sur cette commande.");
             }
+
+            // Étape 2 : dupliquer = ajouter une pièce (le total change) → mêmes règles.
+            string? motifFinal = operateur.RoleEnum == RoleEmploye.Boss
+                ? (string.IsNullOrWhiteSpace(motif) ? null : motif.Trim())
+                : VerifierAjoutSuppressionPieceSecretaire(commande, motif,
+                    "ajouter une pièce après la création de la commande");
 
             var nouvellePiece = new PieceCommande
             {
@@ -1242,6 +1607,12 @@ namespace GestionCoutureApp.Services
             }
             context.SaveChanges();
 
+            Auditer(operateur, nomOperateur, ActionsAntiFraude.PieceAjoutee, "PieceCommande",
+                nouvellePiece.IdPieceCommande, avant: null,
+                apres: new { nouvellePiece.IdCommande, nouvellePiece.TypeVetement, nouvellePiece.MontantCouture,
+                             DupliqueeDe = idPieceCommandeSource },
+                motif: motifFinal);
+
             // Recharger avec navigation pour renvoyer un objet complet
             context.Entry(nouvellePiece).Reference(p => p.Couturier).Load();
             return nouvellePiece;
@@ -1261,61 +1632,48 @@ namespace GestionCoutureApp.Services
             if (pieces.Count == 0) return;
 
             var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
+            ExigerCommandeActive(commande!);
 
-            // Une pièce commissionnée peut avancer de Terminee → Livree (la commission
-            // est déjà calculée, il n'y a plus de risque). En revanche, la rétrogradation
-            // d'une pièce commissionnée reste bloquée (géré par VerifierFluxStatut).
-            // On filtre les pièces déjà livrées (rien à faire pour elles).
-            var piecesATraiter = nouveauStatut == "Livree"
-                ? pieces.Where(p => p.Statut != "Livree").ToList()
-                : pieces.ToList();
-
-            // Bloquer rétrogradation sur pièces commissionnées seulement
-            if (nouveauStatut != "Livree")
-            {
-                var verrouillees = piecesATraiter.Where(p => p.IdCommission.HasValue).ToList();
-                if (verrouillees.Any())
-                    throw new InvalidOperationException(
-                        $"{verrouillees.Count} pièce(s) sont rattachées à une commission et ne peuvent " +
-                        "pas voir leur statut rétrogradé. Annulez d'abord la commission si nécessaire.");
-            }
-
+            // On filtre les pièces déjà au statut cible pour ne pas lever une erreur inutile
+            var piecesATraiter = pieces.Where(p => p.Statut != nouveauStatut).ToList();
             if (piecesATraiter.Count == 0) return;
 
-            // Livraison : même règle que pour une pièce seule
-            decimal? resteLivraisonForcee = null;
-            if (nouveauStatut == "Livree" && piecesATraiter.Any())
-                resteLivraisonForcee = VerifierLivraisonSoldee(commande!, operateur, motifLivraisonNonSoldee);
-
-            foreach (var piece in piecesATraiter)
+            // InMemory ne supporte pas les vraies transactions : on les saute silencieusement.
+            // SQLite (production) les supporte. On détecte par le nom du provider.
+            bool avecTransaction = context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+            using var transaction = avecTransaction ? context.Database.BeginTransaction() : null;
+            try
             {
-                string ancienStatut = piece.Statut;
-                // Tâche 5 : flux strict — Boss peut forcer en arrière avec motif
-                // (motifLivraisonNonSoldee sert aussi de motif de rétrogradation)
-                VerifierFluxStatut(ancienStatut, nouveauStatut, operateur, motifLivraisonNonSoldee);
-                AppliquerDateTerminee(piece, ancienStatut, nouveauStatut, idOperateur);
-                piece.Statut = nouveauStatut;
+                decimal? resteLivraisonForcee = null;
+
+                foreach (var piece in piecesATraiter)
+                {
+                    decimal? reste = TransitionnerStatutPieceCoeur(
+                        piece, nouveauStatut, operateur, motifLivraisonNonSoldee, commande);
+                    // On garde le dernier reste (toutes les pièces d'une commande ont le même)
+                    if (reste.HasValue) resteLivraisonForcee = reste;
+                }
+
+                context.SaveChanges();
+                transaction?.Commit();
+
+                if (resteLivraisonForcee.HasValue)
+                    AuditerLivraisonNonSoldee(operateur, nomOperateur, idCommande,
+                        resteLivraisonForcee.Value, motifLivraisonNonSoldee!,
+                        "Forçage du statut de toutes les pièces");
+
+                _logger.LogInformation(
+                    "ForcerStatutToutesPieces — Commande #{IdCommande} → statut « {Statut} » " +
+                    "par {Operateur} (Id={IdOperateur}) le {Date:dd/MM/yyyy HH:mm:ss}.",
+                    idCommande, nouveauStatut,
+                    string.IsNullOrWhiteSpace(nomOperateur) ? "INCONNU" : nomOperateur,
+                    idOperateur, _clock.Now);
             }
-
-            context.SaveChanges();
-
-            if (resteLivraisonForcee.HasValue)
+            catch
             {
-                AuditerLivraisonNonSoldee(operateur, nomOperateur, idCommande,
-                    resteLivraisonForcee.Value, motifLivraisonNonSoldee!,
-                    "Forçage du statut de toutes les pièces");
+                transaction?.Rollback();
+                throw;
             }
-
-            // ── Traçabilité : qui a forcé le statut et quand ────────────────
-            // idOperateur et nomOperateur sont obligatoires (0 / vide = appelant
-            // non identifié → on log quand même pour diagnostic).
-            _logger.LogInformation(
-                "ForcerStatutToutesPieces — Commande #{IdCommande} → statut « {Statut} » " +
-                "par {Operateur} (Id={IdOperateur}) le {Date:dd/MM/yyyy HH:mm:ss}.",
-                idCommande, nouveauStatut,
-                string.IsNullOrWhiteSpace(nomOperateur) ? "INCONNU" : nomOperateur,
-                idOperateur,
-                DateTime.Now);
         }
 
         public List<PieceCommande> ObtenirPiecesCommande(int idCommande)
@@ -1425,15 +1783,17 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// Change le statut d'une seule pièce sans toucher aux mesures ni au prix.
-        /// Méthode légère dédiée à StatutView.
+        /// Point d'entrée PUBLIC unique pour changer le statut d'une pièce.
+        /// Appelé par toutes les vues (CommandesView, StatutView, dashboard couturier).
+        /// Délègue à <see cref="TransitionnerStatutPieceCoeur"/> après chargement du contexte.
+        /// Pour une rétrogradation de pièce commissionnée, passe commissionService afin
+        /// d'annuler et rétrograder dans la même transaction.
         /// </summary>
-        public void ChangerStatutPiece(int idPieceCommande, string nouveauStatut,
-            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null)
+        public void TransitionnerStatutPiece(int idPieceCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motif = null,
+            CommissionService? commissionService = null)
         {
             using var context = _contextFactory.CreateDbContext();
-
-            // Contrôle des droits : Boss et Secrétaire uniquement
             var operateur = ExigerRole(context, idOperateur, RoleEmploye.Boss, RoleEmploye.Secretaire);
 
             var piece = context.PiecesCommande
@@ -1445,61 +1805,61 @@ namespace GestionCoutureApp.Services
                     .ThenInclude(c => c!.MaterielSupplements)
                 .FirstOrDefault(p => p.IdPieceCommande == idPieceCommande)
                 ?? throw new InvalidOperationException("Pièce introuvable.");
-
-            // Une pièce commissionnée peut avancer vers Livree (la commission est déjà calculée).
-            // En revanche toute autre modification (rétrogradation, changement vers autre statut)
-            // reste bloquée : il faudrait d'abord annuler la commission.
-            if (piece.IdCommission.HasValue && nouveauStatut != "Livree")
-                throw new InvalidOperationException(
-                    "Cette pièce est rattachée à une commission déjà calculée. " +
-                    "Son statut ne peut pas être modifié. " +
-                    "Seul le passage en \"Livrée\" est autorisé pour une pièce commissionnée.");
+            if (piece.Commande != null) ExigerCommandeActive(piece.Commande);
 
             string ancienStatut = piece.Statut;
-            if (ancienStatut == nouveauStatut) return; // rien à faire
 
-            // ── TÂCHE 5 : Flux strict En attente → En cours → Terminee → Livree ─
-            // Retour en arrière réservé au Boss avec motif obligatoire.
-            VerifierFluxStatut(ancienStatut, nouveauStatut, operateur, motifLivraisonNonSoldee);
-
-            // Garde livraison : commande soldée ou Boss avec motif
-            decimal? resteLivraisonForcee = null;
-            if (nouveauStatut == "Livree" && ancienStatut != "Livree" && piece.Commande != null)
-                resteLivraisonForcee = VerifierLivraisonSoldee(piece.Commande, operateur, motifLivraisonNonSoldee);
-
-            piece.Statut = nouveauStatut;
-
-            // ── TÂCHE 1 : mise à jour DateTerminee ───────────────────────────
-            AppliquerDateTerminee(piece, ancienStatut, nouveauStatut, idOperateur);
-
-            context.SaveChanges();
-
-            // Audit : traçabilité statut (qui, quand, ancien → nouveau)
-            Auditer(operateur, nomOperateur, "STATUT_PIECE_MODIFIE", "PieceCommande",
-                idPieceCommande,
-                avant: new { Statut = ancienStatut },
-                apres: new { Statut = nouveauStatut, piece.DateTerminee },
-                motif: null);
-
-            if (resteLivraisonForcee.HasValue)
-                AuditerLivraisonNonSoldee(operateur, nomOperateur, piece.IdCommande,
-                    resteLivraisonForcee.Value, motifLivraisonNonSoldee!,
-                    $"Changement statut pièce #{idPieceCommande} ({piece.TypeVetement})");
-
-            // Notifier les autres écrans
-            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            // InMemory ne supporte pas les vraies transactions.
+            bool avecTransaction = context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+            using var transaction = avecTransaction ? context.Database.BeginTransaction() : null;
+            try
             {
-                IdCommande = piece.IdCommande,
-                TypeChangement = nouveauStatut == "Terminee" ? "PieceTerminee" : "StatutModifie",
-                Details = $"Pièce #{idPieceCommande} : {ancienStatut} → {nouveauStatut}"
-            });
+                decimal? resteLivraisonForcee = TransitionnerStatutPieceCoeur(
+                    piece, nouveauStatut, operateur, motif, piece.Commande, commissionService);
 
-            _logger.LogInformation(
-                "ChangerStatutPiece — Pièce #{IdPiece} ({Type}) : « {Ancien} » → « {Nouveau} » " +
-                "par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
-                idPieceCommande, piece.TypeVetement, ancienStatut, nouveauStatut,
-                nomOperateur, idOperateur, DateTime.Now);
+                context.SaveChanges();
+                transaction?.Commit();
+
+                // Audit
+                Auditer(operateur, nomOperateur, "STATUT_PIECE_MODIFIE", "PieceCommande",
+                    idPieceCommande,
+                    avant: new { Statut = ancienStatut },
+                    apres: new { Statut = nouveauStatut, piece.DateTerminee },
+                    motif: motif);
+
+                if (resteLivraisonForcee.HasValue && piece.Commande != null)
+                    AuditerLivraisonNonSoldee(operateur, nomOperateur, piece.IdCommande,
+                        resteLivraisonForcee.Value, motif!,
+                        $"Changement statut pièce #{idPieceCommande} ({piece.TypeVetement})");
+
+                CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+                {
+                    IdCommande = piece.IdCommande,
+                    TypeChangement = nouveauStatut == "Terminee" ? "PieceTerminee" : "StatutModifie",
+                    Details = $"Pièce #{idPieceCommande} : {ancienStatut} → {nouveauStatut}"
+                });
+
+                _logger.LogInformation(
+                    "TransitionnerStatutPiece — Pièce #{IdPiece} ({Type}) : « {Ancien} » → « {Nouveau} » " +
+                    "par {Operateur} (Id={IdOp}) le {Date:dd/MM/yyyy HH:mm:ss}.",
+                    idPieceCommande, piece.TypeVetement, ancienStatut, nouveauStatut,
+                    nomOperateur, idOperateur, _clock.Now);
+            }
+            catch
+            {
+                transaction?.Rollback();
+                throw;
+            }
         }
+
+        /// <summary>
+        /// Change le statut d'une seule pièce sans toucher aux mesures ni au prix.
+        /// Délègue à <see cref="TransitionnerStatutPiece"/> — conservé pour rétrocompatibilité.
+        /// </summary>
+        public void ChangerStatutPiece(int idPieceCommande, string nouveauStatut,
+            int idOperateur, string nomOperateur, string? motifLivraisonNonSoldee = null)
+            => TransitionnerStatutPiece(idPieceCommande, nouveauStatut, idOperateur, nomOperateur,
+                                        motifLivraisonNonSoldee);
 
         // ── TÂCHE 5 : File "À attribuer" ──────────────────────────────────
 
