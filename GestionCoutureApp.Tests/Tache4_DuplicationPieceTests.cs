@@ -59,7 +59,7 @@ namespace GestionCoutureApp.Tests
         public void T4_01_DupliquerPiece_Cree_Une_Copie()
         {
             var (idCommande, idPiece1) = CreerCommande2Pieces();
-            var copie = _commandeService.DupliquerPiece(idPiece1);
+            var copie = _commandeService.DupliquerPiece(idPiece1, IdBoss, "Mamadou DIALLO");
 
             Assert.That(copie.IdPieceCommande, Is.Not.EqualTo(idPiece1));
             Assert.That(copie.IdCommande,      Is.EqualTo(idCommande));
@@ -75,7 +75,8 @@ namespace GestionCoutureApp.Tests
             var (_, idPiece2) = CreerCommande2Pieces();
 
             Assert.DoesNotThrow(() =>
-                _commandeService.SupprimerPiece(idPiece2, IdSecretaire, "Marie FALL"),
+                _commandeService.SupprimerPiece(idPiece2, IdSecretaire, "Marie FALL",
+                    motif: "Pièce en double, correction saisie"),
                 "Secrétaire peut supprimer une pièce À faire sans paiement");
 
             using var ctx = _factory.CreateDbContext();

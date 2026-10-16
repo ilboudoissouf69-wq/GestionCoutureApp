@@ -325,7 +325,8 @@ namespace GestionCoutureApp.Tests
                 DatePaiement = DateTime.Today, ModePaiement = "Espèces"
             }, IdBoss, "Mamadou DIALLO");
 
-            // Passer en Terminee pour avoir DateTerminee
+            // Passer en Terminee pour avoir DateTerminee (flux strict : En cours d'abord)
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
             // Calculer aperçu avec 10% sur montant total (non-encaissé)

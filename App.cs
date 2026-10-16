@@ -67,6 +67,7 @@ namespace GestionCoutureApp
             services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
             services.AddSingleton<IParametresService, ParametresService>();
+            // RetourService dépend de IAuditService — déclaré après ce dernier
             services.AddSingleton<IRetourService, RetourService>();
             services.AddSingleton<IAlerteService, AlerteService>();
             services.AddSingleton<IDepenseService, DepenseService>();
@@ -74,6 +75,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IWhatsAppService, WhatsAppService>();
             services.AddSingleton<ITresorerieService, TresorerieService>();
             services.AddSingleton<IAuditService, AuditService>();
+            services.AddSingleton<IMesureClientService, MesureClientService>();
             
             // EventAggregator pour notifications globales entre vues
             services.AddSingleton<IEventAggregator, EventAggregator>();
@@ -938,6 +940,161 @@ namespace GestionCoutureApp
             {
                 AjouterCol(c, "Commandes", "EstAnnulee",         "INTEGER NOT NULL DEFAULT 0");
                 AjouterCol(c, "Commandes", "DateImpressionRecu", "TEXT NULL");
+            });
+
+            // ── Étape 4 — MesuresClient : fiche de mesures réutilisables ─────────
+            AppliquerSi("20261015000000_AjoutMesuresClient", c =>
+            {
+                // 1. Créer la table
+                using var createCmd = c.CreateCommand();
+                createCmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""MesuresClient"" (
+                        ""IdMesureClient""          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""IdClient""                INTEGER NOT NULL,
+                        ""TypeVetement""            TEXT    NOT NULL,
+                        ""NomMesure""               TEXT    NOT NULL,
+                        ""Valeur""                  TEXT    NOT NULL,
+                        ""DateMiseAJour""            TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+                        ""IdOperateurMiseAJour""     INTEGER NOT NULL DEFAULT 0,
+                        ""NomOperateurMiseAJour""    TEXT    NOT NULL DEFAULT '',
+                        FOREIGN KEY (""IdClient"") REFERENCES ""Clients""(""IdClient"") ON DELETE CASCADE
+                    )";
+                createCmd.ExecuteNonQuery();
+
+                // 2. Index unique (IdClient, TypeVetement, NomMesure)
+                CreerIndex(c,
+                    "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                    "\"IX_MesuresClient_IdClient_TypeVetement_NomMesure\" " +
+                    "ON \"MesuresClient\" (\"IdClient\", \"TypeVetement\", \"NomMesure\")");
+
+                // 3. Migration des données existantes :
+                //    Pour chaque (client, type de vêtement, nom de mesure), prendre
+                //    la valeur de la pièce la plus récente (par DateCreation de la commande).
+                //    INSERT OR IGNORE → si une valeur existe déjà (relance), on la laisse.
+                using var migCmd = c.CreateCommand();
+                migCmd.CommandText = @"
+                    INSERT OR IGNORE INTO ""MesuresClient""
+                        (""IdClient"", ""TypeVetement"", ""NomMesure"", ""Valeur"",
+                         ""DateMiseAJour"", ""IdOperateurMiseAJour"", ""NomOperateurMiseAJour"")
+                    SELECT
+                        cmd.""IdClient"",
+                        p.""TypeVetement"",
+                        m.""NomMesure"",
+                        m.""Valeur"",
+                        -- Prendre la date de la commande comme date de MAJ initiale
+                        COALESCE(cmd.""DateCreation"", cmd.""DateDebut""),
+                        COALESCE(cmd.""IdOperateurCreation"", 0),
+                        COALESCE(cmd.""NomOperateurCreation"", 'Migration automatique')
+                    FROM ""Mesures"" m
+                    -- Joindre sur la pièce la plus récente pour ce (client, type)
+                    INNER JOIN ""PiecesCommande"" p ON p.""IdPieceCommande"" = m.""IdPieceCommande""
+                    INNER JOIN ""Commandes"" cmd ON cmd.""IdCommande"" = p.""IdCommande""
+                    WHERE cmd.""EstSupprimee"" = 0
+                      AND m.""IdPieceCommande"" IS NOT NULL
+                      -- Sous-requête : pièce la plus récente pour ce (client, type, mesure)
+                      AND p.""IdPieceCommande"" = (
+                            SELECT p2.""IdPieceCommande""
+                            FROM ""PiecesCommande"" p2
+                            INNER JOIN ""Commandes"" c2 ON c2.""IdCommande"" = p2.""IdCommande""
+                            INNER JOIN ""Mesures"" m2 ON m2.""IdPieceCommande"" = p2.""IdPieceCommande""
+                            WHERE c2.""IdClient"" = cmd.""IdClient""
+                              AND p2.""TypeVetement"" = p.""TypeVetement""
+                              AND m2.""NomMesure"" = m.""NomMesure""
+                              AND c2.""EstSupprimee"" = 0
+                            ORDER BY COALESCE(c2.""DateCreation"", c2.""DateDebut"") DESC,
+                                     p2.""IdPieceCommande"" DESC
+                            LIMIT 1
+                      )";
+                int nb = migCmd.ExecuteNonQuery();
+                log.LogInfo($"[MIGRATION MANUELLE] AjoutMesuresClient : {nb} mesure(s) migrées vers MesuresClient.");
+            });
+
+            // ── Étape 6 — NumeroRetour + RetourCompteur + renommage Pret→Termine ─
+            AppliquerSi("20261015000001_Etape6_RetourNumeroStatut", c =>
+            {
+                // 1. Table RetourCompteur (compteur annuel)
+                using var createComp = c.CreateCommand();
+                createComp.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""RetourCompteurs"" (
+                        ""Annee""          INTEGER NOT NULL PRIMARY KEY,
+                        ""DernierNumero""  INTEGER NOT NULL DEFAULT 0
+                    )";
+                createComp.ExecuteNonQuery();
+
+                // 2. Colonne NumeroRetour sur Retours
+                AjouterCol(c, "Retours", "NumeroRetour", "TEXT NOT NULL DEFAULT ''");
+
+                // 3. Index UNIQUE sur NumeroRetour (ignore les vides — WHEREclause)
+                CreerIndex(c,
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Retours_NumeroRetour\" " +
+                    "ON \"Retours\" (\"NumeroRetour\") " +
+                    "WHERE \"NumeroRetour\" != ''");
+
+                // 4. Colonnes retour arrière de statut
+                AjouterCol(c, "Retours", "MotifRetourStatut",         "TEXT NULL");
+                AjouterCol(c, "Retours", "DateRetourStatut",          "TEXT NULL");
+                AjouterCol(c, "Retours", "NomOperateurRetourStatut",  "TEXT NULL");
+
+                // 5. Migration Pret → Termine sur les données existantes
+                using var migStatut = c.CreateCommand();
+                migStatut.CommandText = "UPDATE \"Retours\" SET \"Statut\" = 'Termine' WHERE \"Statut\" = 'Pret'";
+                int nbStatuts = migStatut.ExecuteNonQuery();
+                log.LogInfo($"[MIGRATION MANUELLE] Etape6 : {nbStatuts} retour(s) migrés Pret→Termine.");
+
+                // 6. Attribution des NumeroRetour aux retours existants (sans numéro)
+                //    Ordre : DateSignalement ASC, puis IdRetour ASC.
+                //    On regroupe par année et incrémente le compteur.
+                //    INSERT OR REPLACE dans RetourCompteurs pour chaque année touchée.
+                using var selCmd = c.CreateCommand();
+                selCmd.CommandText = @"
+                    SELECT ""IdRetour"", ""DateSignalement""
+                    FROM ""Retours""
+                    WHERE ""NumeroRetour"" = '' OR ""NumeroRetour"" IS NULL
+                    ORDER BY ""DateSignalement"" ASC, ""IdRetour"" ASC";
+
+                var aNumeroter = new List<(int IdRetour, DateTime Date)>();
+                using (var rdr = selCmd.ExecuteReader())
+                {
+                    while (rdr.Read())
+                    {
+                        int id = rdr.GetInt32(0);
+                        DateTime dt = DateTime.Parse(rdr.GetString(1));
+                        aNumeroter.Add((id, dt));
+                    }
+                }
+
+                // Compteurs par année
+                var compteurs = new System.Collections.Generic.Dictionary<int, int>();
+                foreach (var (idRet, dtSig) in aNumeroter)
+                {
+                    int annee = dtSig.Year;
+                    if (!compteurs.ContainsKey(annee))
+                    {
+                        // Lire le max existant depuis RetourCompteurs (en cas de relance partielle)
+                        using var rdMax = c.CreateCommand();
+                        rdMax.CommandText = $"SELECT \"DernierNumero\" FROM \"RetourCompteurs\" WHERE \"Annee\" = {annee}";
+                        var existant = rdMax.ExecuteScalar();
+                        compteurs[annee] = existant == null ? 0 : Convert.ToInt32(existant);
+                    }
+                    compteurs[annee]++;
+                    string numero = $"RET-{annee}-{compteurs[annee]:D5}";
+
+                    using var updNum = c.CreateCommand();
+                    updNum.CommandText = $"UPDATE \"Retours\" SET \"NumeroRetour\" = '{numero}' WHERE \"IdRetour\" = {idRet}";
+                    updNum.ExecuteNonQuery();
+                }
+
+                // Persister les compteurs
+                foreach (var kvp in compteurs)
+                {
+                    using var upsComp = c.CreateCommand();
+                    upsComp.CommandText =
+                        $"INSERT OR REPLACE INTO \"RetourCompteurs\" (\"Annee\", \"DernierNumero\") " +
+                        $"VALUES ({kvp.Key}, {kvp.Value})";
+                    upsComp.ExecuteNonQuery();
+                }
+
+                log.LogInfo($"[MIGRATION MANUELLE] Etape6 : {aNumeroter.Count} retour(s) numérotés.");
             });
         }
 

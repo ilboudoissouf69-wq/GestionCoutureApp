@@ -834,6 +834,7 @@ namespace GestionCoutureApp.Services
             }
         }
 
+        [Obsolete("Utiliser ModifierPiece() + ModifierInfosCommande() séparément pour éviter la corruption de pièces vides.")]
         public void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
             int idOperateur, string nomOperateur, string? motifModification = null)
         {

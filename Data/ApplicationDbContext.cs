@@ -34,6 +34,12 @@ namespace GestionCoutureApp.Data
         // Point 4 — Retours (reprises gratuites)
         public DbSet<Retour> Retours { get; set; }
 
+        // Étape 6 — Compteur annuel pour la numérotation RET-AAAA-NNNNN
+        public DbSet<RetourCompteur> RetourCompteurs { get; set; }
+
+        // Étape 4 — Mesures réutilisables par client et type de vêtement
+        public DbSet<MesureClient> MesuresClient { get; set; }
+
 
         // Point 3 — Depenses
         public DbSet<Depense> Depenses { get; set; }
@@ -164,6 +170,22 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<Employe>()
                 .Property(e => e.Statut)
                 .HasDefaultValue("Actif");
+
+            // ── Étape 4 — MesureClient ──────────────────────────────────────
+            // Relation Client → MesuresClient : Restrict (ne pas effacer
+            // silencieusement la fiche de mesures si un client est "supprimé"
+            // logiquement — la suppression physique est de toute façon bloquée
+            // par ClientService.Supprimer dès qu'il existe des commandes).
+            modelBuilder.Entity<MesureClient>()
+                .HasOne(mc => mc.Client)
+                .WithMany()
+                .HasForeignKey(mc => mc.IdClient)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Index unique : une seule valeur par (client, type de vêtement, nom de mesure).
+            modelBuilder.Entity<MesureClient>()
+                .HasIndex(mc => new { mc.IdClient, mc.TypeVetement, mc.NomMesure })
+                .IsUnique();
 
             // ── Retour : relation CouturierReprise (nullable, auto-découverte
             // par EF Core impossible car 2 FK vers Employe sur la même entité)

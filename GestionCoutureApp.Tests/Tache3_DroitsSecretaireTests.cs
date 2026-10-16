@@ -70,15 +70,16 @@ namespace GestionCoutureApp.Tests
             {
                 IdPieceCommande = piece.IdPieceCommande,
                 TypeVetement    = "Robe",     // changement type OK
-                MontantCouture  = 8000m,      // changement prix OK
+                MontantCouture  = 8000m,      // changement prix OK (motif requis pour la Secrétaire)
                 IdCouturier     = IdCouturier,
                 Statut          = "En cours"
             };
 
             Assert.DoesNotThrow(() =>
                 _commandeService.Modifier(cmdModif, pieceModif, new List<Mesure>(),
-                    IdSecretaire, "Marie FALL"),
-                "Sans paiement, la Secrétaire peut tout modifier");
+                    IdSecretaire, "Marie FALL",
+                    motifModification: "Correction saisie initiale"),
+                "Sans paiement, la Secrétaire peut tout modifier (avec motif pour le prix)");
 
             var enBase = PieceEnBase(piece.IdPieceCommande);
             Assert.That(enBase.TypeVetement, Is.EqualTo("Robe"));
@@ -143,6 +144,8 @@ namespace GestionCoutureApp.Tests
         public void T3_05_Secretaire_Lecture_Seule_Apres_Terminee()
         {
             var (_, piece) = CreerCommandePiece();
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
             var pieceModif = Formulaire(piece, idCouturier: null);
@@ -158,41 +161,59 @@ namespace GestionCoutureApp.Tests
         public void T3_06_Boss_Peut_Modifier_Apres_Terminee()
         {
             var (_, piece) = CreerCommandePiece();
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
-            var pieceModif = Formulaire(piece, idCouturier: null);
+            // Le Boss peut rétrograder une pièce Terminée (avec motif) pour la modifier
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO",
+                motifLivraisonNonSoldee: "Retouche nécessaire");
 
+            // Après rétrogradation, le Boss peut modifier le couturier
+            // Le formulaire doit refléter le statut actuel "En cours" pour éviter une rétrogradation involontaire
+            var pieceModif = Formulaire(piece, idCouturier: null, statut: "En cours");
             Assert.DoesNotThrow(() =>
                 _commandeService.ModifierPiece(pieceModif, new List<Mesure>(),
                     IdBoss, "Mamadou DIALLO"),
-                "Le Boss peut toujours modifier même après Terminee");
+                "Le Boss peut modifier après rétrogradation depuis Terminee");
+
+            Assert.That(PieceEnBase(piece.IdPieceCommande).IdCouturier, Is.Null);
         }
 
-        // ── 3D : Suppression par la Secrétaire ───────────────────────────
+        // ── 3D : Annulation rapide par la Secrétaire (AnnulerParSecretaireAsync) ──
 
         [Test]
         public async Task T3_07_Secretaire_Peut_Supprimer_Sans_Paiement_Statut_Initial()
         {
-            var (idCommande, _) = CreerCommandePiece();
+            // La commande doit être créée par la Secrétaire elle-même pour pouvoir l'annuler
+            var cmd  = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
+            var pce  = new PieceCommande { TypeVetement = "Chemise", MontantCouture = 10000m, IdCouturier = IdCouturier };
+            _commandeService.Ajouter(cmd, pce, new List<Mesure>(), IdSecretaire, "Marie FALL");
+            int idCommande = cmd.IdCommande;
 
             Assert.DoesNotThrowAsync(async () =>
-                await _commandeService.SupprimerAsync(
+                await _commandeService.AnnulerParSecretaireAsync(
                     idCommande, IdSecretaire, "Marie FALL",
-                    "Erreur de saisie"));
+                    motif: "Erreur de saisie"));
 
             using var ctx = _factory.CreateDbContext();
-            Assert.That(ctx.Commandes.Find(idCommande)!.EstSupprimee, Is.True);
+            var cmdEnBase = ctx.Commandes.Find(idCommande)!;
+            Assert.That(cmdEnBase.EstSupprimee || cmdEnBase.EstAnnulee, Is.True,
+                "La commande doit être marquée supprimée ou annulée après annulation Secrétaire");
         }
 
         [Test]
         public async Task T3_08_Secretaire_Ne_Peut_Pas_Supprimer_Avec_Paiement()
         {
-            var (idCommande, _) = CreerCommandePiece();
-            Payer(idCommande, 2000m);
+            // Commande créée par la Secrétaire
+            var cmd  = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
+            var pce  = new PieceCommande { TypeVetement = "Chemise", MontantCouture = 10000m, IdCouturier = IdCouturier };
+            _commandeService.Ajouter(cmd, pce, new List<Mesure>(), IdSecretaire, "Marie FALL");
+            Payer(cmd.IdCommande, 2000m);
 
             var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-                await _commandeService.SupprimerAsync(
-                    idCommande, IdSecretaire, "Marie FALL", "Test"));
+                await _commandeService.AnnulerParSecretaireAsync(
+                    cmd.IdCommande, IdSecretaire, "Marie FALL", motif: "Test"));
             Assert.That(ex!.Message, Does.Contain("paiement").IgnoreCase);
         }
 
@@ -203,10 +224,10 @@ namespace GestionCoutureApp.Tests
             _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
 
             var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-                await _commandeService.SupprimerAsync(
-                    idCommande, IdSecretaire, "Marie FALL", "Test"));
+                await _commandeService.AnnulerParSecretaireAsync(
+                    idCommande, IdSecretaire, "Marie FALL", motif: "Test"));
             Assert.That(ex!.Message, Does.Contain("initial").Or.Contain("faire").IgnoreCase
-                .Or.Contain("Boss"));
+                .Or.Contain("Boss").Or.Contain("commencé").IgnoreCase);
         }
 
         [Test]

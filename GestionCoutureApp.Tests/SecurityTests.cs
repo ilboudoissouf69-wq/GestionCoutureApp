@@ -120,7 +120,7 @@ namespace GestionCoutureApp.Tests
         [Test]
         public async Task Test01_Secretaire_Ne_Peut_Pas_Supprimer_Commande_Avec_Paiement()
         {
-            // Arrange : Créer une commande avec paiement
+            // Arrange : Créer une commande avec paiement (par la Secrétaire elle-même)
             var commande = new Commande
             {
                 IdClient = 1,
@@ -128,17 +128,16 @@ namespace GestionCoutureApp.Tests
                 DateFin = DateTime.Now.AddDays(7),
                 Statut = "A faire"
             };
-
             var piece = new PieceCommande
             {
                 TypeVetement = "Robe",
                 MontantCouture = 15000,
                 Statut = "A faire"
             };
+            // La commande doit être créée par la Secrétaire pour qu'elle puisse tenter de l'annuler
+            _commandeService.Ajouter(commande, piece, new System.Collections.Generic.List<Mesure>(), idOperateur: 2, nomOperateur: "Marie FALL");
 
-            _commandeService.Ajouter(commande, piece, new System.Collections.Generic.List<Mesure>(), idOperateur: 1, nomOperateur: "Mamadou DIALLO");
-
-            // Ajouter un paiement — après ça, la Secrétaire ne peut plus supprimer
+            // Ajouter un paiement — après ça, la Secrétaire ne peut plus annuler
             _paiementService.Ajouter(new Paiement
             {
                 IdCommande = commande.IdCommande,
@@ -147,17 +146,14 @@ namespace GestionCoutureApp.Tests
                 ModePaiement = "Especes"
             }, idOperateur: 1, nomOperateur: "Mamadou DIALLO");
 
-            // Act & Assert : La secrétaire (ID=2) tente de supprimer → refus
+            // Act & Assert : La Secrétaire tente d'annuler → refus (paiement existant)
             var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            {
-                await _commandeService.SupprimerAsync(
-                    id: commande.IdCommande,
-                    idOperateur: 2, // Secrétaire
+                await _commandeService.AnnulerParSecretaireAsync(
+                    idCommande: commande.IdCommande,
+                    idOperateur: 2,
                     nomOperateur: "Marie FALL",
-                    motif: "Test suppression",
-                    auditService: _auditService
-                );
-            });
+                    motif: "Test suppression"
+                ));
 
             Assert.That(exception.Message, Does.Contain("paiement").IgnoreCase);
         }
@@ -165,7 +161,7 @@ namespace GestionCoutureApp.Tests
         [Test]
         public async Task Test01b_Secretaire_Peut_Supprimer_Commande_Sans_Paiement_Statut_Initial()
         {
-            // TÂCHE 3 : La Secrétaire peut supprimer si aucun paiement et statut initial
+            // TÂCHE 3 : La Secrétaire peut annuler si aucun paiement et statut initial
             var commande = new Commande
             {
                 IdClient = 1,
@@ -177,24 +173,23 @@ namespace GestionCoutureApp.Tests
             {
                 TypeVetement = "Robe", MontantCouture = 15000, Statut = "A faire"
             };
+            // Créer par la Secrétaire elle-même
             _commandeService.Ajouter(commande, piece,
-                new System.Collections.Generic.List<Mesure>(), idOperateur: 1, nomOperateur: "Mamadou DIALLO");
+                new System.Collections.Generic.List<Mesure>(), idOperateur: 2, nomOperateur: "Marie FALL");
 
-            // Pas de paiement → suppression autorisée
+            // Pas de paiement → annulation autorisée
             Assert.DoesNotThrowAsync(async () =>
-            {
-                await _commandeService.SupprimerAsync(
-                    id: commande.IdCommande,
-                    idOperateur: 2, // Secrétaire
+                await _commandeService.AnnulerParSecretaireAsync(
+                    idCommande: commande.IdCommande,
+                    idOperateur: 2,
                     nomOperateur: "Marie FALL",
-                    motif: "Erreur de saisie, annulée",
-                    auditService: _auditService
-                );
-            });
+                    motif: "Erreur de saisie, annulée"
+                ));
 
-            // Vérifier que la commande est bien supprimée logiquement
+            // Vérifier que la commande est bien annulée
             using var ctx = _contextFactory.CreateDbContext();
-            Assert.That(ctx.Commandes.Find(commande.IdCommande)!.EstSupprimee, Is.True);
+            var cmdEnBase = ctx.Commandes.Find(commande.IdCommande)!;
+            Assert.That(cmdEnBase.EstSupprimee || cmdEnBase.EstAnnulee, Is.True);
         }
 
         // ================================================================
@@ -720,5 +715,8 @@ namespace GestionCoutureApp.Tests
         public Task          DefinirSeuilPrimeNbCommandes(int n)   => Task.CompletedTask;
         public Task<decimal> ObtenirMontantPrimeQualite()          => Task.FromResult(5000m);
         public Task          DefinirMontantPrimeQualite(decimal m) => Task.CompletedTask;
+        // Étape 2 : fenêtre d'annulation rapide par la Secrétaire
+        public Task<int>     ObtenirDelaiAnnulationSecretaireMinutes()        => Task.FromResult(10);
+        public Task          DefinirDelaiAnnulationSecretaireMinutes(int min) => Task.CompletedTask;
     }
 }

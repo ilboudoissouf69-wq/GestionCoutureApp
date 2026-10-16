@@ -244,7 +244,15 @@ namespace GestionCoutureApp.Tests
         {
             const decimal montantCouture = 7500m;
             var (idCommande, idPiece) = CreerCommande(montantCouture);
-            Payer(idCommande, montantCouture);
+
+            // Payer le montant RÉEL en base (montantCouture + _counter interne du helper)
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var montantReel = ctx.PiecesCommande
+                    .Where(p => p.IdCommande == idCommande)
+                    .Sum(p => p.MontantCouture);
+                Payer(idCommande, montantReel);
+            }
 
             _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
@@ -253,7 +261,6 @@ namespace GestionCoutureApp.Tests
             var rapport = _tresorerieService.VerifierCoherenceArgentTravail(Debut, Fin);
 
             Assert.That(rapport, Is.Not.Null);
-            // La pièce est soldée → aucune commande dans CommandesNonSoldees
             Assert.That(rapport.CommandesNonSoldees, Is.Empty,
                 "Commande soldée à 100% : aucune commande non soldée dans le rapport");
             Assert.That(rapport.CoherenceOk, Is.True,

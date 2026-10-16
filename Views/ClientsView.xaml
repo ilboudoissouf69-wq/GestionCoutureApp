@@ -711,97 +711,140 @@
                                     Background="{StaticResource CliBorder}"
                                     Margin="0,0,0,14"/>
 
-                            <!-- Historique des commandes -->
-                            <TextBlock Text="Historique des commandes"
-                                       FontSize="13" FontWeight="Bold"
-                                       Foreground="{StaticResource CliSlateDark}"
-                                       Margin="0,0,0,10"/>
-
-                            <TextBlock x:Name="TxtAucuneCommande"
-                                       Text="Aucune commande pour ce client"
-                                       FontSize="12"
-                                       Foreground="{StaticResource CliSlateLight}"
-                                       Visibility="Collapsed"
-                                       Margin="0,0,0,10"/>
-
-                            <ItemsControl x:Name="ItemsHistoriqueCommandes">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="0,0,0,8"
-                                                CornerRadius="8"
-                                                BorderBrush="{StaticResource CliBorder}"
-                                                BorderThickness="1"
-                                                Background="#FAFCFF"
-                                                Padding="12,10">
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
-
-                                                <!-- Titre + badge statut -->
-                                                <Grid Grid.Row="0">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0"
-                                                               Text="{Binding TitreCommande}"
-                                                               FontSize="12" FontWeight="Bold"
-                                                               Foreground="{StaticResource CliBodyFg}"/>
-                                                    <Border Grid.Column="1"
-                                                            CornerRadius="4" Padding="6,2"
-                                                            Background="{StaticResource CliAmberLight}">
-                                                        <TextBlock Text="{Binding StatutAffiche}"
-                                                                   FontSize="10" FontWeight="SemiBold"
-                                                                   Foreground="{StaticResource CliAmber}"/>
+                            <!-- ═══ ONGLETS : Historique │ Mesures ═══ -->
+                            <TabControl x:Name="TabsFiche"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="0">
+                                <TabControl.Resources>
+                                    <Style TargetType="TabItem">
+                                        <Setter Property="Padding"         Value="12,6"/>
+                                        <Setter Property="FontSize"        Value="12"/>
+                                        <Setter Property="FontWeight"      Value="SemiBold"/>
+                                        <Setter Property="Foreground"      Value="{StaticResource CliSlateMuted}"/>
+                                        <Setter Property="Background"      Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="TabItem">
+                                                    <Border x:Name="bd"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            BorderThickness="0,0,0,2"
+                                                            BorderBrush="Transparent">
+                                                        <ContentPresenter ContentSource="Header"/>
                                                     </Border>
-                                                </Grid>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter TargetName="bd" Property="BorderBrush"
+                                                                    Value="{StaticResource CliAmber}"/>
+                                                            <Setter Property="Foreground"
+                                                                    Value="{StaticResource CliAmber}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </TabControl.Resources>
 
-                                                <!-- Résumé pièces + date -->
-                                                <TextBlock Grid.Row="1"
-                                                           Text="{Binding ResumePieces}"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource CliMutedFg}"
-                                                           TextWrapping="Wrap"
-                                                           Margin="0,3,0,0"/>
+                                <!-- ─── Onglet Historique ─────────────── -->
+                                <TabItem Header="📋 Historique">
+                                    <StackPanel Margin="0,12,0,0">
 
-                                                <!-- Reste à payer (si > 0) -->
-                                                <TextBlock Grid.Row="2"
-                                                           Text="{Binding ResteAPayerAffiche}"
-                                                           FontSize="11" FontWeight="SemiBold"
-                                                           Foreground="{StaticResource CliRed}"
-                                                           Margin="0,3,0,0"
-                                                           Visibility="{Binding ResteAPayerVisible}"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                        <TextBlock x:Name="TxtAucuneCommande"
+                                                   Text="Aucune commande pour ce client"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource CliSlateLight}"
+                                                   Visibility="Collapsed"
+                                                   Margin="0,0,0,10"/>
 
-                            <Border Height="1"
-                                    Background="{StaticResource CliBorder}"
-                                    Margin="0,6,0,14"/>
+                                        <ItemsControl x:Name="ItemsHistoriqueCommandes">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,0,8"
+                                                            CornerRadius="8"
+                                                            BorderBrush="{StaticResource CliBorder}"
+                                                            BorderThickness="1"
+                                                            Background="#FAFCFF"
+                                                            Padding="12,10">
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+                                                            <Grid Grid.Row="0">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="{Binding TitreCommande}"
+                                                                           FontSize="12" FontWeight="Bold"
+                                                                           Foreground="{StaticResource CliBodyFg}"/>
+                                                                <Border Grid.Column="1"
+                                                                        CornerRadius="4" Padding="6,2"
+                                                                        Background="{StaticResource CliAmberLight}">
+                                                                    <TextBlock Text="{Binding StatutAffiche}"
+                                                                               FontSize="10" FontWeight="SemiBold"
+                                                                               Foreground="{StaticResource CliAmber}"/>
+                                                                </Border>
+                                                            </Grid>
+                                                            <TextBlock Grid.Row="1"
+                                                                       Text="{Binding ResumePieces}"
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource CliMutedFg}"
+                                                                       TextWrapping="Wrap"
+                                                                       Margin="0,3,0,0"/>
+                                                            <TextBlock Grid.Row="2"
+                                                                       Text="{Binding ResteAPayerAffiche}"
+                                                                       FontSize="11" FontWeight="SemiBold"
+                                                                       Foreground="{StaticResource CliRed}"
+                                                                       Margin="0,3,0,0"
+                                                                       Visibility="{Binding ResteAPayerVisible}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
 
-                            <!-- Dernières mesures -->
-                            <TextBlock Text="Dernières mesures"
-                                       FontSize="13" FontWeight="Bold"
-                                       Foreground="{StaticResource CliSlateDark}"
-                                       Margin="0,0,0,4"/>
-                            <TextBlock x:Name="TxtMesuresSource"
-                                       FontSize="11"
-                                       Foreground="{StaticResource CliSlateMuted}"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,8"/>
-                            <TextBlock x:Name="TxtAucuneMesure"
-                                       Text="Aucune mesure enregistrée"
-                                       FontSize="12"
-                                       Foreground="{StaticResource CliSlateLight}"
-                                       Visibility="Collapsed"
-                                       Margin="0,0,0,10"/>
-                            <WrapPanel x:Name="ItemsDernieresMesures"
-                                       Margin="0,0,0,8"/>
+                                    </StackPanel>
+                                </TabItem>
+
+                                <!-- ─── Onglet Mesures ────────────────── -->
+                                <TabItem Header="📐 Mesures" x:Name="TabMesures">
+                                    <StackPanel Margin="0,12,0,0">
+
+                                        <TextBlock x:Name="TxtAucuneMesureFiche"
+                                                   Text="Aucune mesure enregistrée pour ce client"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource CliSlateLight}"
+                                                   Visibility="Collapsed"
+                                                   Margin="0,0,0,10"/>
+
+                                        <!-- Groupes de mesures par type de vêtement -->
+                                        <StackPanel x:Name="PanelGroupesMesures"/>
+
+                                        <!-- Bouton enregistrer -->
+                                        <Button x:Name="BtnSauvegarderMesures"
+                                                Style="{StaticResource CliBtnAmber}"
+                                                Height="38" Margin="0,12,0,0"
+                                                Padding="0"
+                                                Visibility="Collapsed"
+                                                Click="BtnSauvegarderMesures_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="💾" FontSize="12"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                <TextBlock Text="Enregistrer les mesures"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+
+                                    </StackPanel>
+                                </TabItem>
+
+                            </TabControl>
 
                         </StackPanel>
                     </StackPanel>

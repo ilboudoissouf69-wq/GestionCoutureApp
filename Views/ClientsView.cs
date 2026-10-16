@@ -17,6 +17,7 @@ namespace GestionCoutureApp.Views
         private readonly IWhatsAppService _whatsApp;
         private readonly ILanguageService _languageService;
         private readonly IEventAggregator _eventAggregator;
+        private readonly IMesureClientService _mesureClientService;
 
         // ── Sélection ────────────────────────────────────────────────────
         private int _clientSelectionneId;
@@ -43,6 +44,7 @@ namespace GestionCoutureApp.Views
             _whatsApp        = App.Services.GetRequiredService<IWhatsAppService>();
             _languageService = App.Services.GetRequiredService<ILanguageService>();
             _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
+            _mesureClientService = App.Services.GetRequiredService<IMesureClientService>();
 
             // ✅ S'abonner aux changements de langue et de thème
             _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
@@ -246,7 +248,7 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         private async Task ChargerFicheAsync(int idClient)
         {
-            // ── Historique des commandes ──────────────────────────────────
+            // ── Onglet Historique ─────────────────────────────────────────
             var historique = _clientService.ObtenirHistoriqueCommandes(idClient, 20);
 
             if (historique.Count == 0)
@@ -259,9 +261,9 @@ namespace GestionCoutureApp.Views
                 TxtAucuneCommande.Visibility = Visibility.Collapsed;
                 ItemsHistoriqueCommandes.ItemsSource = historique.Select(h => new
                 {
-                    TitreCommande     = $"CMD #{h.IdCommande}",
-                    StatutAffiche     = h.StatutAffiche,
-                    ResumePieces      = $"{h.ResumePieces} — début {h.DateDebut:dd/MM/yyyy}",
+                    TitreCommande      = $"CMD #{h.IdCommande}",
+                    StatutAffiche      = h.StatutAffiche,
+                    ResumePieces       = $"{h.ResumePieces} — début {h.DateDebut:dd/MM/yyyy}",
                     ResteAPayerAffiche = h.ResteAPayer > 0
                         ? $"Reste : {h.ResteAPayer:N0} FCFA"
                         : "",
@@ -271,54 +273,195 @@ namespace GestionCoutureApp.Views
                 }).ToList();
             }
 
-            // ── Dernières mesures ─────────────────────────────────────────
-            var mesures = _clientService.ObtenirDernieresMesures(idClient);
+            // ── Onglet Mesures ────────────────────────────────────────────
+            ChargerOngletMesures(idClient);
 
-            // Vider le WrapPanel
-            ItemsDernieresMesures.Children.Clear();
+            await Task.CompletedTask;
+        }
 
-            if (mesures == null || mesures.Mesures.Count == 0)
+        /// <summary>
+        /// Charge (ou recharge) l'onglet Mesures pour le client donné.
+        /// Génère dynamiquement un groupe par type de vêtement avec des TextBox éditables.
+        /// </summary>
+        private void ChargerOngletMesures(int idClient)
+        {
+            PanelGroupesMesures.Children.Clear();
+            BtnSauvegarderMesures.Visibility = Visibility.Collapsed;
+
+            List<FicheMesuresParType> groupes;
+            try { groupes = _mesureClientService.ObtenirFicheMesures(idClient); }
+            catch { groupes = new List<FicheMesuresParType>(); }
+
+            if (groupes.Count == 0)
             {
-                TxtMesuresSource.Text        = "";
-                TxtAucuneMesure.Visibility   = Visibility.Visible;
+                TxtAucuneMesureFiche.Visibility = Visibility.Visible;
+                return;
             }
-            else
-            {
-                TxtAucuneMesure.Visibility = Visibility.Collapsed;
-                TxtMesuresSource.Text      = mesures.LabelSource;
 
-                foreach (var m in mesures.Mesures)
+            TxtAucuneMesureFiche.Visibility = Visibility.Collapsed;
+
+            foreach (var groupe in groupes)
+            {
+                // ── En-tête du groupe ──────────────────────────────────────
+                var headerBorder = new Border
                 {
-                    var badge = new Border
+                    Background      = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)), // ambre clair
+                    CornerRadius    = new CornerRadius(8, 8, 0, 0),
+                    BorderBrush     = new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D)),
+                    BorderThickness = new Thickness(1, 1, 1, 0),
+                    Padding         = new Thickness(10, 6, 10, 6),
+                    Margin          = new Thickness(0, 8, 0, 0)
+                };
+                var headerGrid = new Grid();
+                headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var lblType = new TextBlock
+                {
+                    Text       = groupe.TypeVetement,
+                    FontSize   = 12,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x92, 0x40, 0x0E)),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(lblType, 0);
+
+                var lblDate = new TextBlock
+                {
+                    Text       = groupe.LabelDate,
+                    FontSize   = 10,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xB4, 0x5A, 0x09)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin     = new Thickness(8, 0, 0, 0)
+                };
+                if (!string.IsNullOrEmpty(groupe.NomOperateurDerniereMaj))
+                    lblDate.ToolTip = $"Mis à jour par : {groupe.NomOperateurDerniereMaj}";
+                Grid.SetColumn(lblDate, 1);
+
+                headerGrid.Children.Add(lblType);
+                headerGrid.Children.Add(lblDate);
+                headerBorder.Child = headerGrid;
+
+                // ── Corps : une ligne par mesure ──────────────────────────
+                var bodyBorder = new Border
+                {
+                    CornerRadius    = new CornerRadius(0, 0, 8, 8),
+                    BorderBrush     = new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D)),
+                    BorderThickness = new Thickness(1),
+                    Padding         = new Thickness(10, 8, 10, 8),
+                    Margin          = new Thickness(0, 0, 0, 0)
+                };
+                var bodyPanel = new StackPanel();
+
+                foreach (var mesure in groupe.Mesures)
+                {
+                    var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+                    row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+                    row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                    var lblNom = new TextBlock
                     {
-                        CornerRadius    = new CornerRadius(6),
-                        Background      = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
-                        BorderBrush     = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
-                        BorderThickness = new Thickness(1),
-                        Margin          = new Thickness(0, 0, 6, 6),
-                        Padding         = new Thickness(8, 4, 8, 4)
+                        Text              = mesure.NomMesure,
+                        FontSize          = 11,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Foreground        = new SolidColorBrush(Color.FromRgb(0x47, 0x55, 0x69))
                     };
-                    var sp = new StackPanel();
-                    sp.Children.Add(new TextBlock
+                    Grid.SetColumn(lblNom, 0);
+
+                    var txtVal = new TextBox
                     {
-                        Text       = m.NomMesure,
-                        FontSize   = 10,
-                        FontWeight = FontWeights.SemiBold,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0x47, 0x55, 0x69))
-                    });
-                    sp.Children.Add(new TextBlock
+                        Text              = mesure.Valeur,
+                        FontSize          = 11,
+                        Height            = 28,
+                        Padding           = new Thickness(6, 0, 6, 0),
+                        VerticalContentAlignment = VerticalAlignment.Center,
+                        BorderBrush       = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1)),
+                        BorderThickness   = new Thickness(1),
+                        // Tag : encode "idClient|typeVetement|nomMesure" pour SaveMesures
+                        Tag               = $"{idClient}|{groupe.TypeVetement}|{mesure.NomMesure}"
+                    };
+                    // Afficher le bouton Enregistrer dès qu'une valeur change
+                    txtVal.TextChanged += (s, e) =>
+                        BtnSauvegarderMesures.Visibility = Visibility.Visible;
+
+                    Grid.SetColumn(txtVal, 1);
+
+                    row.Children.Add(lblNom);
+                    row.Children.Add(txtVal);
+                    bodyPanel.Children.Add(row);
+                }
+
+                bodyBorder.Child = bodyPanel;
+                PanelGroupesMesures.Children.Add(headerBorder);
+                PanelGroupesMesures.Children.Add(bodyBorder);
+            }
+        }
+
+        // ==================================================================
+        // Sauvegarde des mesures éditées depuis la fiche client
+        // ==================================================================
+        private void BtnSauvegarderMesures_Click(object sender, RoutedEventArgs e)
+        {
+            if (_clientSelectionneId == 0) return;
+
+            var authService = App.Services.GetRequiredService<IAuthService>();
+            var op = authService.UtilisateurConnecte;
+            int idOp     = op?.IdEmploye ?? 0;
+            string nomOp = op != null ? $"{op.Prenom} {op.Nom}".Trim() : "Inconnu";
+
+            // Collecter toutes les TextBox du panel et regrouper par type
+            var parType = new Dictionary<string, List<(string Nom, string Valeur)>>();
+
+            foreach (var child in PanelGroupesMesures.Children)
+            {
+                // On cherche les bodyBorder (ceux qui ont un StackPanel)
+                if (child is not Border bodyBorder) continue;
+                if (bodyBorder.Child is not StackPanel bodyPanel) continue;
+
+                foreach (var rowEl in bodyPanel.Children)
+                {
+                    if (rowEl is not Grid row) continue;
+                    foreach (UIElement el in row.Children)
                     {
-                        Text       = m.Valeur,
-                        FontSize   = 12,
-                        FontWeight = FontWeights.Bold,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0x0F, 0x17, 0x2A))
-                    });
-                    badge.Child = sp;
-                    ItemsDernieresMesures.Children.Add(badge);
+                        if (el is not TextBox txt) continue;
+                        // Tag format : "idClient|TypeVetement|NomMesure"
+                        var parts = (txt.Tag?.ToString() ?? "").Split('|');
+                        if (parts.Length != 3) continue;
+                        string typeVet = parts[1];
+                        string nomMes  = parts[2];
+                        string valeur  = txt.Text.Trim().Replace(" cm", "").Replace("cm", "").Trim();
+                        if (string.IsNullOrEmpty(valeur)) continue;
+
+                        if (!parType.ContainsKey(typeVet))
+                            parType[typeVet] = new List<(string, string)>();
+                        parType[typeVet].Add((nomMes, valeur));
+                    }
                 }
             }
 
-            await Task.CompletedTask; // satisfait le compilateur sur la signature async
+            if (parType.Count == 0)
+            {
+                MessageBox.Show("Aucune mesure à enregistrer.", "Info",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                foreach (var (type, mesures) in parType)
+                    _mesureClientService.UpsertMesures(_clientSelectionneId, type, mesures, idOp, nomOp);
+
+                BtnSauvegarderMesures.Visibility = Visibility.Collapsed;
+                // Recharger pour mettre à jour les labels de date
+                ChargerOngletMesures(_clientSelectionneId);
+                MessageBox.Show("Mesures enregistrées.", "Succès",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de l'enregistrement :\n" + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // ==================================================================

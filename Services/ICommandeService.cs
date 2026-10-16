@@ -66,6 +66,13 @@ namespace GestionCoutureApp.Services
         /// </summary>
         /// <param name="idOperateur">Id de l'opérateur (Boss ou Secrétaire).</param>
         /// <param name="nomOperateur">Nom pour l'audit.</param>
+        /// <summary>
+        /// Modifie une commande et sa première pièce en une seule transaction (méthode legacy mono-pièce).
+        /// Pour les commandes multi-pièces, utiliser <see cref="ModifierPiece"/> +
+        /// <see cref="ModifierInfosCommande"/> séparément afin d'éviter de corrompre les pièces
+        /// avec une pièce fantôme vide quand aucune pièce n'est sélectionnée.
+        /// </summary>
+        [Obsolete("Utiliser ModifierPiece() + ModifierInfosCommande() séparément pour éviter la corruption de pièces vides.")]
         void Modifier(Commande commande, PieceCommande piece, List<Mesure> mesures,
             int idOperateur, string nomOperateur, string? motifModification = null);
 

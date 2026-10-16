@@ -319,7 +319,7 @@
                         <TextBlock x:Name="TxtNbPret" Text="0"
                                    FontSize="22" FontWeight="Bold"
                                    Foreground="#1D4ED8"/>
-                        <TextBlock Text="Prêts"
+                        <TextBlock Text="Terminés"
                                    FontSize="11" Foreground="#3B82F6"/>
                     </StackPanel>
                 </Grid>
@@ -385,7 +385,7 @@
                            Margin="14,0,0,0"
                            FontSize="12"
                            Foreground="#94A3B8">
-                    <TextBlock.Text>🔍  Rechercher par nom du client, n° commande (ex. 4 ou CMD-4), couturier ou motif…</TextBlock.Text>
+                    <TextBlock.Text>🔍  Rechercher par N° retour (RET-…), nom client, téléphone, n° commande, couturier ou motif…</TextBlock.Text>
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -411,7 +411,7 @@
                 <ComboBoxItem Content="Tous"             IsSelected="True"/>
                 <ComboBoxItem Content="Signalé"/>
                 <ComboBoxItem Content="En reprise"/>
-                <ComboBoxItem Content="Prêt ✓"/>
+                <ComboBoxItem Content="Terminé ✓"/>
                 <ComboBoxItem Content="Rendu au client"/>
             </ComboBox>
             </Grid>
@@ -954,6 +954,26 @@
 
                     <DataGrid.Columns>
 
+                        <!-- ── N° RETOUR ──────────────────────────────── -->
+                        <DataGridTemplateColumn Header="N° RETOUR"
+                                                Width="Auto" MinWidth="120">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="8,4" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding NumeroRetour}"
+                                                   FontSize="11" FontWeight="Bold"
+                                                   Foreground="{StaticResource RetAmber}"
+                                                   FontFamily="Consolas"
+                                                   ToolTip="{Binding NumeroRetour}"/>
+                                        <TextBlock Text="{Binding DateSignalementAffichee}"
+                                                   FontSize="9"
+                                                   Foreground="{StaticResource RetSlateMuted}"
+                                                   Margin="0,1,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
                         <!-- ── DATE SIGNALEMENT ───────────────────────── -->
                         <DataGridTextColumn Header="DATE"
                                             Binding="{Binding DateSignalementAffichee}"
@@ -1091,6 +1111,9 @@
                                                     <DataTrigger Binding="{Binding Statut}" Value="En reprise">
                                                         <Setter Property="Background" Value="#FEF3C7"/>
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Statut}" Value="Termine">
+                                                        <Setter Property="Background" Value="#DBEAFE"/>
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding Statut}" Value="Pret">
                                                         <Setter Property="Background" Value="#DBEAFE"/>
                                                     </DataTrigger>
@@ -1117,6 +1140,9 @@
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="En reprise">
                                                             <Setter Property="Foreground" Value="#92400E"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Statut}" Value="Termine">
+                                                            <Setter Property="Foreground" Value="#1D4ED8"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="Pret">
                                                             <Setter Property="Foreground" Value="#1D4ED8"/>
@@ -1209,9 +1235,14 @@
                                                             <Setter Property="ToolTip"     Value="Passer à En reprise"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="En reprise">
-                                                            <Setter Property="Content"     Value="✓ Marquer Prêt"/>
+                                                            <Setter Property="Content"     Value="✓ Terminé"/>
                                                             <Setter Property="Background"  Value="#1D4ED8"/>
-                                                            <Setter Property="ToolTip"     Value="Marquer comme Prêt"/>
+                                                            <Setter Property="ToolTip"     Value="Marquer comme Terminé"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Statut}" Value="Termine">
+                                                            <Setter Property="Content"     Value="📦 Rendu client"/>
+                                                            <Setter Property="Background"  Value="#059669"/>
+                                                            <Setter Property="ToolTip"     Value="Marquer comme Rendu au client"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="Pret">
                                                             <Setter Property="Content"     Value="📦 Rendu client"/>
@@ -1285,11 +1316,59 @@
                                             </Button.Style>
                                         </Button>
 
+                                        <!-- Imprimer ticket -->
+                                        <Button Width="30" Height="30"
+                                                FontSize="13"
+                                                ToolTip="Imprimer étiquette colis et reçu client"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Cursor="Hand"
+                                                Margin="1,1"
+                                                Click="BtnImprimerRetour_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                            <Setter Property="IsEnabled" Value="False"/>
+                                                            <Setter Property="Opacity"   Value="0.25"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <TextBlock Text="🖨️" FontSize="13"/>
+                                        </Button>
+
+                                        <!-- Retour arrière statut (Boss uniquement) -->
+                                        <Button Width="30" Height="30"
+                                                FontSize="13"
+                                                ToolTip="Reculer le statut (Boss uniquement — motif obligatoire)"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Cursor="Hand"
+                                                Margin="1,1"
+                                                Click="BtnReculerStatut_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding EstAnnule}" Value="True">
+                                                            <Setter Property="IsEnabled" Value="False"/>
+                                                            <Setter Property="Opacity"   Value="0.25"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Statut}" Value="Signale">
+                                                            <Setter Property="IsEnabled" Value="False"/>
+                                                            <Setter Property="Opacity"   Value="0.2"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <TextBlock Text="↩" FontSize="13"/>
+                                        </Button>
+
                                         <!-- Annuler -->
                                         <Button Content="🚫"
                                                 Width="30" Height="30"
                                                 FontSize="13"
-                                                ToolTip="Annuler ce retour (avec motif)"
+                                                ToolTip="Annuler ce retour — Boss uniquement (motif obligatoire)"
                                                 Background="Transparent"
                                                 BorderThickness="0"
                                                 Cursor="Hand"

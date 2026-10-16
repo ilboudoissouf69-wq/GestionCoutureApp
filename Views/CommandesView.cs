@@ -26,6 +26,7 @@ namespace GestionCoutureApp.Views
         private readonly IEventAggregator _eventAggregator;
         private readonly IPaiementService _paiementService;
         private readonly IReceiptService _receiptService;
+        private readonly IMesureClientService _mesureClientService;
 
         private int _commandeSelectionneeId;
         private int? _pieceSelectionneeId;
@@ -170,6 +171,7 @@ namespace GestionCoutureApp.Views
                 _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
                 _paiementService = App.Services.GetRequiredService<IPaiementService>();
                 _receiptService  = App.Services.GetRequiredService<IReceiptService>();
+                _mesureClientService = App.Services.GetRequiredService<IMesureClientService>();
 
                 var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
                 _context = contextFactory.CreateDbContext();
@@ -416,6 +418,14 @@ namespace GestionCoutureApp.Views
                 MettreAJourAffichageClientSelectionne(client);
                 // NE PAS remettre la liste complète ici — ça effacerait la sélection.
                 // La liste sera remise la prochaine fois que l'utilisateur saisira dans TxtRechercheClient.
+
+                // ── Étape 4 : pré-remplir les mesures de toutes les cartes ──
+                // Si les cartes existent déjà (édition) et que leurs types sont définis,
+                // on rafraîchit les mesures depuis la fiche client.
+                // En création : les cartes n'existent pas encore, le pré-remplissage se
+                // fait dans CmbTypeCarte_SelectionChanged quand le type est choisi.
+                if (!_modalModeCreation)
+                    RafraichirPreRemplissageMesuresCartes();
             }
             else
             {
@@ -1839,10 +1849,33 @@ namespace GestionCoutureApp.Views
             carte.PanelMesures.Children.Clear();
             if (type.MesuresRequises != null && type.MesuresRequises.Any())
             {
+                // ── Pré-remplissage depuis MesureClient ──────────────────────
+                // Récupère les mesures de la fiche client pour ce type de vêtement
+                // (vide si client non encore choisi ou pas de fiche)
+                List<MesureClient> mesuresFiche = new();
+                DateTime? dateFiche = null;
+                if (CmbModalClient.SelectedValue is int idClient && idClient > 0)
+                {
+                    try
+                    {
+                        mesuresFiche = _mesureClientService.ObtenirMesuresPourType(idClient, type.Nom);
+                        dateFiche    = _mesureClientService.ObtenirDateDerniereMaj(idClient, type.Nom);
+                    }
+                    catch { /* accès base non bloquant */ }
+                }
+
+                // Label « Mesures du jj/MM/yyyy » ou rien si pas de fiche
+                string labelDate = dateFiche.HasValue
+                    ? $"Mesures du {dateFiche.Value:dd/MM/yyyy}"
+                    : $"{type.MesuresRequises.Count} mesure(s) en cm :";
+
                 var header = new TextBlock
                 {
-                    Text = $"{type.MesuresRequises.Count} mesure(s) en cm :",
-                    FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
+                    Text = labelDate,
+                    FontSize = 11,
+                    Foreground = dateFiche.HasValue
+                        ? new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69))   // vert = pré-rempli
+                        : new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),  // gris = vierge
                     Margin = new Thickness(0, 0, 0, 4)
                 };
                 carte.PanelMesures.Children.Add(header);
@@ -1862,10 +1895,131 @@ namespace GestionCoutureApp.Views
                     };
                     for (int i = 20; i <= 300; i++)
                         combo.Items.Add((i * 0.5).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cm");
-                    combo.SelectedIndex = 0;
+
+                    // Pré-remplir depuis la fiche client si disponible
+                    var ficheVal = mesuresFiche.FirstOrDefault(m => m.NomMesure == mesure.NomMesure);
+                    if (ficheVal != null)
+                    {
+                        bool trouve = false;
+                        for (int j = 0; j < combo.Items.Count; j++)
+                        {
+                            string? item = combo.Items[j]?.ToString();
+                            if (item == ficheVal.Valeur + " cm" || item?.StartsWith(ficheVal.Valeur + " ") == true)
+                            { combo.SelectedIndex = j; trouve = true; break; }
+                        }
+                        if (!trouve) combo.Text = ficheVal.Valeur + " cm";
+                    }
+                    else
+                    {
+                        combo.SelectedIndex = 0;
+                    }
+
                     row.Children.Add(combo);
                     carte.PanelMesures.Children.Add(row);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Propose à l'opérateur de mettre à jour la fiche MesureClient pour chaque pièce
+        /// dont les mesures diffèrent de la fiche existante (ou qui n'ont pas encore de fiche).
+        /// Appelé juste avant FermerModal(), après un succès de création ou d'édition.
+        /// La pièce garde TOUJOURS sa copie figée — seule la fiche client est mise à jour.
+        /// </summary>
+        private void ProposerMiseAJourFicheMesures(int idClient, int idOp, string nomOp)
+        {
+            if (idClient <= 0) return;
+
+            // Construire la liste des (type, mesures) à comparer
+            var propositions = new List<(string TypeVetement, List<(string Nom, string Valeur)> Mesures)>();
+
+            foreach (var carte in _cartesPieces)
+            {
+                if (carte.CmbType.SelectedValue == null) continue;
+                if (!int.TryParse(carte.CmbType.SelectedValue.ToString(), out int idType)) continue;
+                var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idType);
+                if (type == null) continue;
+
+                var mesuresCarte = CollecterMesuresCarte(carte);
+                if (mesuresCarte.Count == 0) continue;
+
+                // Comparer avec la fiche existante
+                bool aDesDifferences = false;
+                try
+                {
+                    var ficheMesures = _mesureClientService.ObtenirMesuresPourType(idClient, type.Nom);
+                    foreach (var m in mesuresCarte)
+                    {
+                        var fiche = ficheMesures.FirstOrDefault(f => f.NomMesure == m.NomMesure);
+                        if (fiche == null || fiche.Valeur != m.Valeur)
+                        { aDesDifferences = true; break; }
+                    }
+                    // Si la fiche n'existe pas du tout, c'est une nouveauté
+                    if (ficheMesures.Count == 0) aDesDifferences = true;
+                }
+                catch { aDesDifferences = true; }
+
+                if (aDesDifferences)
+                    propositions.Add((type.Nom,
+                        mesuresCarte.Select(m => (m.NomMesure, m.Valeur)).ToList()));
+            }
+
+            if (propositions.Count == 0) return;
+
+            // Résumé des types concernés
+            string typesString = string.Join(", ", propositions.Select(p => p.TypeVetement));
+            var rep = MessageBox.Show(
+                $"Les mesures saisies diffèrent de la fiche client pour : {typesString}.\n\n" +
+                "Mettre à jour la fiche du client avec ces nouvelles mesures ?\n\n" +
+                "• Oui → met à jour la fiche (les pièces enregistrées restent inchangées)\n" +
+                "• Non → garde l'ancienne fiche client",
+                "Mise à jour fiche mesures",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (rep != MessageBoxResult.Yes) return;
+
+            try
+            {
+                foreach (var (typeVetement, mesures) in propositions)
+                    _mesureClientService.UpsertMesures(idClient, typeVetement, mesures, idOp, nomOp);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur lors de la mise à jour de la fiche client :\n" + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Pré-remplit les mesures de TOUTES les cartes depuis MesureClient
+        /// quand le client change dans la modale (sans rechanger le type).
+        /// </summary>
+        private void RafraichirPreRemplissageMesuresCartes()
+        {
+            if (CmbModalClient.SelectedValue is not int idClient || idClient <= 0) return;
+            foreach (var carte in _cartesPieces)
+            {
+                if (carte.CmbType.SelectedValue == null) continue;
+                if (!int.TryParse(carte.CmbType.SelectedValue.ToString(), out int idType)) continue;
+                var type = _typesVetement.FirstOrDefault(t => t.IdTypeVetement == idType);
+                if (type == null) continue;
+
+                try
+                {
+                    var mesuresFiche = _mesureClientService.ObtenirMesuresPourType(idClient, type.Nom);
+                    if (mesuresFiche.Count == 0) continue;
+                    // Mise à jour du label date
+                    var dateFiche = mesuresFiche.Max(m => m.DateMiseAJour);
+                    if (carte.PanelMesures.Children.Count > 0 &&
+                        carte.PanelMesures.Children[0] is TextBlock lbl)
+                    {
+                        lbl.Text       = $"Mesures du {dateFiche:dd/MM/yyyy}";
+                        lbl.Foreground = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
+                    }
+                    RemplirMesuresDansCarte(carte,
+                        mesuresFiche.Select(mc => new Mesure { NomMesure = mc.NomMesure, Valeur = mc.Valeur }).ToList());
+                }
+                catch { /* non bloquant */ }
             }
         }
 
@@ -2191,6 +2345,10 @@ namespace GestionCoutureApp.Views
                     _cartesPieces[0].MateriauxBuffer.ToList(), piecesSup);
                 _materiauxTemporaires.Clear();
 
+                // ── Étape 4 : proposer la mise à jour de la fiche mesures client ──
+                // Appelé avant FermerModal pour que les cartes soient encore accessibles.
+                ProposerMiseAJourFicheMesures((int)CmbModalClient.SelectedValue!, idOp, nomOp);
+
                 await ChargerCommandes();
 
                 // 5. Acompte immédiat si > 0
@@ -2353,6 +2511,9 @@ namespace GestionCoutureApp.Views
                     ParseHeure(TxtHeureDebut.Text) ?? _commandeEnEdition.HeureDebut,
                     ParseHeure(TxtModalHeure.Text),
                     idOp, nomOp);
+
+                // ── Étape 4 : proposer la mise à jour de la fiche mesures client ──
+                ProposerMiseAJourFicheMesures((int)CmbModalClient.SelectedValue!, idOp, nomOp);
 
                 FermerModal();
                 await ChargerCommandes();
@@ -3512,15 +3673,20 @@ namespace GestionCoutureApp.Views
             if (MessageBox.Show("Modifier la commande ?", "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try
             {
+                var (idOpM, nomOpM) = OperateurConnecte();
                 if (pieceModifiee != null)
                 {
-                    var (idOp, nomOp) = OperateurConnecte();
-                    if (!AvecControleLivraison(motif => _commandeService.ModifierPiece(pieceModifiee, CollecterMesures(), idOp, nomOp, motif))) return;
+                    // Pièce sélectionnée : modifier la pièce, puis les infos commande séparément
+                    if (!AvecControleLivraison(motif => _commandeService.ModifierPiece(pieceModifiee, CollecterMesures(), idOpM, nomOpM, motif))) return;
                 }
-                var commandePourModif = new Commande { IdCommande = _commandeSelectionneeId, IdClient = (int)(CmbClient.SelectedValue ?? 0), DateFin = DateFin.SelectedDate ?? DateTime.Today, HeureDebut = ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero, HeureFin = ParseHeure(TxtHeureFin.Text) };
-                var piecePourModif = pieceModifiee ?? new PieceCommande { TypeVetement = string.Empty, MontantCouture = 0, Statut = string.Empty };
-                var (idOpM, nomOpM) = OperateurConnecte();
-                _commandeService.Modifier(commandePourModif, piecePourModif, pieceModifiee != null ? CollecterMesures() : new List<Mesure>(), idOpM, nomOpM);
+                // Mettre à jour les infos commande (client, date, heures) sans toucher aux pièces
+                _commandeService.ModifierInfosCommande(
+                    _commandeSelectionneeId,
+                    (int)(CmbClient.SelectedValue ?? 0),
+                    DateFin.SelectedDate ?? DateTime.Today,
+                    ParseHeure(TxtHeureDebut.Text) ?? TimeSpan.Zero,
+                    ParseHeure(TxtHeureFin.Text),
+                    idOpM, nomOpM);
                 if (pieceModifiee != null)
                 {
                     _piecesCommande = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId);

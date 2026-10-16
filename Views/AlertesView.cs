@@ -20,6 +20,8 @@ namespace GestionCoutureApp.Views
         private List<AlerteRendezVous> _alertesProduction = new();
         private List<AlerteRendezVous> _alertesRetrait    = new();
         private List<AlerteRendezVous> _alertesRetard     = new();
+        // Étape 6 : retours actifs avec RDV
+        private List<AlerteRendezVous> _alertesRetours    = new();
 
         // ── Timer 60 s + anti-répétition notifications ────────────────────
         private readonly DispatcherTimer _timer;
@@ -72,6 +74,9 @@ namespace GestionCoutureApp.Views
                 _alertesProduction = await _alerteService.ObtenirAlertesActuelles();
                 _alertesRetrait    = await _alerteService.ObtenirRendezVousSemaine();
                 _alertesRetard     = await _alerteService.ObtenirRetards();
+                // Étape 6 : retours actifs
+                try { _alertesRetours = await _alerteService.ObtenirAlertesRetours(); }
+                catch { _alertesRetours = new(); }
 
                 RepartirEtAfficher();
                 await VerifierNotificationsUrgentes();
@@ -96,97 +101,87 @@ namespace GestionCoutureApp.Views
         {
             var maintenant = DateTime.Now;
 
-            // 1. Union dédoublonnée (IdPieceCommande).
+            // 1. Union dédoublonnée (IdPieceCommande) pour les commandes.
             // Priorité d'ordre : retards d'abord (RDV dépassé = plus urgent),
             // puis retrait, puis production — pour que la déduplification
             // garde la version "retard" quand une pièce est dans plusieurs listes.
-            var toutes = _alertesRetard
+            var toutesCommandes = _alertesRetard
                 .Concat(_alertesRetrait)
                 .Concat(_alertesProduction)
                 .GroupBy(a => a.IdPieceCommande)
                 .Select(g => g.First())
                 .ToList();
 
-            // 2. Affectation à une section par priorité
+            // 2. Retours — dédoublonnés par IdRetour (distinct des pièces commande)
+            var retoursDedoub = _alertesRetours
+                .GroupBy(r => r.IdRetour)
+                .Select(g => g.First())
+                .ToList();
+
+            // 3. Affectation à une section par priorité
             var prets       = new List<AlerteRendezVous>();
             var retards     = new List<AlerteRendezVous>();
             var auJourdhui  = new List<AlerteRendezVous>();
             var imminentes  = new List<AlerteRendezVous>();
 
-            foreach (var a in toutes)
+            // ── Commandes ────────────────────────────────────────────────
+            foreach (var a in toutesCommandes)
             {
-                // Priorité 1 — EN RETARD : RDV dépassé (que la pièce soit Terminée ou non).
-                // Une pièce Terminée avec RDV dépassé = client pas venu → urgence maximale.
-                // NiveauAlerte == "retard" pour les non-terminées.
-                // Pour les Terminées dont le RDV est dépassé : TypeAlerte == "Retard".
                 bool rdvDepasse = a.DateRendezVous < maintenant;
-                if (rdvDepasse)
-                {
-                    retards.Add(a);
-                    continue;
-                }
-
-                // Priorité 2 — PRÊTS À RETIRER : pièce Terminée avec RDV futur ou aujourd'hui
-                if (a.PiecePrete)
-                {
-                    prets.Add(a);
-                    continue;
-                }
-
-                // Priorité 3 — AUJOURD'HUI : RDV ce jour, non terminée
-                if (a.DateRendezVous.Date == maintenant.Date)
-                {
-                    auJourdhui.Add(a);
-                    continue;
-                }
-
-                // Priorité 4 — À VENIR 7 JOURS : RDV dans la fenêtre > aujourd'hui
-                // et <= +7 jours. Exception : colis stagnant hors fenêtre affiché quand même.
+                if (rdvDepasse)                          { retards.Add(a);    continue; }
+                if (a.PiecePrete)                        { prets.Add(a);      continue; }
+                if (a.DateRendezVous.Date == maintenant.Date) { auJourdhui.Add(a); continue; }
                 bool rdvSemaine = a.DateRendezVous.Date > maintenant.Date
                                && a.DateRendezVous.Date <= maintenant.AddDays(7).Date;
-                bool stagnantHorsFenetre = a.TypeAlerte == "PasEncorePriseEnCharge"
-                                        && a.DateRendezVous.Date > maintenant.AddDays(7).Date;
-
-                if (rdvSemaine || stagnantHorsFenetre)
-                {
-                    imminentes.Add(a);
-                }
+                bool stagnant = a.TypeAlerte == "PasEncorePriseEnCharge"
+                             && a.DateRendezVous.Date > maintenant.AddDays(7).Date;
+                if (rdvSemaine || stagnant) imminentes.Add(a);
             }
 
-            // 3. Tris par section
-            // Retards : Terminées (client pas venu) en premier, puis les autres par date
+            // ── Retours (Étape 6) : même logique de priorité ─────────────
+            foreach (var r in retoursDedoub)
+            {
+                bool rdvDepasse = r.DateRendezVous < maintenant;
+                bool estTermine = r.Statut is "Termine" or "Terminé";
+
+                if (rdvDepasse && !estTermine)           { retards.Add(r);    continue; }
+                if (estTermine)                          { prets.Add(r);      continue; }
+                if (r.DateRendezVous.Date == maintenant.Date) { auJourdhui.Add(r); continue; }
+                bool rdvSemaine = r.DateRendezVous.Date > maintenant.Date
+                               && r.DateRendezVous.Date <= maintenant.AddDays(7).Date;
+                if (rdvSemaine) imminentes.Add(r);
+            }
+
+            // 4. Tris par section
             retards    = retards
-                .OrderByDescending(a => a.PiecePrete)   // Terminées en tête (prêtes mais pas venues)
-                .ThenBy(a => a.DateRendezVous)           // puis par ancienneté du RDV
-                .ToList();
-            prets      = prets
-                .OrderByDescending(a => a.ProposerContactWhatsApp)
+                .OrderByDescending(a => a.PiecePrete || a.Statut is "Termine" or "Terminé")
                 .ThenBy(a => a.DateRendezVous)
                 .ToList();
+            prets      = prets.OrderByDescending(a => a.ProposerContactWhatsApp).ThenBy(a => a.DateRendezVous).ToList();
             auJourdhui = auJourdhui.OrderBy(a => a.DateRendezVous).ToList();
             imminentes = imminentes.OrderBy(a => a.DateRendezVous).ToList();
 
-            // 4. Groupement en cartes
+            // 5. Groupement en cartes
             var cartesPrets      = Grouper(prets,      "💬 Prévenir : commande prête");
             var cartesRetards    = Grouper(retards,    "💬 Relancer le client");
             var cartesAujourdhui = Grouper(auJourdhui, "💬 Rappel RDV");
-            var cartesImminentes = Grouper(imminentes, ""); // pas de bouton WhatsApp
+            var cartesImminentes = Grouper(imminentes, "");
 
-            // 5. Mise à jour badges KPI
+            // 6. Mise à jour badges KPI
             TxtBadgeNbPrets.Text       = cartesPrets.Count.ToString();
             TxtBadgeNbRetards.Text     = cartesRetards.Count.ToString();
             TxtBadgeNbAujourdhui.Text  = cartesAujourdhui.Count.ToString();
             TxtBadgeNbImminentes.Text  = cartesImminentes.Count.ToString();
 
-            // 6. Alimenter les sections
+            // 7. Alimenter les sections
             AppliquerSection(ListePrets,      TxtZeroPrets,      cartesPrets);
             AppliquerSection(ListeRetards,    TxtZeroRetard,     cartesRetards);
             AppliquerSection(ListeAujourdhui, TxtZeroAujourdhui, cartesAujourdhui);
             AppliquerSection(ListeImminentes, TxtZeroImminentes, cartesImminentes);
 
-            // 7. Badge menu principal : retards (RDV dépassé, toutes pièces) + livraisons du jour
-            // Les Terminées avec RDV dépassé comptent aussi (client pas venu = urgence)
-            int totalBadge = toutes.Count(a => a.DateRendezVous < maintenant || a.NiveauAlerte == "jourbj");
+            // 8. Badge menu principal : retards commandes + retards retours + livraisons du jour
+            var toutesDedup = toutesCommandes.Concat(retoursDedoub).ToList();
+            int totalBadge = toutesDedup.Count(a => a.DateRendezVous < maintenant || a.NiveauAlerte == "jourbj");
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.MettreAJourBadgeAlertes(totalBadge);
         }
@@ -196,7 +191,14 @@ namespace GestionCoutureApp.Views
             List<AlerteRendezVous> pieces,
             string libelleBoutonWhatsApp)
         {
-            return pieces
+            var result = new List<AlerteCommandeVm>();
+
+            // Séparer retours et commandes
+            var retours   = pieces.Where(a => a.EstAlertRetour).ToList();
+            var commandes = pieces.Where(a => !a.EstAlertRetour).ToList();
+
+            // Regrouper les commandes par IdCommande (logique existante)
+            var cartesCommandes = commandes
                 .GroupBy(a => a.IdCommande)
                 .Select(g =>
                 {
@@ -210,18 +212,41 @@ namespace GestionCoutureApp.Views
 
                     return new AlerteCommandeVm
                     {
-                        IdCommande             = g.Key,
-                        NomClient              = plusUrgente.NomClient,
-                        Telephone              = plusUrgente.Telephone,
-                        DateEcheance           = plusUrgente.DateRendezVous,
-                        HeureRdv               = plusUrgente.HeureRendezVous,
-                        DetailPieces           = detail,
-                        LibelleBoutonWhatsApp  = libelleBoutonWhatsApp,
-                        EstStagnant            = stagnant,
-                        IdsPiecesCommande      = ordered.Select(a => a.IdPieceCommande).ToList()
+                        IdCommande            = g.Key,
+                        NomClient             = plusUrgente.NomClient,
+                        Telephone             = plusUrgente.Telephone,
+                        DateEcheance          = plusUrgente.DateRendezVous,
+                        HeureRdv              = plusUrgente.HeureRendezVous,
+                        DetailPieces          = detail,
+                        LibelleBoutonWhatsApp = libelleBoutonWhatsApp,
+                        EstStagnant           = stagnant,
+                        IdsPiecesCommande     = ordered.Select(a => a.IdPieceCommande).ToList(),
+                        EstAlertRetour        = false
                     };
-                })
-                .ToList();
+                });
+            result.AddRange(cartesCommandes);
+
+            // Un retour = une carte distincte (pas de regroupement inter-retours)
+            foreach (var r in retours)
+            {
+                result.Add(new AlerteCommandeVm
+                {
+                    IdCommande            = r.IdCommande,
+                    NomClient             = r.NomClient,
+                    Telephone             = r.Telephone,
+                    DateEcheance          = r.DateRendezVous,
+                    HeureRdv              = r.HeureRendezVous,
+                    DetailPieces          = $"{r.TypeVetement} — {r.NomCouturier} ({r.Statut})",
+                    LibelleBoutonWhatsApp = "", // pas de WhatsApp auto sur retours
+                    EstStagnant           = false,
+                    IdsPiecesCommande     = new List<int> { r.IdPieceCommande },
+                    EstAlertRetour        = true,
+                    IdRetour              = r.IdRetour,
+                    NumeroRetour          = r.NumeroRetour
+                });
+            }
+
+            return result.OrderBy(c => c.DateEcheance).ToList();
         }
 
         // ── Afficher / masquer une section ────────────────────────────────
@@ -256,7 +281,13 @@ namespace GestionCoutureApp.Views
                 .Select(g => g.First())
                 .ToList();
 
-            var urgentes = toutesDedup
+            // Ajouter les retours (clé = IdRetour, distinct)
+            var retoursDedup = _alertesRetours
+                .GroupBy(r => r.IdRetour)
+                .Select(g => g.First())
+                .ToList();
+
+            var urgentes = toutesDedup.Concat(retoursDedup)
                 .Where(a => a.NecessiteNotificationUrgente)
                 .ToList();
 
@@ -265,7 +296,10 @@ namespace GestionCoutureApp.Views
             var maintenant = DateTime.Now;
             var nouvelles  = urgentes.Where(a =>
             {
-                if (_dernieresNotifications.TryGetValue(a.IdPieceCommande, out DateTime derniere))
+                // Clé d'anti-répétition : pour les retours, on utilise un ID négatif pour éviter
+                // les collisions avec les IdPieceCommande (qui sont toujours positifs).
+                int cle = a.EstAlertRetour ? -(a.IdRetour) : a.IdPieceCommande;
+                if (_dernieresNotifications.TryGetValue(cle, out DateTime derniere))
                     return (maintenant - derniere) >= DelaiRepetitionNotif;
                 return true;
             }).ToList();
@@ -279,7 +313,9 @@ namespace GestionCoutureApp.Views
             });
 
             string corps = string.Join("\n", nouvelles.Take(5).Select(a =>
-                $"• {a.NomClient} — {a.TypeVetement} " +
+                $"• {a.NomClient} — " +
+                (a.EstAlertRetour ? $"[RETOUR {a.NumeroRetour}] " : "") +
+                $"{a.TypeVetement} " +
                 $"({(a.NiveauAlerte == "retard" ? "EN RETARD" : "Auj. " + a.HeureRendezVous)})"));
             if (nouvelles.Count > 5)
                 corps += $"\n… et {nouvelles.Count - 5} autre(s)";
@@ -322,7 +358,10 @@ namespace GestionCoutureApp.Views
             btnIgnorer.Click += (s, e) =>
             {
                 foreach (var a in nouvelles)
-                    _dernieresNotifications[a.IdPieceCommande] = DateTime.Now;
+                {
+                    int cle = a.EstAlertRetour ? -(a.IdRetour) : a.IdPieceCommande;
+                    _dernieresNotifications[cle] = DateTime.Now;
+                }
                 popup.Close();
             };
 
@@ -336,7 +375,10 @@ namespace GestionCoutureApp.Views
             btnVoir.Click += (s, e) =>
             {
                 foreach (var a in nouvelles)
-                    _dernieresNotifications[a.IdPieceCommande] = DateTime.Now;
+                {
+                    int cle = a.EstAlertRetour ? -(a.IdRetour) : a.IdPieceCommande;
+                    _dernieresNotifications[cle] = DateTime.Now;
+                }
                 popup.Close();
                 if (Window.GetWindow(this) is Window main)
                 {
@@ -356,8 +398,10 @@ namespace GestionCoutureApp.Views
             popup.Content = sp;
 
             foreach (var a in nouvelles)
-                _dernieresNotifications[a.IdPieceCommande] = DateTime.Now;
-
+            {
+                int cle = a.EstAlertRetour ? -(a.IdRetour) : a.IdPieceCommande;
+                _dernieresNotifications[cle] = DateTime.Now;
+            }
             popup.Show();
         }
 

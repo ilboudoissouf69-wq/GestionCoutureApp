@@ -32,24 +32,26 @@ namespace GestionCoutureApp.Services
         // Exemple : couture 2 000 + tissu 3 000 → client paie 5 000.
         //   CA encaissé = 5 000
         //   Dont matériaux = 3 000  (récupérés, flux neutre pour l'atelier)
-        //   Marge brute    = 5 000 − 3 000 − commissions  (ce qui reste à l'atelier)
-        //   Bénéfice net   = Marge brute − charges exploitation
+        //   CaEncaisseCouture = 5 000 − 3 000 = 2 000  (part couture pure)
+        //   Marge brute = CaEncaisseCouture − commissions  (ce qui reste à l'atelier, hors matériaux)
+        //   Bénéfice net = CA encaissé − commissions − charges  (matériaux NON déduits : flux neutre)
         //
-        // CaEncaisseCouture = part couture pure (CA − matériaux)
+        // CaEncaisseCouture = part couture pure (CA − matériaux) — informatif
         public decimal CaEncaisseCouture =>
             Math.Max(0m, CaEncaisse - TotalMateriaux);
 
         // Charges exploitation = Dépenses validées + Salaire Secrétaire proraté
         public decimal ChargesExploitation => TotalDepenses + SalaireSecretaire;
 
-        // Marge Brute = CA encaissé − matériaux récupérés − commissions couturiers
-        // → ce que l'atelier garde avant les charges fixes
+        // Marge Brute = CA couture pure − commissions couturiers
+        // (les matériaux sont exclus : flux neutre, remboursés par le client)
         public decimal MargeBrute =>
-            CaEncaisse - TotalMateriaux - TotalCommissions;
+            CaEncaisseCouture - TotalCommissions;
 
-        // Bénéfice Net = Marge Brute − charges d'exploitation
-        // → résultat final après toutes les charges
-        public decimal BeneficeNet => MargeBrute - ChargesExploitation;
+        // Bénéfice Net = CA encaissé − commissions − charges d'exploitation
+        // Les matériaux NE sont PAS déduits : ce sont des avances remboursées,
+        // pas des charges pour l'atelier.
+        public decimal BeneficeNet => CaEncaisse - TotalCommissions - ChargesExploitation;
 
         // Alias pour compatibilité avec d'autres vues (TresorerieService, etc.)
         public decimal BeneficeCouture => BeneficeNet;

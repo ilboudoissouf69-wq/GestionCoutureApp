@@ -74,12 +74,13 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Secretaire_Peut_Modifier_Le_Prix_Sans_Paiement()
         {
-            // TÂCHE 3 : Sans aucun paiement, la Secrétaire peut corriger le prix.
+            // TÂCHE 3 : Sans aucun paiement, la Secrétaire peut corriger le prix (avec motif).
             var (_, piece) = CreerCommandeSansTerminee(10000m);
             piece.MontantCouture = 7000m;
 
             Assert.DoesNotThrow(() =>
-                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL"));
+                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL",
+                    motifModification: "Correction saisie initiale"));
             Assert.That(PieceEnBase(piece.IdPieceCommande).MontantCouture, Is.EqualTo(7000m));
         }
 
@@ -88,7 +89,8 @@ namespace GestionCoutureApp.Tests
         {
             // TÂCHE 3 : Lecture seule pour la Secrétaire après Terminee.
             var (_, piece) = CreerCommandeSansTerminee(10000m);
-            // Passer la pièce en Terminee via Boss d'abord
+            // Passer la pièce en Terminee via Boss (flux strict : En cours d'abord)
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
             // Recharger le formulaire depuis la base
             piece = new PieceCommande
@@ -108,7 +110,8 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Secretaire_Peut_Changer_Couturier_Et_Statut()
         {
-            var (_, piece) = CreerCommande(10000m);
+            // Pièce "A faire" (pas encore Terminee) pour que la Secrétaire puisse modifier
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
             piece.IdCouturier = null;
             piece.Statut = "En cours";
 
@@ -122,7 +125,8 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Boss_Peut_Modifier_Le_Prix()
         {
-            var (_, piece) = CreerCommande(10000m);
+            // Pièce "A faire" — le Boss modifie le prix
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
             piece.MontantCouture = 8000m;
 
             _commandeService.ModifierPiece(piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
@@ -142,12 +146,14 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Secretaire_NePeut_Pas_Livrer_Une_Commande_Non_Soldee()
         {
+            // Pièce en Terminee (via CreerCommande), paiement partiel, Secrétaire tente de livrer
             var (idCommande, piece) = CreerCommande(10000m);
             Payer(idCommande, 4000m);
-            piece.Statut = "Livree";
 
+            // ChangerStatutPiece est la bonne API pour changer le statut Terminee→Livree
             var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
-                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL"));
+                _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Livree",
+                    IdSecretaire, "Marie FALL"));
             Assert.That(ex!.PeutForcer, Is.False);
             Assert.That(ex.ResteAPayer, Is.EqualTo(6000m));
             Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.Not.EqualTo("Livree"));
@@ -156,14 +162,18 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Boss_Doit_Donner_Un_Motif_Pour_Livrer_Non_Solde()
         {
+            // Pièce en Terminee (via CreerCommande), aucun paiement, Boss tente de livrer
             var (_, piece) = CreerCommande(10000m);
-            piece.Statut = "Livree";
 
+            // Sans motif → lève LivraisonNonSoldeeException avec PeutForcer=true
             var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
-                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO"));
+                _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Livree",
+                    IdBoss, "Mamadou DIALLO"));
             Assert.That(ex!.PeutForcer, Is.True);
 
-            _commandeService.ModifierPiece(piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO",
+            // Avec motif → réussit
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Livree",
+                IdBoss, "Mamadou DIALLO",
                 motifLivraisonNonSoldee: "Client fidèle, solde demain");
             Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("Livree"));
         }
@@ -171,12 +181,13 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Livraison_Commande_Soldee_Autorisee_Pour_Secretaire()
         {
+            // Pièce en Terminee (via CreerCommande), commande soldée, Secrétaire livre
             var (idCommande, piece) = CreerCommande(10000m);
             Payer(idCommande, 10000m);
-            piece.Statut = "Livree";
 
             Assert.DoesNotThrow(() =>
-                _commandeService.ModifierPiece(piece, new List<Mesure>(), IdSecretaire, "Marie FALL"));
+                _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Livree",
+                    IdSecretaire, "Marie FALL"));
             Assert.That(PieceEnBase(piece.IdPieceCommande).Statut, Is.EqualTo("Livree"));
         }
 
@@ -195,7 +206,7 @@ namespace GestionCoutureApp.Tests
         public void Secretaire_NePeut_Pas_Supprimer_Une_Piece_En_Cours()
         {
             // TÂCHE 4 : la Secrétaire peut supprimer une pièce vierge, pas une En cours
-            var (idCommande, _) = CreerCommande(10000m);
+            var (idCommande, _) = CreerCommandeSansTerminee(10000m);
             int idPiece2 = AjouterSecondePiece(idCommande);
             // Passer en cours → plus vierge
             _commandeService.ChangerStatutPiece(idPiece2, "En cours", IdBoss, "Mamadou DIALLO");
@@ -209,11 +220,12 @@ namespace GestionCoutureApp.Tests
         public void Secretaire_Peut_Supprimer_Piece_Vierge()
         {
             // TÂCHE 4 : pièce A faire sans paiement → Secrétaire peut supprimer
-            var (idCommande, _) = CreerCommande(10000m);
+            var (idCommande, _) = CreerCommandeSansTerminee(10000m);
             int idPiece2 = AjouterSecondePiece(idCommande);
 
             Assert.DoesNotThrow(() =>
-                _commandeService.SupprimerPiece(idPiece2, IdSecretaire, "Marie FALL"));
+                _commandeService.SupprimerPiece(idPiece2, IdSecretaire, "Marie FALL",
+                    motif: "Pièce en double, correction saisie"));
 
             using var ctx = _factory.CreateDbContext();
             Assert.That(ctx.PiecesCommande.Any(p => p.IdPieceCommande == idPiece2), Is.False);
@@ -222,7 +234,7 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void Boss_Peut_Supprimer_Une_Piece()
         {
-            var (idCommande, _) = CreerCommande(10000m);
+            var (idCommande, _) = CreerCommandeSansTerminee(10000m);
             int idPiece2 = AjouterSecondePiece(idCommande);
 
             _commandeService.SupprimerPiece(idPiece2, IdBoss, "Mamadou DIALLO");
@@ -236,7 +248,8 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void ChangerStatutPiece_Boss_Peut_Changer_Statut()
         {
-            var (_, piece) = CreerCommande(10000m);
+            // Utiliser une pièce "A faire" pour tester la progression normale
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
 
             _commandeService.ChangerStatutPiece(
                 piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
@@ -247,7 +260,8 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void ChangerStatutPiece_Secretaire_Peut_Changer_Statut()
         {
-            var (_, piece) = CreerCommande(10000m);
+            // Utiliser une pièce "A faire" pour tester la progression normale
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
 
             _commandeService.ChangerStatutPiece(
                 piece.IdPieceCommande, "En cours", IdSecretaire, "Marie FALL");
@@ -258,10 +272,11 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void ChangerStatutPiece_Couturier_Acces_Refuse()
         {
-            var (_, piece) = CreerCommande(10000m);
-            // Passer la pièce en "En cours" via Boss pour avoir un statut de départ non-A faire
+            // Partir d'une pièce "A faire", la passer "En cours" via Boss
+            var (_, piece) = CreerCommandeSansTerminee(10000m);
             _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
 
+            // Le Couturier tente de passer en Terminee → accès refusé
             Assert.Throws<UnauthorizedAccessException>(() =>
                 _commandeService.ChangerStatutPiece(
                     piece.IdPieceCommande, "Terminee", IdCouturier, "Issa CISSE"));
@@ -274,8 +289,8 @@ namespace GestionCoutureApp.Tests
         public void ChangerStatutPiece_Livree_NonSoldee_Refuse_Secretaire()
         {
             var (_, piece) = CreerCommande(10000m);
-            // Commande non soldée (aucun paiement) — on met En cours pour avoir un état cohérent
-            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
+            // CreerCommande laisse la pièce en Terminee (flux : A faire → En cours → Terminee)
+            // Commande non soldée (aucun paiement) — on vérifie le blocage Terminee → Livree sans solde
 
             var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
                 _commandeService.ChangerStatutPiece(
@@ -290,6 +305,7 @@ namespace GestionCoutureApp.Tests
         public void ChangerStatutPiece_Livree_NonSoldee_Boss_Peut_Forcer_Avec_Motif()
         {
             var (_, piece) = CreerCommande(10000m);
+            // CreerCommande laisse la pièce en Terminee — aucun paiement → commande non soldée
 
             // Sans motif → lève PeutForcer = true
             var ex = Assert.Throws<LivraisonNonSoldeeException>(() =>
@@ -308,7 +324,7 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void ChangerStatutPiece_PieceCommissionnee_Bloquee()
         {
-            // Créer une commande et verrouiller la pièce avec une commission fictive
+            // Créer une commande, amener la pièce en Terminee, puis verrouiller avec une commission
             var commande = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
             var piece = new PieceCommande
             {
@@ -316,6 +332,9 @@ namespace GestionCoutureApp.Tests
                 IdCouturier = IdCouturier, Statut = "A faire"
             };
             _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
             using (var ctx = _factory.CreateDbContext())
             {
@@ -336,10 +355,12 @@ namespace GestionCoutureApp.Tests
                 ctx.SaveChanges();
             }
 
-            var ex = Assert.Throws<InvalidOperationException>(() =>
+            // Tenter de rétrograder une pièce commissionnée → PieceCommissionneeException
+            var ex = Assert.Throws<CommandeService.PieceCommissionneeException>(() =>
                 _commandeService.ChangerStatutPiece(
-                    piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO"));
-            Assert.That(ex!.Message, Does.Contain("commission"));
+                    piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO",
+                    motifLivraisonNonSoldee: "Retouche nécessaire"));
+            Assert.That(ex!.Message, Does.Contain("commission").IgnoreCase);
         }
 
         // ── Statut forcé à "A faire" à la création ────────────────────────
@@ -365,7 +386,8 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void AjouterPiece_Force_Statut_A_Faire()
         {
-            var (idCommande, _) = CreerCommande(10000m);
+            // Utiliser une pièce "A faire" pour que la commande reste modifiable
+            var (idCommande, _) = CreerCommandeSansTerminee(10000m);
 
             var nouvellePiece = new PieceCommande
             {
@@ -618,18 +640,22 @@ namespace GestionCoutureApp.Tests
                 TypeVetement = "Chemise",
                 MontantCouture = montant,
                 IdCouturier = IdCouturier,
-                Statut = "Terminee"
+                Statut = "A faire"  // Ajouter() force toujours A faire
             };
             _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
 
-            // Objet "formulaire" détaché, comme le construit l'écran
+            // Flux strict : A faire → En cours → Terminee (état de départ pour les tests de livraison)
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
+
+            // Objet "formulaire" détaché, comme le construit l'écran — reflète l'état réel en base
             var formulaire = new PieceCommande
             {
                 IdPieceCommande = piece.IdPieceCommande,
                 TypeVetement = piece.TypeVetement,
                 MontantCouture = piece.MontantCouture,
                 IdCouturier = piece.IdCouturier,
-                Statut = piece.Statut
+                Statut = "Terminee"  // état réel en base après le flux strict
             };
             return (commande.IdCommande, formulaire);
         }

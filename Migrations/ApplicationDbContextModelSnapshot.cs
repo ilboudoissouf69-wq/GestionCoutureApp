@@ -460,6 +460,49 @@ namespace GestionCoutureApp.Migrations
                     b.ToTable("Mesures");
                 });
 
+            modelBuilder.Entity("GestionCoutureApp.Models.MesureClient", b =>
+                {
+                    b.Property<int>("IdMesureClient")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("IdClient")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TypeVetement")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NomMesure")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Valeur")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DateMiseAJour")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IdOperateurMiseAJour")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NomOperateurMiseAJour")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("IdMesureClient");
+
+                    b.HasIndex(new[] { "IdClient", "TypeVetement", "NomMesure" }, "IX_MesuresClient_IdClient_TypeVetement_NomMesure")
+                        .IsUnique();
+
+                    b.ToTable("MesuresClient");
+                });
+
             modelBuilder.Entity("GestionCoutureApp.Models.MesureRequise", b =>
                 {
                     b.Property<int>("IdMesureRequise")
@@ -784,6 +827,17 @@ namespace GestionCoutureApp.Migrations
                     b.Navigation("Commande");
 
                     b.Navigation("PieceCommande");
+                });
+
+            modelBuilder.Entity("GestionCoutureApp.Models.MesureClient", b =>
+                {
+                    b.HasOne("GestionCoutureApp.Models.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("IdClient")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
                 });
 
             modelBuilder.Entity("GestionCoutureApp.Models.MesureRequise", b =>

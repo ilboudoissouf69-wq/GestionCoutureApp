@@ -76,6 +76,8 @@ namespace GestionCoutureApp.Tests
 
             // On passe la pièce en Terminee — DateTerminee sera ~aujourd'hui (05/10 dans le test)
             DateTime avantTerminee = DateTime.UtcNow.AddSeconds(-2);
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
             DateTime apresTerminee = DateTime.UtcNow.AddSeconds(2);
 
@@ -120,6 +122,8 @@ namespace GestionCoutureApp.Tests
         public void T1_03_Piece_Avec_Retour_Non_Resolu_Exclue()
         {
             var (_, idPiece) = CreerCommandePiece(DateTime.Now.AddDays(2), 12000m);
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             // Créer un retour non résolu pour cette pièce
@@ -149,6 +153,8 @@ namespace GestionCoutureApp.Tests
         public void T1_04_Piece_Deja_Commissionnee_Exclue()
         {
             var (_, idPiece) = CreerCommandePiece(DateTime.Now.AddDays(2), 10000m);
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             // Verrouiller la pièce avec une commission fictive
@@ -188,6 +194,8 @@ namespace GestionCoutureApp.Tests
             Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Null, "Avant Terminee, DateTerminee doit être null");
             Assert.That(PieceEnBase(idPiece).IdOperateurTerminee, Is.Null);
 
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             var piece = PieceEnBase(idPiece);
@@ -204,6 +212,8 @@ namespace GestionCoutureApp.Tests
             // Solder la commande pour pouvoir livrer
             Payer(idCommande, 5000m);
 
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
             DateTime dateTermineeInitiale = PieceEnBase(idPiece).DateTerminee!.Value;
 
@@ -222,6 +232,8 @@ namespace GestionCoutureApp.Tests
         public void T1_07_Retour_En_Arriere_Remet_DateTerminee_Null()
         {
             var (_, idPiece) = CreerCommandePiece(DateTime.Now.AddDays(5), 10000m);
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             Assert.That(PieceEnBase(idPiece).DateTerminee, Is.Not.Null, "Précondition : DateTerminee renseignée");
@@ -246,21 +258,30 @@ namespace GestionCoutureApp.Tests
         {
             var (idCommande, piece) = CreerCommandeFormulaire(DateTime.Now.AddDays(5), 10000m);
 
+            // Flux strict : A faire → En cours → Terminee via ChangerStatutPiece
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Mamadou DIALLO");
+
+            // Recharger le formulaire depuis la base pour avoir le bon statut "En cours"
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var p = ctx.PiecesCommande.Find(piece.IdPieceCommande)!;
+                piece = new PieceCommande
+                {
+                    IdPieceCommande = p.IdPieceCommande,
+                    TypeVetement    = p.TypeVetement,
+                    MontantCouture  = p.MontantCouture,
+                    IdCouturier     = p.IdCouturier,
+                    Statut          = "Terminee"
+                };
+            }
+
             var commandeModif = new Commande
             {
                 IdCommande = idCommande, IdClient = IdClient,
                 DateFin = DateTime.Now.AddDays(5), HeureDebut = TimeSpan.Zero
             };
-            var pieceModif = new PieceCommande
-            {
-                IdPieceCommande = piece.IdPieceCommande,
-                TypeVetement    = piece.TypeVetement,
-                MontantCouture  = piece.MontantCouture,
-                IdCouturier     = piece.IdCouturier,
-                Statut          = "Terminee"
-            };
 
-            _commandeService.Modifier(commandeModif, pieceModif, new List<Mesure>(),
+            _commandeService.Modifier(commandeModif, piece, new List<Mesure>(),
                 IdBoss, "Mamadou DIALLO");
 
             var enBase = PieceEnBase(piece.IdPieceCommande);
@@ -279,6 +300,8 @@ namespace GestionCoutureApp.Tests
             _commandeService.AjouterPiece(idCommande, p2, new List<Mesure>(), roleBoss: true);
             int idPiece2 = p2.IdPieceCommande;
 
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ForcerStatutToutesPieces(idCommande, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ForcerStatutToutesPieces(idCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
             Assert.That(PieceEnBase(idPiece1).DateTerminee, Is.Not.Null, "Pièce 1 : DateTerminee");
@@ -292,6 +315,8 @@ namespace GestionCoutureApp.Tests
         {
             // Pièce terminée il y a 10 jours
             var (_, idPiece) = CreerCommandePiece(DateTime.Now.AddDays(5), 10000m);
+            // Flux strict : A faire → En cours → Terminee
+            _commandeService.ChangerStatutPiece(idPiece, "En cours",  IdBoss, "Mamadou DIALLO");
             _commandeService.ChangerStatutPiece(idPiece, "Terminee", IdBoss, "Mamadou DIALLO");
 
             // Forcer DateTerminee à il y a 10 jours en base pour simuler un cas passé

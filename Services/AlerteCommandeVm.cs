@@ -4,13 +4,14 @@ namespace GestionCoutureApp.Services
     /// Modèle d'affichage pour UNE CARTE dans AlertesView.
     /// Regroupe toutes les pièces d'une même commande qui tombent dans
     /// la même section (Prêtes / Retard / Aujourd'hui / À venir).
+    /// Étape 6 : peut aussi représenter un retour (EstAlertRetour = true).
     ///
     /// Construit dans AlertesView.cs à partir des AlerteRendezVous
     /// fournis par IAlerteService — jamais utilisé dans les services.
     /// </summary>
     public class AlerteCommandeVm
     {
-        /// <summary>Id de la commande parente.</summary>
+        /// <summary>Id de la commande parente (0 si c'est un retour pur).</summary>
         public int IdCommande { get; set; }
 
         /// <summary>Nom affiché du client (Prénom Nom).</summary>
@@ -47,15 +48,36 @@ namespace GestionCoutureApp.Services
         /// <summary>Ids des PieceCommande regroupées dans cette carte.</summary>
         public List<int> IdsPiecesCommande { get; set; } = new();
 
+        // ── Étape 6 : champs retour ───────────────────────────────────────
+        /// <summary>True si cette carte représente un retour (pas une commande).</summary>
+        public bool EstAlertRetour { get; set; } = false;
+
+        /// <summary>IdRetour si EstAlertRetour, 0 sinon.</summary>
+        public int IdRetour { get; set; } = 0;
+
+        /// <summary>Numéro lisible RET-AAAA-NNNNN, vide pour les commandes.</summary>
+        public string NumeroRetour { get; set; } = string.Empty;
+
         // ── Propriétés calculées utilisées par le XAML ───────────────────
 
         /// <summary>True si le bouton WhatsApp doit être visible.</summary>
-        public bool AfficherWhatsApp => !string.IsNullOrEmpty(LibelleBoutonWhatsApp);
+        public bool AfficherWhatsApp => !string.IsNullOrEmpty(LibelleBoutonWhatsApp) && !EstAlertRetour;
 
         /// <summary>Date d'échéance formatée pour l'affichage (dd/MM/yy HH:mm).</summary>
         public string DateEcheanceAffichee => DateEcheance.ToString("dd/MM/yy HH:mm");
 
         /// <summary>Date courte pour l'affichage compact (dd/MM/yyyy).</summary>
         public string DateCourte => DateEcheance.ToString("dd/MM/yyyy");
+
+        /// <summary>
+        /// Libellé de la carte : « RETOUR RET-2026-00001 » pour les retours,
+        /// « CMD-42 » pour les commandes.
+        /// </summary>
+        public string LibelleType => EstAlertRetour
+            ? $"🔄 RETOUR  {NumeroRetour}"
+            : $"CMD-{IdCommande}";
+
+        /// <summary>Couleur d'accent de la carte (ambre pour retours, bleu-ardoise pour commandes).</summary>
+        public string CouleurAccent => EstAlertRetour ? "#D97706" : "#1D4ED8";
     }
 }

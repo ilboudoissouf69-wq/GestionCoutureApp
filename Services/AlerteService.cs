@@ -173,6 +173,7 @@ namespace GestionCoutureApp.Services
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Client)
                 .Where(p => p.Statut != "Livree"          // Livrées exclues : affaire réglée
+                         && p.Statut != "Terminee"        // Terminées exclues : travail fini, client pas encore venu (pas un retard de production)
                          && p.Commande != null
                          && p.Commande.EstSupprimee == false)
                 .AsNoTracking()
@@ -205,6 +206,77 @@ namespace GestionCoutureApp.Services
 
             var heureFin = commande.HeureFin ?? new TimeSpan(17, 0, 0);
             return commande.DateFin.Date + heureFin;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        // ÉTAPE 6 — ALERTES RETOURS
+        // ══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Retours actifs avec DateRdvReprise renseignée.
+        /// Inclut : Signale, En reprise, Termine (pas encore récupéré).
+        /// Exclut : Rendu, Annulé, sans DateRdvReprise.
+        /// Les mêmes niveaux d'urgence (J-1 / Jour J / retard) s'appliquent.
+        /// </summary>
+        public async Task<List<AlerteRendezVous>> ObtenirAlertesRetours()
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var retours = await context.Retours
+                .Include(r => r.Commande).ThenInclude(c => c!.Client)
+                .Include(r => r.PieceCommande)
+                .Include(r => r.Couturier)
+                .Include(r => r.CouturierReprise)
+                .Where(r =>
+                    !r.EstAnnule &&
+                    r.Statut != "Rendu" &&
+                    r.DateRdvReprise.HasValue)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var alertes = new List<AlerteRendezVous>();
+            var maintenant = DateTime.Now;
+
+            foreach (var ret in retours)
+            {
+                var dateRdv = ret.DateRdvReprise!.Value;
+                if (ret.HeureDebutReprise.HasValue)
+                    dateRdv = ret.DateRdvReprise.Value.Date + ret.HeureDebutReprise.Value;
+
+                string nomCouturier = ret.CouturierReprise != null
+                    ? ret.CouturierReprise.Prenom + " " + ret.CouturierReprise.Nom
+                    : ret.Couturier != null
+                        ? ret.Couturier.Prenom + " " + ret.Couturier.Nom
+                        : "(non assigné)";
+
+                string nomClient = ret.Commande?.Client != null
+                    ? ret.Commande.Client.Prenom + " " + ret.Commande.Client.Nom
+                    : "(client inconnu)";
+
+                var tempsRestant = dateRdv - maintenant;
+
+                alertes.Add(new AlerteRendezVous
+                {
+                    IdCommande       = ret.IdCommande,
+                    IdPieceCommande  = ret.IdPieceCommande,
+                    IdRetour         = ret.IdRetour,
+                    NumeroRetour     = ret.NumeroRetour,
+                    EstAlertRetour   = true,
+                    NomClient        = nomClient,
+                    Telephone        = ret.Commande?.Client?.Telephone ?? "",
+                    TypeVetement     = ret.PieceCommande?.TypeVetement ?? "—",
+                    DateRendezVous   = dateRdv,
+                    HeureRendezVous  = dateRdv.ToString("HH:mm"),
+                    Statut           = ret.Statut,
+                    TempsRestant     = FormaterTempsRestant(tempsRestant),
+                    NomCouturier     = nomCouturier,
+                    EstUrgent        = tempsRestant.TotalHours <= 1,
+                    ProposerContactWhatsApp = false,  // pas de WhatsApp auto sur retours
+                    TypeAlerte       = "Retour"
+                });
+            }
+
+            return alertes.OrderBy(a => a.DateRendezVous).ToList();
         }
 
         private static AlerteRendezVous ConstruireAlerte(

@@ -265,10 +265,11 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void B2_01_ForcerStatut_Avec_IdOperateur_NePasLeverException()
         {
-            // Arrange : commande avec 2 pièces
+            // Arrange : commande avec 2 pièces en "En cours" (flux strict respecté)
             int idCommande = CreerCommandeAvecDeuxPieces(IdClient1, IdCouturier);
+            _commandeService.ForcerStatutToutesPieces(idCommande, "En cours", IdBoss, "Mamadou DIALLO");
 
-            // Act & Assert : doit réussir pour Boss
+            // Act & Assert : forçage vers Terminee doit réussir pour Boss
             Assert.DoesNotThrow(() =>
                 _commandeService.ForcerStatutToutesPieces(
                     idCommande, "Terminee", IdBoss, "Mamadou DIALLO"),
@@ -282,10 +283,12 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void B2_02_ForcerStatut_Applique_Statut_A_Toutes_Les_Pieces()
         {
-            // Arrange
+            // Arrange : flux strict A faire → En cours → Terminee → Livree
             int idCommande = CreerCommandeAvecDeuxPieces(IdClient2, IdCouturier);
+            _commandeService.ForcerStatutToutesPieces(idCommande, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ForcerStatutToutesPieces(idCommande, "Terminee", IdBoss, "Mamadou DIALLO");
 
-            // Act — commande non soldée : le Boss doit fournir un motif pour livrer
+            // Act — commande non soldée : le Boss fournit un motif pour livrer
             _commandeService.ForcerStatutToutesPieces(
                 idCommande, "Livree", IdBoss, "Mamadou DIALLO",
                 motifLivraisonNonSoldee: "Client fidèle, solde demain");
@@ -333,16 +336,18 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void B2_04_ForcerStatut_Refuse_Si_Piece_Commissionnee()
         {
-            // Arrange : créer une commande avec une pièce verrouillée
+            // Arrange : pièce Terminee + commission verrouillée
             int idCommande = CreerCommandeSimpleAvecPieceCommissionnee(IdClient1, IdCouturier);
 
-            // Act & Assert
-            var ex = Assert.Throws<InvalidOperationException>(() =>
+            // Une rétrogradation (Terminee → En cours) sur une pièce commissionnée
+            // lève PieceCommissionneeException (hérite de InvalidOperationException)
+            var ex = Assert.Throws<CommandeService.PieceCommissionneeException>(() =>
                 _commandeService.ForcerStatutToutesPieces(
-                    idCommande, "Livree", IdBoss, "Mamadou DIALLO"));
+                    idCommande, "En cours", IdBoss, "Mamadou DIALLO",
+                    motifLivraisonNonSoldee: "Retouche nécessaire"));
 
-            Assert.That(ex!.Message, Does.Contain("commission"),
-                "Le message d'erreur doit mentionner la commission qui bloque l'opération.");
+            Assert.That(ex!.Message, Does.Contain("commission").IgnoreCase,
+                "Le message d'erreur doit mentionner la commission qui bloque la rétrogradation.");
         }
 
         /// <summary>
@@ -584,11 +589,15 @@ namespace GestionCoutureApp.Tests
                 TypeVetement   = "Chemise",
                 MontantCouture = 12000m,
                 IdCouturier    = idCouturier,
-                Statut         = "Terminee"
+                Statut         = "A faire"
             };
             _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
 
-            // Verrouiller la pièce avec une commission fictive
+            // Flux strict : A faire → En cours → Terminee (pour que la commission ait du sens)
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "En cours",  IdBoss, "Mamadou DIALLO");
+            _commandeService.ChangerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Mamadou DIALLO");
+
+            // Verrouiller la pièce Terminee avec une commission fictive
             using var ctx = _factory.CreateDbContext();
             var commission = new Commission
             {
@@ -703,6 +712,106 @@ namespace GestionCoutureApp.Tests
                 .IdPieceCommande;
 
             return (commande.IdCommande, idPiece);
+        }
+    }
+
+    // ====================================================================
+    // BUG 5 — BtnModifier_Click : modification date sans pièce sélectionnée
+    //         ne doit pas écraser TypeVetement, MontantCouture, Statut
+    // ====================================================================
+
+    [TestFixture]
+    public class BugModifierSansPieceTests
+    {
+        private IDbContextFactory<ApplicationDbContext> _factory = null!;
+        private CommandeService _commandeService = null!;
+
+        private const int IdBoss      = 1;
+        private const int IdClient    = 1;
+        private const int IdCouturier = 3;
+
+        [SetUp]
+        public void SetUp()
+        {
+            CommandeService.ViderCacheDoublonPourTests();
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase($"BugModif_{Guid.NewGuid()}")
+                .Options;
+            _factory = new BugFixDbContextFactory(options);
+            var log  = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance;
+            _commandeService = new CommandeService(_factory,
+                new Microsoft.Extensions.Logging.Logger<CommandeService>(log));
+
+            using var ctx = _factory.CreateDbContext();
+            ctx.Employes.Add(new Employe
+            {
+                IdEmploye = IdBoss, Nom = "DIALLO", Prenom = "Mamadou",
+                Identifiant = "boss", MotDePasse = "x", Role = "Boss", Statut = "Actif"
+            });
+            ctx.Clients.Add(new Client
+            {
+                IdClient = IdClient, Nom = "SARR", Prenom = "Fatou", Telephone = "771234567"
+            });
+            ctx.Employes.Add(new Employe
+            {
+                IdEmploye = IdCouturier, Nom = "CISSE", Prenom = "Issa",
+                Identifiant = "cout", MotDePasse = "x", Role = "Couturier", Statut = "Actif"
+            });
+            ctx.SaveChanges();
+        }
+
+        /// <summary>
+        /// Non-régression BtnModifier_Click :
+        /// Modifier uniquement la date d'une commande (sans pièce sélectionnée)
+        /// NE doit pas changer TypeVetement, MontantCouture ou Statut d'aucune pièce.
+        /// C'était le bug : Modifier() était appelé avec une pièce { TypeVetement="", MontantCouture=0 }
+        /// ce qui écrasait la première pièce. La correction appelle ModifierInfosCommande qui ne touche pas aux pièces.
+        /// </summary>
+        [Test]
+        public void B5_ModifierDateSansPiece_NePasEcraserPiece()
+        {
+            // Arrange : commande avec une pièce
+            var commande = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
+            var piece = new PieceCommande
+            {
+                TypeVetement   = "Boubou",
+                MontantCouture = 15000m,
+                IdCouturier    = IdCouturier
+            };
+            _commandeService.Ajouter(commande, piece, new List<Mesure>(), IdBoss, "Mamadou DIALLO");
+
+            // Snapshot avant modification
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var p = ctx.PiecesCommande.Find(piece.IdPieceCommande)!;
+                Assert.That(p.TypeVetement,    Is.EqualTo("Boubou"),  "Précondition TypeVetement");
+                Assert.That(p.MontantCouture,  Is.EqualTo(15000m),    "Précondition MontantCouture");
+                Assert.That(p.Statut,          Is.EqualTo("A faire"), "Précondition Statut");
+            }
+
+            // Act : modifier UNIQUEMENT la date (aucune pièce sélectionnée → ModifierInfosCommande)
+            var nouvelleDate = DateTime.Now.AddDays(14);
+            _commandeService.ModifierInfosCommande(
+                commande.IdCommande,
+                IdClient,
+                nouvelleDate,
+                TimeSpan.Zero,
+                null,
+                IdBoss,
+                "Mamadou DIALLO");
+
+            // Assert : la pièce est INCHANGÉE
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var p = ctx.PiecesCommande.Find(piece.IdPieceCommande)!;
+                Assert.That(p.TypeVetement,   Is.EqualTo("Boubou"),  "TypeVetement ne doit pas changer");
+                Assert.That(p.MontantCouture, Is.EqualTo(15000m),    "MontantCouture ne doit pas changer");
+                Assert.That(p.Statut,         Is.EqualTo("A faire"), "Statut ne doit pas changer");
+
+                // La date doit être mise à jour
+                var cmd = ctx.Commandes.Find(commande.IdCommande)!;
+                Assert.That(cmd.DateFin.Date, Is.EqualTo(nouvelleDate.Date), "DateFin doit être mise à jour");
+            }
         }
     }
 
