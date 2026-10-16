@@ -80,12 +80,14 @@ namespace GestionCoutureApp.Tests
         // ── Helpers ───────────────────────────────────────────────────────
 
         /// <summary>Crée une commande neuve "A faire" par la Secrétaire.</summary>
-        private int CreerCommandeParSecretaire(int idSecretaire = IdSecretaire)
+        private int CreerCommandeParSecretaire(int idSecretaire = IdSecretaire,
+            string typeVetement = "Chemise")
         {
+            CommandeService.ViderCacheDoublonPourTests();
             var cmd = new Commande { IdClient = IdClient, DateFin = DateTime.Now.AddDays(7) };
             var pce = new PieceCommande
             {
-                TypeVetement = "Chemise", MontantCouture = 10_000m, IdCouturier = IdCouturier
+                TypeVetement = typeVetement, MontantCouture = 10_000m, IdCouturier = IdCouturier
             };
             _commandeService.Ajouter(cmd, pce, new List<Mesure>(), idSecretaire, "Marie FALL");
             return cmd.IdCommande;
@@ -164,7 +166,7 @@ namespace GestionCoutureApp.Tests
         public async Task T2ter_04_Delai_Parametre_5_Minutes_Respecte()
         {
             DefinirDelai(5);
-            int idCommande = CreerCommandeParSecretaire();
+            int idCommande = CreerCommandeParSecretaire(typeVetement: "Pantalon");
 
             // 4:59 → autorisé
             _clock.AvancerUtc(TimeSpan.FromMinutes(4).Add(TimeSpan.FromSeconds(59)));
@@ -172,9 +174,9 @@ namespace GestionCoutureApp.Tests
                 await _commandeService.AnnulerParSecretaireAsync(
                     idCommande, IdSecretaire, "Marie FALL", motif: "Test 5min OK"));
 
-            // Nouvelle commande, 5:00 → refusé
+            // Nouvelle commande avec type différent pour éviter la garde anti-doublon
             _clock.ReinitialiserA(DateTime.UtcNow);
-            int idCommande2 = CreerCommandeParSecretaire();
+            int idCommande2 = CreerCommandeParSecretaire(typeVetement: "Robe");
             _clock.AvancerUtc(TimeSpan.FromMinutes(5));
             var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await _commandeService.AnnulerParSecretaireAsync(
@@ -304,16 +306,16 @@ namespace GestionCoutureApp.Tests
         [Test]
         public async Task T2ter_11_CompteurAntiFraude_Suppressions_Et_Annulations()
         {
-            // Boss supprime 2 commandes
-            int id1 = CreerCommandeParSecretaire();
-            int id2 = CreerCommandeParSecretaire();
+            // Boss supprime 2 commandes (types différents pour éviter anti-doublon)
+            int id1 = CreerCommandeParSecretaire(typeVetement: "Pantalon");
+            int id2 = CreerCommandeParSecretaire(typeVetement: "Robe");
             await _commandeService.SupprimerAsync(id1, IdBoss, "Mamadou DIALLO",
                 "Motif 1", _auditService);
             await _commandeService.SupprimerAsync(id2, IdBoss, "Mamadou DIALLO",
                 "Motif 2", _auditService);
 
             // Secrétaire annule 1 commande (dans le délai)
-            int id3 = CreerCommandeParSecretaire();
+            int id3 = CreerCommandeParSecretaire(typeVetement: "Chemise");
             await _commandeService.AnnulerParSecretaireAsync(
                 id3, IdSecretaire, "Marie FALL", "Annulation test");
 
