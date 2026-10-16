@@ -487,6 +487,93 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- ── Étape 7 : Alertes retard & message d'excuse ── -->
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#DC2626" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock Text="⏰  Alertes Retard — Message d'excuse"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock Text="Réservé au Boss · Déclenche les alertes « RDV en risque de retard »"
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Délai alerte + Jours de report -->
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Délai d'alerte avant le RDV"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox x:Name="CboRetardAlerteMinutes"
+                                              Style="{StaticResource ModernComboBox}"
+                                              SelectedValuePath="Tag">
+                                        <ComboBoxItem Content="60 minutes avant" Tag="60"/>
+                                        <ComboBoxItem Content="120 minutes avant (défaut)" Tag="120"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Temps avant l'heure du RDV où l'alerte se déclenche."
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Report du RDV (jours)"
+                                               Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="TxtRetardReportJours"
+                                             Style="{StaticResource ModernTextBox}"
+                                             Text="1"/>
+                                    <TextBlock Text="Nombre de jours ajoutés lors d'un report de RDV."
+                                               FontSize="10"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Modèle du message d'excuse -->
+                            <TextBlock Text="Modèle du message d'excuse client"
+                                       Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtRetardMessageModele"
+                                     Style="{StaticResource ModernTextBox}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MinHeight="80"
+                                     MaxHeight="120"
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextChanged="TxtRetardMessageModele_TextChanged"/>
+
+                            <!-- Balises disponibles -->
+                            <Border Background="#FEF3C7" BorderBrush="#FDE68A"
+                                    BorderThickness="1" CornerRadius="6" Padding="12,8"
+                                    Margin="0,8,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="📌  Balises : {client}  {numero_commande}  {type_vetement}  {nouvelle_date}  {atelier}"
+                                               FontSize="11" Foreground="#92400E"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Aperçu du message -->
+                            <TextBlock Text="Aperçu du message :"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       Margin="0,0,0,6"/>
+                            <Border Background="#F0FDF4" BorderBrush="#BBF7D0"
+                                    BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                <TextBlock x:Name="TxtApercuMessageRetard"
+                                           FontSize="11" Foreground="#166534"
+                                           TextWrapping="Wrap" LineHeight="18"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
                     <!-- ── Étape 2 : Délai d'annulation rapide ── -->
                     <Border Style="{StaticResource ParamCard}">
                         <StackPanel>

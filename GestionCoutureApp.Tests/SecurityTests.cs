@@ -718,5 +718,12 @@ namespace GestionCoutureApp.Tests
         // Étape 2 : fenêtre d'annulation rapide par la Secrétaire
         public Task<int>     ObtenirDelaiAnnulationSecretaireMinutes()        => Task.FromResult(10);
         public Task          DefinirDelaiAnnulationSecretaireMinutes(int min) => Task.CompletedTask;
+        public Task<int>     ObtenirRetardAlerteAvantMinutes() => Task.FromResult(120);
+        public Task          DefinirRetardAlerteAvantMinutes(int minutes) => Task.CompletedTask;
+        public Task<int>     ObtenirRetardReportJours() => Task.FromResult(1);
+        public Task          DefinirRetardReportJours(int jours) => Task.CompletedTask;
+        public Task<string>  ObtenirRetardMessageModele() =>
+            Task.FromResult(ParametresService.ModeleExcuseRetardDefaut);
+        public Task          DefinirRetardMessageModele(string modele) => Task.CompletedTask;
     }
 }

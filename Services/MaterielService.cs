@@ -7,10 +7,14 @@ namespace GestionCoutureApp.Services
     public class MaterielService : IMaterielService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly IEventAggregator? _eventAggregator;
 
-        public MaterielService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        public MaterielService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            IEventAggregator? eventAggregator = null)
         {
             _contextFactory = contextFactory;
+            _eventAggregator = eventAggregator;
         }
 
         public List<MaterielSupplement> ObtenirTous()
@@ -57,6 +61,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             context.MaterielsSupplements.Add(materiel);
             context.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Materiel });
         }
 
         public void Modifier(MaterielSupplement materiel)
@@ -74,6 +79,7 @@ namespace GestionCoutureApp.Services
                 existant.IdPieceCommande = materiel.IdPieceCommande;
 
             context.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Materiel });
         }
 
         public void Supprimer(int idMateriel)
@@ -103,6 +109,7 @@ namespace GestionCoutureApp.Services
 
             context.MaterielsSupplements.Remove(materiel);
             context.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Materiel });
         }
 
         public decimal TotalParCommande(int idCommande)

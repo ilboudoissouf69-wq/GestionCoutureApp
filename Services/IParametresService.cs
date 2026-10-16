@@ -25,6 +25,13 @@ namespace GestionCoutureApp.Services
         // Étape 2 : fenêtre d'annulation rapide par la Secrétaire (minutes, défaut 10)
         Task<int>     ObtenirDelaiAnnulationSecretaireMinutes();
         Task          DefinirDelaiAnnulationSecretaireMinutes(int minutes);
+        // Étape 7 — alerte retard / message d'excuse
+        Task<int>     ObtenirRetardAlerteAvantMinutes();
+        Task          DefinirRetardAlerteAvantMinutes(int minutes);
+        Task<int>     ObtenirRetardReportJours();
+        Task          DefinirRetardReportJours(int jours);
+        Task<string>  ObtenirRetardMessageModele();
+        Task          DefinirRetardMessageModele(string modele);
 
         // ── Onglet 1 — Comptabilité & Seuils ─────────────────────────────
         Task<string>  ObtenirModeCA();           // "Encaisse" | "Total"

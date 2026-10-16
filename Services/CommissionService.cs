@@ -10,17 +10,20 @@ namespace GestionCoutureApp.Services
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<CommissionService> _logger;
         private readonly IParametresService _parametresService;
+        private readonly IEventAggregator? _eventAggregator;
 
         private static readonly object _verrou = new();
 
         public CommissionService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
             ILogger<CommissionService> logger,
-            IParametresService parametresService)
+            IParametresService parametresService,
+            IEventAggregator? eventAggregator = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
             _parametresService = parametresService;
+            _eventAggregator = eventAggregator;
         }
 
         // Le moteur de calcul de commission opère sur PieceCommande, et non sur Commande
@@ -401,6 +404,8 @@ namespace GestionCoutureApp.Services
 
                 transaction.Commit();
             }
+
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Commission });
         }
 
         public List<Commission> ObtenirHistorique()
@@ -457,6 +462,8 @@ namespace GestionCoutureApp.Services
             _logger.LogWarning(
                 "Commission {Id} ANNULÉE (dans transaction) par {Annulateur} — {NbPieces} pièce(s) déverrouillée(s) — motif : {Motif}",
                 idCommission, nomAnnulateur, commission.Pieces.Count, motif);
+            // Note : AnnulerDansTransaction n'a pas de _eventAggregator car la transaction
+            // n'est pas encore committée par l'appelant. Celui-ci publiera son propre événement.
         }
 
         public void Annuler(int idCommission, string motif, int idAnnulateur, string nomAnnulateur)
@@ -503,6 +510,8 @@ namespace GestionCoutureApp.Services
             _logger.LogWarning(
                 "Commission {Id} ANNULÉE par {Annulateur} — {NbPieces} pièce(s) déverrouillée(s) — motif : {Motif}",
                 idCommission, nomAnnulateur, commission.Pieces.Count, motif);
+
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Commission });
         }
     }
 }

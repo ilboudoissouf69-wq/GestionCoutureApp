@@ -77,6 +77,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IAuditService, AuditService>();
             services.AddSingleton<IMesureClientService, MesureClientService>();
             services.AddSingleton<IBrouillonCommandeService, BrouillonCommandeService>();
+            services.AddSingleton<IRetardAlerteService, RetardAlerteService>();
             
             // EventAggregator pour notifications globales entre vues
             services.AddSingleton<IEventAggregator, EventAggregator>();
@@ -1096,6 +1097,47 @@ namespace GestionCoutureApp
                 }
 
                 log.LogInfo($"[MIGRATION MANUELLE] Etape6 : {aNumeroter.Count} retour(s) numérotés.");
+            });
+
+            AppliquerSi("20261016000000_AjoutBrouillonCommande", c =>
+            {
+                using var createBrouillon = c.CreateCommand();
+                createBrouillon.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""BrouillonsCommande"" (
+                        ""IdBrouillon""    INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""IdEmploye""      INTEGER NOT NULL,
+                        ""ContenuJson""    TEXT    NOT NULL,
+                        ""DateMiseAJour""  TEXT    NOT NULL
+                    )";
+                createBrouillon.ExecuteNonQuery();
+                CreerIndex(c,
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_BrouillonsCommande_IdEmploye\" " +
+                    "ON \"BrouillonsCommande\" (\"IdEmploye\")");
+            });
+
+            AppliquerSi("20261016120000_AjoutSuiviAlerteRetard", c =>
+            {
+                using var createSuivi = c.CreateCommand();
+                createSuivi.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS ""SuivisAlerteRetard"" (
+                        ""IdSuivi""                     INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        ""TypeCible""                   TEXT    NOT NULL,
+                        ""IdCible""                     INTEGER NOT NULL,
+                        ""IdClient""                    INTEGER NOT NULL DEFAULT 0,
+                        ""DateRdvTraite""               TEXT    NOT NULL,
+                        ""NbPreventions""               INTEGER NOT NULL DEFAULT 0,
+                        ""NbReports""                   INTEGER NOT NULL DEFAULT 0,
+                        ""DateDernierMessage""          TEXT    NULL,
+                        ""IdOperateurDernierMessage""   INTEGER NULL,
+                        ""NomOperateurDernierMessage""  TEXT    NULL,
+                        ""AncienneDateDernierReport""   TEXT    NULL,
+                        ""NouvelleDateDernierReport""   TEXT    NULL,
+                        ""DateDernierReport""           TEXT    NULL
+                    )";
+                createSuivi.ExecuteNonQuery();
+                CreerIndex(c,
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SuivisAlerteRetard_TypeCible_IdCible\" " +
+                    "ON \"SuivisAlerteRetard\" (\"TypeCible\", \"IdCible\")");
             });
         }
 

@@ -21,6 +21,14 @@ namespace GestionCoutureApp.Services
         // Étape 2 : fenêtre d'annulation rapide d'une commande par la Secrétaire
         public const string CleDelaiAnnulationSecretaire = "delai_annulation_secretaire_minutes";
         public const int    DelaiAnnulationSecretaireDefautMinutes = 10;
+        // Étape 7
+        public const string CleRetardAlerteAvantMinutes = "retard_alerte_avant_minutes";
+        public const string CleRetardReportJours        = "retard_report_jours";
+        public const string CleRetardMessageModele      = "retard_message_modele";
+        public const int    RetardAlerteAvantMinutesDefaut = 120;
+        public const int    RetardReportJoursDefaut        = 1;
+        public const string ModeleExcuseRetardDefaut =
+            "Bonjour {client}, toutes nos excuses : votre {type_vetement} (commande n°{numero_commande}) n'est pas encore prête. Elle sera prête le {nouvelle_date}. Merci de votre compréhension. — {atelier}";
         // Onglet 1 — Comptabilité
         public const string CleModeCA             = "ModeCA";
         public const string CleSeuilDepenses      = "SeuilAlerteDepenses";
@@ -98,6 +106,33 @@ namespace GestionCoutureApp.Services
         public Task          DefinirDelaiAnnulationSecretaireMinutes(int m)
             => m < 0 ? throw new ArgumentOutOfRangeException(nameof(m), "Le délai ne peut pas être négatif.")
                      : SetInt(CleDelaiAnnulationSecretaire, m);
+
+        public Task<int> ObtenirRetardAlerteAvantMinutes()
+            => GetInt(CleRetardAlerteAvantMinutes, RetardAlerteAvantMinutesDefaut);
+
+        public Task DefinirRetardAlerteAvantMinutes(int minutes)
+        {
+            if (minutes != 60 && minutes != 120)
+                throw new ArgumentOutOfRangeException(nameof(minutes),
+                    "Le délai d'alerte retard doit être 60 ou 120 minutes.");
+            return SetInt(CleRetardAlerteAvantMinutes, minutes);
+        }
+
+        public Task<int> ObtenirRetardReportJours()
+            => GetInt(CleRetardReportJours, RetardReportJoursDefaut);
+
+        public Task DefinirRetardReportJours(int jours)
+            => jours < 1
+                ? throw new ArgumentOutOfRangeException(nameof(jours), "Le report doit être d'au moins 1 jour.")
+                : SetInt(CleRetardReportJours, jours);
+
+        public async Task<string> ObtenirRetardMessageModele()
+            => await ObtenirValeur(CleRetardMessageModele) ?? ModeleExcuseRetardDefaut;
+
+        public Task DefinirRetardMessageModele(string modele)
+            => string.IsNullOrWhiteSpace(modele)
+                ? throw new ArgumentException("Le modèle de message ne peut pas être vide.", nameof(modele))
+                : SetStr(CleRetardMessageModele, modele.Trim());
 
         // ── Onglet 1 — Comptabilité ──────────────────────────────────────
         public async Task<string>  ObtenirModeCA()         => await ObtenirValeur(CleModeCA) ?? "Encaisse";

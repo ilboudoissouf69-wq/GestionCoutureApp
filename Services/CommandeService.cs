@@ -9,6 +9,7 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<CommandeService> _logger;
+        private readonly IEventAggregator? _eventAggregator;
 
         // Événement déclenché après toute modification d'une commande.
         // Permet aux vues ouvertes (PaiementsView, etc.) de se rafraîchir automatiquement.
@@ -34,12 +35,27 @@ namespace GestionCoutureApp.Services
             IDbContextFactory<ApplicationDbContext> contextFactory,
             ILogger<CommandeService> logger,
             IAuditService? auditService = null,
-            IClock? clock = null)
+            IClock? clock = null,
+            IEventAggregator? eventAggregator = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
             _auditService = auditService;
             _clock = clock ?? new SystemClock();
+            _eventAggregator = eventAggregator;
+        }
+
+        /// <summary>
+        /// Publie un événement via IEventAggregator ET via le C# event (rétrocompatibilité).
+        /// </summary>
+        private void NotifierCommandeChangee(CommandeChangedEventArgs args)
+        {
+            CommandeChanged?.Invoke(this, args);
+            _eventAggregator?.Publish(new DomainChangedEvent
+            {
+                Type = DomainChangedType.Commande,
+                Data = args
+            });
         }
 
         public List<Commande> ObtenirTous()
@@ -723,7 +739,7 @@ namespace GestionCoutureApp.Services
                     ActionsAntiFraude.Annulation, "Commande", idCommande,
                     valeursAvant: snapshot, valeursApres: null, motif: motifFinal);
 
-            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            NotifierCommandeChangee(new CommandeChangedEventArgs
             {
                 IdCommande = idCommande,
                 TypeChangement = "CommandeAnnulee",
@@ -1333,7 +1349,7 @@ namespace GestionCoutureApp.Services
                     "AjouterPiece sans opérateur identifié — Commande #{IdCommande}, pièce #{IdPiece} non auditée.",
                     idCommande, piece.IdPieceCommande);
 
-            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            NotifierCommandeChangee(new CommandeChangedEventArgs
             {
                 IdCommande = idCommande,
                 TypeChangement = "PieceAjoutee",
@@ -1450,7 +1466,7 @@ namespace GestionCoutureApp.Services
             // Notifier les vues abonnées si le montant a changé
             if (montantModifie)
             {
-                CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+                NotifierCommandeChangee(new CommandeChangedEventArgs
                 {
                     IdCommande = pieceExistante.IdCommande,
                     TypeChangement = "MontantModifie",
@@ -1540,7 +1556,7 @@ namespace GestionCoutureApp.Services
             Auditer(operateur, nomOperateur, ActionsAntiFraude.PieceSupprimee, "PieceCommande",
                 idPieceCommande, avant: snapshot, apres: null, motif: motifFinal);
 
-            CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+            NotifierCommandeChangee(new CommandeChangedEventArgs
             {
                 IdCommande = piece.IdCommande,
                 TypeChangement = "PieceSupprimee",
@@ -1833,7 +1849,7 @@ namespace GestionCoutureApp.Services
                         resteLivraisonForcee.Value, motif!,
                         $"Changement statut pièce #{idPieceCommande} ({piece.TypeVetement})");
 
-                CommandeChanged?.Invoke(this, new CommandeChangedEventArgs
+                NotifierCommandeChangee(new CommandeChangedEventArgs
                 {
                     IdCommande = piece.IdCommande,
                     TypeChangement = nouveauStatut == "Terminee" ? "PieceTerminee" : "StatutModifie",

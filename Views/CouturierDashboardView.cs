@@ -1,5 +1,8 @@
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -8,47 +11,114 @@ namespace GestionCoutureApp.Views
     public partial class CouturierDashboardView : Page
     {
         private readonly Models.Employe _couturier;
-        private readonly ApplicationDbContext _context;
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly IEventAggregator _eventAggregator;
+
+        // ── Rafraîchissement automatique ─────────────────────────────────
+        private readonly DispatcherTimer _timerPeriodique;
+        private readonly DispatcherTimer _timerDebounce;
+        private readonly Action<DomainChangedEvent> _handlerDomaine;
+        private bool _refreshEnCours = false;
 
         public CouturierDashboardView(Models.Employe couturier)
         {
             InitializeComponent();
             _couturier = couturier;
 
-            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-            _context = contextFactory.CreateDbContext();
-            Unloaded += (s, e) => _context.Dispose();
+            _contextFactory  = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
             TxtNomCouturier.Text = $"Bienvenue, {couturier.Prenom} {couturier.Nom}";
 
-            ChargerDonnees();
+            // Anti-rebond 500 ms
+            _timerDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _timerDebounce.Tick += (_, _) => { _timerDebounce.Stop(); RafraichirAsync(); };
+
+            // Périodique 60 s
+            _timerPeriodique = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+            _timerPeriodique.Tick += (_, _) => RafraichirAsync();
+
+            _handlerDomaine = _ => PlanifierRefresh();
+
+            Loaded   += OnLoaded;
+            Unloaded += OnUnloaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            // Les couturiers n'ont besoin que des événements Commande et Retour
+            _eventAggregator.Subscribe(DomainChangedType.Commande, _handlerDomaine);
+            _eventAggregator.Subscribe(DomainChangedType.Retour,   _handlerDomaine);
+
+            _timerPeriodique.Start();
+            RafraichirAsync();
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            _timerDebounce.Stop();
+            _timerPeriodique.Stop();
+
+            _eventAggregator.Unsubscribe(DomainChangedType.Commande, _handlerDomaine);
+            _eventAggregator.Unsubscribe(DomainChangedType.Retour,   _handlerDomaine);
+        }
+
+        private void PlanifierRefresh()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                _timerDebounce.Stop();
+                _timerDebounce.Start();
+            });
+        }
+
+        private async void BtnActualiserCouturier_Click(object sender, RoutedEventArgs e)
+        {
+            await Task.Run(RafraichirAsync);
+        }
+
+        private void RafraichirAsync()
+        {
+            if (_refreshEnCours) return;
+            _refreshEnCours = true;
+
+            try
+            {
+                Dispatcher.Invoke(ChargerDonnees);
+                Dispatcher.Invoke(() =>
+                {
+                    if (TxtDerniereMAJCouturier != null)
+                        TxtDerniereMAJCouturier.Text = $"Mise à jour : {DateTime.Now:HH:mm:ss}";
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[CouturierDashboard] " + ex.Message);
+            }
+            finally
+            {
+                _refreshEnCours = false;
+            }
         }
 
         private void ChargerDonnees()
         {
-            // CORRECTIF (Étape 1b-i) : Commande.IdCouturier/Statut/MontantTotal
-            // ne sont plus jamais renseignés par CommandeService (dépréciés,
-            // voir Commande.cs) — filtrer/sommer directement dessus ici
-            // aurait affiché "0 commande, 0 FCFA" pour CHAQUE couturier,
-            // silencieusement (aucune erreur, juste un tableau de bord vide).
-            // On filtre maintenant via Pieces.IdCouturier, et les colonnes du
-            // DataGrid (voir CouturierDashboardView.xaml) lisent les
-            // propriétés calculées TypeVetementAffiche/StatutGlobalAffiche/
-            // MontantTotalCalcule ajoutées sur Commande à cet effet.
-            var commandes = _context.Commandes
+            using var context = _contextFactory.CreateDbContext();
+
+            // Filtrage via Pieces.IdCouturier (Commande.IdCouturier est déprécié)
+            var commandes = context.Commandes
                 .Include(c => c.Client)
                 .Include(c => c.Pieces)
-                .Where(c => c.Pieces.Any(p => p.IdCouturier == _couturier.IdEmploye))
+                .Where(c => !c.EstSupprimee && c.Pieces.Any(p => p.IdCouturier == _couturier.IdEmploye))
                 .ToList();
 
             GridMesCommandes.ItemsSource = commandes;
 
-            TxtEnCours.Text = commandes.Count(c => c.StatutGlobal == "En cours").ToString();
+            TxtEnCours.Text   = commandes.Count(c => c.StatutGlobal == "En cours").ToString();
             TxtTerminees.Text = commandes.Count(c => c.StatutGlobal == "Terminee").ToString();
-            TxtLivrees.Text = commandes.Count(c => c.StatutGlobal == "Livree").ToString();
-            // Revenus : uniquement la part de couture des pièces confiées à
-            // CE couturier (et non le montant total de la commande, qui
-            // pourrait un jour inclure les pièces d'autres couturiers).
+            TxtLivrees.Text   = commandes.Count(c => c.StatutGlobal == "Livree").ToString();
+
+            // Revenus : uniquement la part de couture des pièces de CE couturier
             TxtRevenus.Text = commandes
                 .SelectMany(c => c.Pieces)
                 .Where(p => p.IdCouturier == _couturier.IdEmploye)

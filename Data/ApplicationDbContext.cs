@@ -43,6 +43,9 @@ namespace GestionCoutureApp.Data
         // Étape 5 — Brouillon automatique de commande (un seul par utilisateur)
         public DbSet<BrouillonCommande> BrouillonsCommande { get; set; }
 
+        // Étape 7 — Suivi des alertes retard traitées
+        public DbSet<SuiviAlerteRetard> SuivisAlerteRetard { get; set; }
+
         // Point 3 — Depenses
         public DbSet<Depense> Depenses { get; set; }
 
@@ -202,6 +205,11 @@ namespace GestionCoutureApp.Data
             // Index unique : un seul brouillon par employé
             modelBuilder.Entity<BrouillonCommande>()
                 .HasIndex(b => b.IdEmploye)
+                .IsUnique();
+
+            // Étape 7 — une ligne de suivi par cible
+            modelBuilder.Entity<SuiviAlerteRetard>()
+                .HasIndex(s => new { s.TypeCible, s.IdCible })
                 .IsUnique();
         }
     }

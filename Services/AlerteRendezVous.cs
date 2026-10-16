@@ -41,7 +41,14 @@ namespace GestionCoutureApp.Services
         // doivent pas être confondues dans une seule liste indifférenciée.
         // Étape 6 : ajout de "Retour" comme troisième type.
         public string TypeAlerte { get; set; } = string.Empty;
-        // "PasEncorePriseEnCharge" | "RendezVousProche" | "Retard" | "Retour"
+        // "PasEncorePriseEnCharge" | "RendezVousProche" | "Retard" | "Retour" | "RisqueRetard"
+
+        // Étape 7 — cible du suivi anti-doublon
+        public string TypeCibleRetard { get; set; } = string.Empty;
+        public int IdCibleRetard { get; set; }
+        public int IdClientRetard { get; set; }
+        public int NbFoisPrevenu { get; set; }
+        public bool AlerteTraiteePourCeRdv { get; set; }
 
         // Libellé lisible pour la colonne "Alerte"
         public string MotifAlerte => TypeAlerte switch
@@ -49,6 +56,7 @@ namespace GestionCoutureApp.Services
             "PasEncorePriseEnCharge" => "⚠️  Colis stagnant — mi-délai dépassé, statut 'À faire'",
             "RendezVousProche"       => "⏰  RDV proche — vêtement pas encore terminé",
             "Retard"                 => "🔴  RDV dépassé — vêtement pas encore terminé",
+            "RisqueRetard"           => "🟠  RDV en risque de retard",
             "Retour"                 => "🔄  Retour en cours — RDV reprise",
             _                       => TypeAlerte
         };
@@ -95,9 +103,16 @@ namespace GestionCoutureApp.Services
         /// Vrai si le RDV est dans moins d'une heure ou dépassé, et pièce/retour non terminé(e).
         /// Déclenche la notification sonore/popup.
         /// </summary>
-        public bool NecessiteNotificationUrgente =>
-            NiveauAlerte is "retard" or "jourbj"
-            && (DateRendezVous - DateTime.Now).TotalHours <= 1.0;
+        public bool NecessiteNotificationUrgente
+        {
+            get
+            {
+                if (AlerteTraiteePourCeRdv) return false;
+                if (TypeAlerte is "RisqueRetard" or "Retard") return true;
+                return NiveauAlerte is "retard" or "jourbj"
+                    && (DateRendezVous - DateTime.Now).TotalHours <= 1.0;
+            }
+        }
     }
 
     public interface IAlerteService

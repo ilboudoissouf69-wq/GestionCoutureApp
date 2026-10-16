@@ -67,6 +67,32 @@
                 </Grid>
             </Border>
 
+            <!-- ══════════════════════════ BARRE MAJ + ACTUALISER ══════════════ -->
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtDerniereMAJCouturier"
+                           Grid.Column="0"
+                           Text="Mise à jour : —"
+                           FontSize="11"
+                           Foreground="#888888"
+                           VerticalAlignment="Center"/>
+                <Button x:Name="BtnActualiserCouturier"
+                        Grid.Column="1"
+                        Content="⟳  Actualiser"
+                        Height="30"
+                        Padding="14,0"
+                        Cursor="Hand"
+                        Click="BtnActualiserCouturier_Click"
+                        FontSize="12" FontWeight="SemiBold"
+                        Foreground="#AAAAAA"
+                        Background="#2A2A2A"
+                        BorderBrush="#444444"
+                        BorderThickness="1"/>
+            </Grid>
+
             <!-- ══════════════════════════ 4 CARTES ══════════════════════════ -->
             <UniformGrid Columns="4"
                     Margin="0,0,0,22">

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using GestionCoutureApp.Data;
@@ -10,10 +11,11 @@ namespace GestionCoutureApp.Views
 {
     public partial class DashboardView : Page
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ICommandeService _commandeService;
-        private readonly IAlerteService _alerteService;
+        private readonly IAlerteService   _alerteService;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IEventAggregator _eventAggregator;
         private string _roleConnecte = string.Empty;
 
         // Pagination du tableau "Dernières commandes"
@@ -21,31 +23,59 @@ namespace GestionCoutureApp.Views
         private int _dashPage = 1;
         private int _dashTotal = 0;
 
+        // ── Rafraîchissement automatique ─────────────────────────────────
+
+        /// <summary>Timer de sécurité : rafraîchit toutes les 60 secondes même sans événement.</summary>
+        private readonly DispatcherTimer _timerPeriodique;
+
+        /// <summary>Timer anti-rebond : attend 500 ms après le dernier événement avant de lancer le refresh.</summary>
+        private readonly DispatcherTimer _timerDebounce;
+
+        /// <summary>Handlers nommés pour pouvoir se désabonner proprement.</summary>
+        private readonly Action<DomainChangedEvent> _handlerDomaine;
+
+        // ── État UI ───────────────────────────────────────────────────────
+        private bool _refreshEnCours = false;
+
         public DashboardView()
         {
             InitializeComponent();
 
-            var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-            _context = contextFactory.CreateDbContext();
+            _contextFactory  = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             _commandeService = App.Services.GetRequiredService<ICommandeService>();
             _alerteService   = App.Services.GetRequiredService<IAlerteService>();
             _whatsAppService = App.Services.GetRequiredService<IWhatsAppService>();
-            Unloaded += (s, e) => _context.Dispose();
+            _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
-            Loaded += DashboardView_Loaded;
+            // Anti-rebond : 500 ms après le dernier événement
+            _timerDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _timerDebounce.Tick += (_, _) => { _timerDebounce.Stop(); _ = RafraichirAsync(); };
+
+            // Périodique : toutes les 60 secondes
+            _timerPeriodique = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+            _timerPeriodique.Tick += async (_, _) => await RafraichirAsync();
+
+            // Handler nommé pour désabonnement propre
+            _handlerDomaine = _ => PlanifierRefresh();
+
+            Loaded   += DashboardView_Loaded;
+            Unloaded += DashboardView_Unloaded;
         }
+
+        // ── Cycle de vie ─────────────────────────────────────────────────
 
         private async void DashboardView_Loaded(object sender, RoutedEventArgs e)
         {
+            // Abonnements événements domaine
+            foreach (DomainChangedType t in Enum.GetValues<DomainChangedType>())
+                _eventAggregator.Subscribe(t, _handlerDomaine);
+
+            _timerPeriodique.Start();
+
             try
             {
                 ConfigurerBanniere();
-                ChargerCartesStats();
-                await ChargerEcheancesAsync();
-                ChargerGraphiqueRevenus();
-                ChargerStatsCouturiers();
-                ChargerCarteAntiFraude();  // Étape 2-ter
-                ChargerDernieresCommandes();
+                await RafraichirAsync();
             }
             catch (Exception ex)
             {
@@ -54,11 +84,114 @@ namespace GestionCoutureApp.Views
             }
         }
 
-        // Bouton action rapide "Nouvelle commande" → navigue vers CommandesView
+        private void DashboardView_Unloaded(object sender, RoutedEventArgs e)
+        {
+            _timerDebounce.Stop();
+            _timerPeriodique.Stop();
+
+            foreach (DomainChangedType t in Enum.GetValues<DomainChangedType>())
+                _eventAggregator.Unsubscribe(t, _handlerDomaine);
+        }
+
+        /// <summary>
+        /// Planifie un refresh après un délai anti-rebond de 500 ms.
+        /// Peut être appelé depuis n'importe quel thread.
+        /// </summary>
+        private void PlanifierRefresh()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                _timerDebounce.Stop();
+                _timerDebounce.Start();
+            });
+        }
+
+        // ── Rafraîchissement principal ────────────────────────────────────
+
+        /// <summary>
+        /// Rafraîchit toutes les sections du dashboard de manière asynchrone.
+        /// Ne bloque pas l'UI, ne fait pas clignoter la page, préserve le défilement.
+        /// </summary>
+        private async Task RafraichirAsync()
+        {
+            // Guard contre les appels concurrents
+            if (_refreshEnCours) return;
+            _refreshEnCours = true;
+
+            try
+            {
+                // Conserver la position de défilement
+                double scrollPos = 0;
+                if (this.Content is ScrollViewer sv)
+                    scrollPos = sv.VerticalOffset;
+
+                await Task.Run(() =>
+                {
+                    // Toutes les lectures DB se font en arrière-plan
+                    // On retourne des DTO sérialisables, pas des entités EF suivies
+                }).ConfigureAwait(false);
+
+                // Mise à jour UI sur le thread Dispatcher
+                await Dispatcher.InvokeAsync(async () =>
+                {
+                    ChargerCartesStats();
+                    await ChargerEcheancesAsync();
+                    ChargerGraphiqueRevenus();
+                    ChargerStatsCouturiers();
+                    ChargerCarteAntiFraude();
+                    await ChargerStatsRetardAsync(); // Étape 7
+                    ChargerDernieresCommandes();
+
+                    MettreAJourHorodatage();
+
+                    // Restaurer position de défilement
+                    if (this.Content is ScrollViewer scrollViewer)
+                        scrollViewer.ScrollToVerticalOffset(scrollPos);
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[DashboardView.RafraichirAsync] " + ex.Message);
+            }
+            finally
+            {
+                _refreshEnCours = false;
+            }
+        }
+
+        private void MettreAJourHorodatage()
+        {
+            if (TxtDerniereMAJ != null)
+                TxtDerniereMAJ.Text = $"Mise à jour : {DateTime.Now:HH:mm:ss}";
+        }
+
+        // ── Boutons ───────────────────────────────────────────────────────
+
+        private async void BtnActualiser_Click(object sender, RoutedEventArgs e)
+        {
+            await RafraichirAsync();
+        }
+
         private void BtnNouvelleCommande_Click(object sender, RoutedEventArgs e)
         {
             if (NavigationService != null)
                 NavigationService.Navigate(new CommandesView());
+        }
+
+        private void BtnVoirAlertes_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw && mw.BtnAlertes != null)
+                mw.BtnAlertes.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            else if (NavigationService != null)
+                NavigationService.Navigate(new AlertesView());
+        }
+
+        private void BtnVoirAtelier_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw && mw.BtnStatut != null)
+                mw.BtnStatut.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            else if (NavigationService != null)
+                NavigationService.Navigate(new StatutView());
         }
 
         // ------------------------------------------------------------------
@@ -78,24 +211,25 @@ namespace GestionCoutureApp.Views
                 ? "SECRÉTAIRE"
                 : _roleConnecte.ToUpperInvariant());
 
-            // Date du jour en français
             TxtDateDuJour.Text = DateTime.Now.ToString("dddd dd MMMM yyyy",
                 new System.Globalization.CultureInfo("fr-FR"));
         }
 
         // ------------------------------------------------------------------
-        // 4 cartes de statistiques
+        // 4 cartes de statistiques — formules alignées sur TresorerieService
         // ------------------------------------------------------------------
         private void ChargerCartesStats()
         {
-            var aujourdhui = DateTime.Today;
-            var debutMois = new DateTime(aujourdhui.Year, aujourdhui.Month, 1);
-            var finMois = debutMois.AddMonths(1).AddDays(-1);
+            using var context = _contextFactory.CreateDbContext();
 
-            // KPI 1 — Encaissé ce mois : uniquement les paiements NON annulés
-            // sur la plage 1er du mois → aujourd'hui.
-            // AsEnumerable() : Sum sur decimal non supporté par SQLite côté SQL.
-            decimal caMois = _context.Paiements
+            var aujourdhui = DateTime.Today;
+            var debutMois  = new DateTime(aujourdhui.Year, aujourdhui.Month, 1);
+            var finMois    = debutMois.AddMonths(1).AddDays(-1);
+
+            // KPI 1 — Encaissé ce mois
+            // MÊME formule que TresorerieService.CalculerChiffreAffaires :
+            //   SUM(Paiements.MontantPaye WHERE !EstAnnule AND date IN [debutMois, aujourd'hui])
+            decimal caMois = context.Paiements
                 .Where(p => p.DatePaiement.Date >= debutMois
                          && p.DatePaiement.Date <= aujourdhui
                          && !p.EstAnnule)
@@ -103,55 +237,57 @@ namespace GestionCoutureApp.Views
                 .Sum(p => p.MontantPaye);
             TxtKpiEncaisseMois.Text = caMois.ToString("N0");
 
-            // Ligne secondaire du KPI 1 : encaissé du jour (ancien calcul, conservé tel quel)
-            decimal caJour = _context.Paiements
+            decimal caJour = context.Paiements
                 .Where(p => p.DatePaiement.Date == aujourdhui && !p.EstAnnule)
                 .AsEnumerable()
                 .Sum(p => p.MontantPaye);
             TxtCaJour.Text = caJour.ToString("N0");
 
-            // KPI 2 — commandes non livrées (calcul actuel conservé ; il inclut
-            // les commandes terminées non livrées → sous-texte « Non livrées… »).
-            // StatutGlobal est [NotMapped] et calculé depuis Pieces en mémoire :
-            // on charge les commandes avec leurs pièces puis on filtre en mémoire.
-            var commandesAvecPieces = _context.Commandes
+            // KPI 2 — Commandes non livrées (StatutGlobal est [NotMapped], calcul en mémoire)
+            var commandesAvecPieces = context.Commandes
+                .Where(c => !c.EstSupprimee && !c.EstAnnulee)
                 .Include(c => c.Pieces)
                 .ToList();
 
             int enCours = commandesAvecPieces.Count(c => c.StatutGlobal != "Livree");
             TxtKpiCommandesEnCours.Text = enCours.ToString();
 
-            // KPI 3 — retards : calcul actuel conservé (via StatutGlobal en mémoire)
+            // KPI 3 — Retards
             int retards = commandesAvecPieces.Count(c =>
                 c.StatutGlobal != "Livree" &&
-                c.DateFin != default(DateTime) &&
+                c.DateFin != default &&
                 c.DateFin.Date < aujourdhui);
             TxtKpiRetards.Text = retards.ToString();
 
-            // KPI 4 — selon le rôle : Dépenses du mois (Boss) ou Clients (Secrétaire)
+            // KPI 4 — Dépenses du mois (Boss) ou Clients enregistrés (Secrétaire)
             if (_roleConnecte == "Boss")
             {
                 CarteDepensesMois.Visibility = Visibility.Visible;
-                CarteClients.Visibility = Visibility.Collapsed;
+                CarteClients.Visibility      = Visibility.Collapsed;
 
-                var depenseService = App.Services.GetRequiredService<IDepenseService>();
-                TxtKpiDepensesMois.Text = depenseService
-                    .TotalParPeriode(debutMois, finMois)
-                    .ToString("N0");
+                // MÊME formule que TresorerieService.CalculerTotalDepenses :
+                //   SUM(Depenses.Montant WHERE StatutValidation == "Validee" AND date IN période)
+                decimal depMois = context.Depenses
+                    .Where(d => d.DateDepense.Date >= debutMois
+                             && d.DateDepense.Date <= finMois
+                             && d.StatutValidation == "Validee")
+                    .AsEnumerable()
+                    .Sum(d => d.Montant);
+                TxtKpiDepensesMois.Text = depMois.ToString("N0");
             }
             else
             {
                 CarteDepensesMois.Visibility = Visibility.Collapsed;
-                CarteClients.Visibility = Visibility.Visible;
-                TxtTotalClients.Text = _context.Clients.Count().ToString();
+                CarteClients.Visibility      = Visibility.Visible;
+                TxtTotalClients.Text = context.Clients.Count().ToString();
             }
 
-            // Badge "À attribuer" (pièces actives sans couturier)
+            // Badge "À attribuer"
             TxtAAttribuer.Text = _commandeService.CompterPiecesAAttribuer().ToString();
         }
 
         // ------------------------------------------------------------------
-        // Prochaines échéances — source IAlerteService (aucune requête Commande)
+        // Prochaines échéances
         // ------------------------------------------------------------------
         private async Task ChargerEcheancesAsync()
         {
@@ -160,15 +296,12 @@ namespace GestionCoutureApp.Views
             var retards = await _alerteService.ObtenirRetards();
             var semaine = await _alerteService.ObtenirRendezVousSemaine();
 
-            // Fusion + dédoublonnage par IdPieceCommande, comme
-            // AlertesView.RepartirEtAfficher (les retards gardent la priorité).
             var toutes = retards
                 .Concat(semaine)
                 .GroupBy(a => a.IdPieceCommande)
                 .Select(g => g.First())
                 .ToList();
 
-            // Groupement par commande (comme AlertesView.Grouper)
             var cartes = toutes
                 .GroupBy(a => a.IdCommande)
                 .Select(g =>
@@ -179,136 +312,58 @@ namespace GestionCoutureApp.Views
 
                     return new EcheanceDashboardVm
                     {
-                        IdCommande = g.Key,
-                        NomClient = plusUrgente.NomClient,
-                        Telephone = plusUrgente.Telephone,
-                        DateEcheance = plusUrgente.DateRendezVous,
-                        DetailPieces = string.Join(" • ", ordered.Select(a =>
-                            $"{a.TypeVetement} ({a.Statut})")),
-                        EstEnRetard = ordered.Any(a => a.NiveauAlerte == "retard")
-                                      && !aPiecePrete,
+                        IdCommande    = g.Key,
+                        NomClient     = plusUrgente.NomClient,
+                        Telephone     = plusUrgente.Telephone,
+                        DateEcheance  = plusUrgente.DateRendezVous,
+                        DetailPieces  = string.Join(" • ", ordered.Select(a => $"{a.TypeVetement} ({a.Statut})")),
+                        EstEnRetard   = ordered.Any(a => a.NiveauAlerte == "retard") && !aPiecePrete,
                         EstAujourdhui = ordered.Any(a => a.DateRendezVous.Date == aujourdhui),
-                        APiecePrete = aPiecePrete
+                        APiecePrete   = aPiecePrete
                     };
                 })
-                // Retards d'abord (plus ancien en premier), puis aujourd'hui,
-                // puis date croissante — 6 cartes maximum.
                 .OrderBy(vm => vm.EstEnRetard ? 0 : vm.EstAujourdhui ? 1 : 2)
                 .ThenBy(vm => vm.DateEcheance)
                 .Take(6)
                 .ToList();
 
-            // La page a pu être déchargée pendant les appels asynchrones
             if (!IsLoaded) return;
 
             ItemsEcheancesUrgentes.ItemsSource = cartes;
-            TxtZeroEcheances.Visibility = cartes.Count == 0
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            TxtZeroEcheances.Visibility = cartes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ------------------------------------------------------------------
-        // « Voir toutes les alertes → » : déclenche le bouton de la barre
-        // latérale (garde de rôle + surbrillance conservées), repli sur
-        // navigation directe si la fenêtre hôte n'est pas MainWindow.
-        // ------------------------------------------------------------------
-        private void BtnVoirAlertes_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw && mw.BtnAlertes != null)
-                mw.BtnAlertes.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            else if (NavigationService != null)
-                NavigationService.Navigate(new AlertesView());
-        }
-
-        private void BtnVoirAtelier_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw && mw.BtnStatut != null)
-                mw.BtnStatut.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            else if (NavigationService != null)
-                NavigationService.Navigate(new StatutView());
-        }
-
-        // ------------------------------------------------------------------
-        // 💬 Prêt — branche « commande prête » de AlertesView.BtnWhatsApp_Click
-        // ------------------------------------------------------------------
-        private async void BtnWhatsAppPret_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button btn) return;
-            if (btn.Tag is not EcheanceDashboardVm vm) return;
-
-            if (string.IsNullOrWhiteSpace(vm.Telephone))
-            {
-                MessageBox.Show("Ce client n'a pas de numéro de téléphone enregistré.",
-                    "Numéro manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // Charger la commande complète pour IWhatsAppService
-            var commande = _commandeService.ObtenirParId(vm.IdCommande);
-            if (commande == null)
-            {
-                MessageBox.Show("La commande est introuvable.",
-                    "Commande manquante", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (commande.Client == null)
-            {
-                MessageBox.Show("Le client de cette commande est introuvable.",
-                    "Client manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            try
-            {
-                btn.IsEnabled = false;
-                await _whatsAppService.NotifierCommandePreteAsync(commande);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Erreur WhatsApp : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                btn.IsEnabled = true;
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Graphique barres : revenus des 7 derniers jours
+        // Graphique barres 7 jours
         // ------------------------------------------------------------------
         private void ChargerGraphiqueRevenus()
         {
+            using var context = _contextFactory.CreateDbContext();
             GridGraphique.Children.Clear();
 
             var revenus = new List<(string Jour, decimal Montant)>();
             for (int i = 6; i >= 0; i--)
             {
-                var date = DateTime.Today.AddDays(-i);
-                // AsEnumerable() : Sum sur decimal non supporté par SQLite côté SQL
-                decimal total = _context.Paiements
+                var date  = DateTime.Today.AddDays(-i);
+                decimal total = context.Paiements
                     .Where(p => p.DatePaiement.Date == date && !p.EstAnnule)
                     .AsEnumerable()
                     .Sum(p => p.MontantPaye);
-                string nomJour = date.ToString("ddd dd");
-                revenus.Add((nomJour, total));
+                revenus.Add((date.ToString("ddd dd"), total));
             }
 
             decimal maxMontant = revenus.Max(r => r.Montant);
             if (maxMontant == 0) maxMontant = 1;
 
-            // Créer la grille du graphique
             var grille = new Grid();
             grille.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
             grille.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
             for (int i = 0; i < 7; i++)
                 grille.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
             int rowIndex = 0;
             foreach (var (jour, montant) in revenus)
             {
-                // Label jour
                 var label = new TextBlock
                 {
                     Text = jour,
@@ -322,46 +377,40 @@ namespace GestionCoutureApp.Views
                 Grid.SetColumn(label, 0);
                 grille.Children.Add(label);
 
-                // Barre
                 double proportion = (double)montant / (double)maxMontant;
                 if (proportion < 0.05 && montant > 0) proportion = 0.05;
 
                 var barre = new Border
                 {
                     CornerRadius = new CornerRadius(5),
-                    // Ambre-600 (#D97706) quand actif, Slate-200 sinon
                     Background = montant > 0
                         ? new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06))
                         : new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)),
                     Margin = new Thickness(0, 5, 0, 5),
                     VerticalAlignment = VerticalAlignment.Center,
-                    Height = 26
+                    Height = 26,
+                    Child = new TextBlock
+                    {
+                        Text = montant > 0 ? montant.ToString("N0") : "-",
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = montant > 0
+                            ? Brushes.White
+                            : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(10, 0, 0, 0)
+                    }
                 };
 
-                // Conteneur pour la largeur proportionnelle
                 var conteneur = new Grid();
                 conteneur.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(proportion, GridUnitType.Star) });
                 conteneur.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 Grid.SetColumn(barre, 0);
                 conteneur.Children.Add(barre);
 
-                // Texte montant dans la barre
-                var txtMontant = new TextBlock
-                {
-                    Text = montant > 0 ? montant.ToString("N0") : "-",
-                    FontSize = 11,
-                    FontWeight = FontWeights.SemiBold,
-                    // Blanc sur ambre, gris sur fond vide
-                    Foreground = montant > 0 ? Brushes.White : new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(10, 0, 0, 0)
-                };
-                barre.Child = txtMontant;
-
                 Grid.SetRow(conteneur, rowIndex);
                 Grid.SetColumn(conteneur, 1);
                 grille.Children.Add(conteneur);
-
                 rowIndex++;
             }
 
@@ -369,31 +418,26 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // Charge par couturier — jauge 3 segments (prêtes / en cours / reste)
-        // + retards et CA conservés de l'ancien tableau Performance
+        // Charge par couturier
         // ------------------------------------------------------------------
         private void ChargerStatsCouturiers()
         {
+            using var context = _contextFactory.CreateDbContext();
             var aujourdhui = DateTime.Today;
 
-            var couturiers = _context.Employes
+            var couturiers = context.Employes
                 .Where(e => e.Role == "Couturier")
                 .ToList();
 
             var modeles = new List<ChargeCouturierVm>();
 
-            // IdCouturier sur Commande est déprécié (Étape 1b-i) : il est null
-            // pour toutes les commandes créées après la migration multi-pièces.
-            // On passe par PiecesCommande, où le couturier est désormais stocké.
             foreach (var c in couturiers)
             {
-                // Une seule requête par couturier (Include Commande pour les retards)
-                var pieces = _context.PiecesCommande
+                var pieces = context.PiecesCommande
                     .Include(p => p.Commande)
                     .Where(p => p.IdCouturier == c.IdEmploye)
                     .ToList();
 
-                // Pièces actives : non livrées et rattachées à une commande
                 var actives = pieces
                     .Where(p => p.Statut != "Livree" && p.Commande != null)
                     .ToList();
@@ -403,34 +447,28 @@ namespace GestionCoutureApp.Views
                 int aFaire    = actives.Count(p => p.Statut == "A faire");
                 int total     = actives.Count;
 
-                // Retards : commandes DISTINCTES en retard — même calcul que
-                // l'ancien écran (une commande comptée une seule fois même si
-                // le couturier y a plusieurs pièces en retard).
                 int nbRetards = pieces
                     .Where(p => p.Statut != "Livree" &&
                                 p.Commande != null &&
-                                p.Commande.DateFin != default(DateTime) &&
+                                p.Commande.DateFin != default &&
                                 p.Commande.DateFin.Date < aujourdhui)
                     .Select(p => p.IdCommande)
                     .Distinct()
                     .Count();
 
-                // CA = somme des MontantCouture de TOUTES les pièces du couturier
-                decimal caTotal = pieces.AsEnumerable().Sum(p => p.MontantCouture);
+                decimal caTotal = pieces.Sum(p => p.MontantCouture);
 
                 var vm = new ChargeCouturierVm
                 {
-                    NomComplet = c.NomComplet,
-                    TotalPieces = total,
-                    PiecesAFaire = aFaire,
+                    NomComplet    = c.NomComplet,
+                    TotalPieces   = total,
+                    PiecesAFaire  = aFaire,
                     PiecesEnCours = enCours,
                     PiecesTerminees = terminees,
                     NbRetards = nbRetards,
-                    CaTotal = caTotal
+                    CaTotal   = caTotal
                 };
 
-                // Jauge : largeurs étoiles proportionnelles — aucune division,
-                // donc 0 pièce donne une barre entièrement grise.
                 if (total > 0)
                 {
                     vm.LargeurTerminees = new GridLength(terminees, GridUnitType.Star);
@@ -451,7 +489,42 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // Étape 2-ter : Carte anti-fraude (Boss uniquement)
+        // Étape 7 — Statistiques retard (Boss uniquement)
+        // ------------------------------------------------------------------
+        private async Task ChargerStatsRetardAsync()
+        {
+            if (CarteStatsRetard == null) return;
+
+            if (_roleConnecte != "Boss")
+            {
+                CarteStatsRetard.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            CarteStatsRetard.Visibility = Visibility.Visible;
+
+            try
+            {
+                var retardService = App.Services.GetService<IRetardAlerteService>();
+                if (retardService == null) return;
+
+                var stats = await retardService.ObtenirStatsDashboardAsync();
+
+                if (TxtStatRetardsEnCours != null)
+                    TxtStatRetardsEnCours.Text = stats.NbCommandesEnRetard.ToString();
+                if (TxtStatReportsMois != null)
+                    TxtStatReportsMois.Text = stats.NbReportsMois.ToString();
+                if (TxtStatClientsPrevenusMois != null)
+                    TxtStatClientsPrevenusMois.Text = stats.NbClientsPrevenusMois.ToString();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Dashboard] ChargerStatsRetard : " + ex.Message);
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Carte anti-fraude (Boss uniquement)
         // ------------------------------------------------------------------
         private void ChargerCarteAntiFraude()
         {
@@ -471,7 +544,6 @@ namespace GestionCoutureApp.Views
             var depuis = DateTime.UtcNow.AddDays(-30);
             var indicateurs = auditService.ObtenirIndicateurAntiFraude(depuis);
 
-            // Seuil d'alerte : configurable dans Paramètres (défaut 3)
             int seuilAlerte = 3;
             try
             {
@@ -486,46 +558,41 @@ namespace GestionCoutureApp.Views
             }
             catch { }
 
-            // Créer les ViewModels pour l'affichage
             var vms = indicateurs.Select(i => new AntiFraudeVm
             {
-                IdOperateur = i.IdOperateur,
-                NomOperateur = i.NomOperateur,
-                RoleOperateur = i.RoleOperateur,
-                Suppressions = i.Suppressions,
-                Annulations = i.Annulations,
+                IdOperateur      = i.IdOperateur,
+                NomOperateur     = i.NomOperateur,
+                RoleOperateur    = i.RoleOperateur,
+                Suppressions     = i.Suppressions,
+                Annulations      = i.Annulations,
                 ModificationsPrix = i.ModificationsPrix,
-                Total = i.Total,
+                Total            = i.Total,
                 EstAuDessusSeuil = i.Total >= seuilAlerte,
                 Couleur = i.Total >= seuilAlerte
-                    ? new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26))  // Rouge
-                    : new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80))  // Gris
+                    ? new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26))
+                    : new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80))
             }).ToList();
 
             if (ItemsAntiFraude != null)
                 ItemsAntiFraude.ItemsSource = vms;
 
-            // Message si aucune action suspecte
             if (TxtZeroAntiFraude != null)
-                TxtZeroAntiFraude.Visibility = vms.Count == 0
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                TxtZeroAntiFraude.Visibility = vms.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        // Handler clic sur une ligne : ouvre le journal filtré
+        // Handler clic sur une ligne anti-fraude
         private void LigneAntiFraude_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (sender is not Border border || border.DataContext is not AntiFraudeVm vm)
                 return;
 
-            // Ouvrir une nouvelle fenêtre JournalAuditWindow filtrée sur cet utilisateur
             var window = new JournalAuditWindow(vm.IdOperateur, vm.NomOperateur);
             window.Owner = Window.GetWindow(this);
             window.ShowDialog();
         }
 
         // ------------------------------------------------------------------
-        // Dernières commandes — paginées (10 par page)
+        // Dernières commandes — paginées
         // ------------------------------------------------------------------
         private void ChargerDernieresCommandes() => _ = ChargerDernieresCommandesAsync();
 
@@ -575,6 +642,51 @@ namespace GestionCoutureApp.Views
         {
             _dashPage++;
             await ChargerDernieresCommandesAsync();
+        }
+
+        // ------------------------------------------------------------------
+        // WhatsApp "Prêt"
+        // ------------------------------------------------------------------
+        private async void BtnWhatsAppPret_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+            if (btn.Tag is not EcheanceDashboardVm vm) return;
+
+            if (string.IsNullOrWhiteSpace(vm.Telephone))
+            {
+                MessageBox.Show("Ce client n'a pas de numéro de téléphone enregistré.",
+                    "Numéro manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var commande = _commandeService.ObtenirParId(vm.IdCommande);
+            if (commande == null)
+            {
+                MessageBox.Show("La commande est introuvable.",
+                    "Commande manquante", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (commande.Client == null)
+            {
+                MessageBox.Show("Le client de cette commande est introuvable.",
+                    "Client manquant", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                btn.IsEnabled = false;
+                await _whatsAppService.NotifierCommandePreteAsync(commande);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur WhatsApp : " + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                btn.IsEnabled = true;
+            }
         }
     }
 }

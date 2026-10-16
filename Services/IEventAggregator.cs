@@ -6,19 +6,26 @@ namespace GestionCoutureApp.Services
     /// </summary>
     public interface IEventAggregator
     {
-        /// <summary>
-        /// S'abonner aux changements de paramètres.
-        /// </summary>
+        // ── Paramètres / UI ──────────────────────────────────────────────
+
+        /// <summary>S'abonner aux changements de paramètres.</summary>
         void Subscribe(SettingsChangedType type, Action<SettingsChangedEvent> handler);
-        
-        /// <summary>
-        /// Se désabonner des changements de paramètres.
-        /// </summary>
+
+        /// <summary>Se désabonner des changements de paramètres.</summary>
         void Unsubscribe(SettingsChangedType type, Action<SettingsChangedEvent> handler);
-        
-        /// <summary>
-        /// Publier un changement de paramètres.
-        /// </summary>
+
+        /// <summary>Publier un changement de paramètres.</summary>
         void Publish(SettingsChangedEvent @event);
+
+        // ── Domaine métier (données) ──────────────────────────────────────
+
+        /// <summary>S'abonner aux changements de données d'un domaine métier.</summary>
+        void Subscribe(DomainChangedType type, Action<DomainChangedEvent> handler);
+
+        /// <summary>Se désabonner des changements de données d'un domaine métier.</summary>
+        void Unsubscribe(DomainChangedType type, Action<DomainChangedEvent> handler);
+
+        /// <summary>Publier un changement de données métier.</summary>
+        void Publish(DomainChangedEvent @event);
     }
 }

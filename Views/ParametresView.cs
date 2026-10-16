@@ -317,6 +317,14 @@ namespace GestionCoutureApp.Views
             TxtPrimeZeroDefaut.Text    = (await _p.ObtenirPrimeZeroDefaut()).ToString("N0");
             TxtDelaiAnnulationSecrétaire.Text = (await _p.ObtenirDelaiAnnulationSecretaireMinutes()).ToString();
 
+            // Étape 7 — alertes retard
+            int alerteMin  = await _p.ObtenirRetardAlerteAvantMinutes();
+            foreach (ComboBoxItem item in CboRetardAlerteMinutes.Items)
+                item.IsSelected = item.Tag?.ToString() == alerteMin.ToString();
+            TxtRetardReportJours.Text = (await _p.ObtenirRetardReportJours()).ToString();
+            TxtRetardMessageModele.Text = await _p.ObtenirRetardMessageModele();
+            MajApercuMessageRetard();
+
             // Messages
             TxtMsgCommandePrete.Text  = await _p.ObtenirMsgCommandePrete();
             TxtMsgRappelRdv.Text      = await _p.ObtenirMsgRappelRdv();
@@ -740,9 +748,45 @@ namespace GestionCoutureApp.Views
                 { Erreur(TxtMsgMetier, "Délai annulation doit être entre 1 et 120 minutes."); return; }
                 await _p.DefinirDelaiAnnulationSecretaireMinutes(delaiAnnul);
 
+                // Étape 7 — alertes retard
+                var selMin = CboRetardAlerteMinutes.SelectedItem as ComboBoxItem;
+                if (selMin?.Tag is not string tagMin || !int.TryParse(tagMin, out int alerteMin) || (alerteMin != 60 && alerteMin != 120))
+                { Erreur(TxtMsgMetier, "Choisissez 60 ou 120 minutes pour le délai d'alerte retard."); return; }
+                await _p.DefinirRetardAlerteAvantMinutes(alerteMin);
+
+                if (!int.TryParse(TxtRetardReportJours.Text, out int reportJ) || reportJ < 1)
+                { Erreur(TxtMsgMetier, "Le report doit être d'au moins 1 jour."); return; }
+                await _p.DefinirRetardReportJours(reportJ);
+
+                if (string.IsNullOrWhiteSpace(TxtRetardMessageModele.Text))
+                { Erreur(TxtMsgMetier, "Le modèle de message d'excuse ne peut pas être vide."); return; }
+                await _p.DefinirRetardMessageModele(TxtRetardMessageModele.Text.Trim());
+
                 OK(TxtMsgMetier, _langueActive == "fr" ? "✅  Enregistré." : "✅  Saved.");
             }
             catch (Exception ex) { Erreur(TxtMsgMetier, ex.Message); }
+        }
+
+        // ==================================================================
+        // Onglet Métier — aperçu message d'excuse retard (Étape 7)
+        // ==================================================================
+        private void TxtRetardMessageModele_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            MajApercuMessageRetard();
+        }
+
+        private void MajApercuMessageRetard()
+        {
+            if (TxtApercuMessageRetard == null || TxtRetardMessageModele == null) return;
+            string modele = TxtRetardMessageModele.Text;
+            if (string.IsNullOrWhiteSpace(modele)) { TxtApercuMessageRetard.Text = ""; return; }
+            // Exemple avec des valeurs fictives
+            TxtApercuMessageRetard.Text = modele
+                .Replace("{client}",          "Fatou Ouédraogo")
+                .Replace("{numero_commande}", "42")
+                .Replace("{type_vetement}",   "Boubou brodé")
+                .Replace("{nouvelle_date}",   DateTime.Today.AddDays(1).ToString("dd/MM/yyyy"))
+                .Replace("{atelier}",         "Retouche Choco");
         }
 
         // ==================================================================

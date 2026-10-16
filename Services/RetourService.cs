@@ -14,13 +14,16 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IAuditService _auditService;
+        private readonly IEventAggregator? _eventAggregator;
 
         public RetourService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
-            IAuditService auditService)
+            IAuditService auditService,
+            IEventAggregator? eventAggregator = null)
         {
             _contextFactory = contextFactory;
             _auditService   = auditService;
+            _eventAggregator = eventAggregator;
         }
 
         // ── Includes systématiques ────────────────────────────────────────
@@ -208,6 +211,8 @@ namespace GestionCoutureApp.Services
                 tx.Rollback();
                 throw;
             }
+
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
         }
 
         public void Modifier(Retour retour)
@@ -228,6 +233,7 @@ namespace GestionCoutureApp.Services
                 existant.CheminPhotoDefaut = retour.CheminPhotoDefaut;
 
             ctx.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -245,6 +251,7 @@ namespace GestionCoutureApp.Services
 
             retour.Statut = "En reprise";
             ctx.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
 
             _ = _auditService.EnregistrerActionAsync(
                 idOperateur, nomOperateur, "Operateur",
@@ -275,6 +282,7 @@ namespace GestionCoutureApp.Services
             retour.IdOperateurResolution  = idOperateur;
             retour.NomOperateurResolution = nomOperateur;
             ctx.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
 
             _ = _auditService.EnregistrerActionAsync(
                 idOperateur, nomOperateur, "Operateur",
@@ -321,6 +329,7 @@ namespace GestionCoutureApp.Services
 
             retour.Statut = "Rendu";
             ctx.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
 
             _ = _auditService.EnregistrerActionAsync(
                 idOperateur, nomOperateur, "Operateur",
@@ -382,6 +391,8 @@ namespace GestionCoutureApp.Services
                 "RETOUR_STATUT_RECULE", "Retour", idRetour,
                 new { StatutAvant = statutAvant },
                 new { StatutApres = statutApres, Motif = motif });
+
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
         }
 
         public void Annuler(int idRetour, string motif, string nomAnnulateur)
@@ -414,6 +425,7 @@ namespace GestionCoutureApp.Services
             ctx.SaveChanges();
 
             // L'audit est géré par l'appelant (RetoursView) qui a le rôle et l'id
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Retour });
         }
 
         // ═══════════════════════════════════════════════════════════════════

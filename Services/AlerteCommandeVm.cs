@@ -48,6 +48,16 @@ namespace GestionCoutureApp.Services
         /// <summary>Ids des PieceCommande regroupées dans cette carte.</summary>
         public List<int> IdsPiecesCommande { get; set; } = new();
 
+        // ── Étape 7 ──────────────────────────────────────────────────────
+        public string TypeCibleRetard { get; set; } = string.Empty;
+        public int IdCibleRetard { get; set; }
+        public int IdClientRetard { get; set; }
+        public int NbFoisPrevenu { get; set; }
+        public bool AfficherPrevenirClient { get; set; }
+        public string CompteurPrevenu =>
+            NbFoisPrevenu > 0 ? $"Client prévenu {NbFoisPrevenu} fois" : string.Empty;
+        public bool AfficherCompteurPrevenu => NbFoisPrevenu > 0;
+
         // ── Étape 6 : champs retour ───────────────────────────────────────
         /// <summary>True si cette carte représente un retour (pas une commande).</summary>
         public bool EstAlertRetour { get; set; } = false;
@@ -60,8 +70,11 @@ namespace GestionCoutureApp.Services
 
         // ── Propriétés calculées utilisées par le XAML ───────────────────
 
-        /// <summary>True si le bouton WhatsApp doit être visible.</summary>
-        public bool AfficherWhatsApp => !string.IsNullOrEmpty(LibelleBoutonWhatsApp) && !EstAlertRetour;
+        /// <summary>True si le bouton WhatsApp générique doit être visible (pas le flux « Prévenir »).</summary>
+        public bool AfficherWhatsApp =>
+            !AfficherPrevenirClient
+            && !string.IsNullOrEmpty(LibelleBoutonWhatsApp)
+            && !EstAlertRetour;
 
         /// <summary>Date d'échéance formatée pour l'affichage (dd/MM/yy HH:mm).</summary>
         public string DateEcheanceAffichee => DateEcheance.ToString("dd/MM/yy HH:mm");

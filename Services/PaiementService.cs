@@ -10,6 +10,7 @@ namespace GestionCoutureApp.Services
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<PaiementService> _logger;
         private readonly IClock _clock;
+        private readonly IEventAggregator? _eventAggregator;
 
         // Verrou statique pour éviter les numéros de reçu en doublon
         private static readonly object _verrou = new();
@@ -17,11 +18,13 @@ namespace GestionCoutureApp.Services
         public PaiementService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
             ILogger<PaiementService> logger,
-            IClock? clock = null)
+            IClock? clock = null,
+            IEventAggregator? eventAggregator = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
             _clock = clock ?? new SystemClock();
+            _eventAggregator = eventAggregator;
         }
 
         // ----------------------------------------------------------------
@@ -285,6 +288,8 @@ namespace GestionCoutureApp.Services
                 _logger.LogInformation(
                     "Paiement {Recu} enregistré — commande {IdCommande} — {Montant:N0} FCFA — opérateur {Op}",
                     paiement.RecuNumero, paiement.IdCommande, paiement.MontantPaye, nomOperateur);
+
+                _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Paiement });
             }
         }
 
@@ -349,6 +354,8 @@ namespace GestionCoutureApp.Services
             _logger.LogWarning(
                 "Paiement {Recu} ANNULÉ par {Annulateur} (ID {IdAnnulateur}) — motif : {Motif}",
                 paiement.RecuNumero, nomAnnulateur, idAnnulateur, motif);
+
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Paiement });
         }
 
         // ----------------------------------------------------------------

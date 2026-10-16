@@ -7,10 +7,14 @@ namespace GestionCoutureApp.Services
     public class DepenseService : IDepenseService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
+        private readonly IEventAggregator? _eventAggregator;
 
-        public DepenseService(IDbContextFactory<ApplicationDbContext> contextFactory)
+        public DepenseService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            IEventAggregator? eventAggregator = null)
         {
             _contextFactory = contextFactory;
+            _eventAggregator = eventAggregator;
         }
 
         public List<Depense> ObtenirTous()
@@ -56,6 +60,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             context.Depenses.Add(depense);
             context.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Depense });
         }
 
         public void Valider(int idDepense, string nomBoss)
@@ -73,6 +78,7 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException("Impossible de valider une dépense annulée.");
             dep.StatutValidation = "Validee";
             context.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Depense });
         }
 
         public void Annuler(int idDepense, string motif, string nomAnnulateur)
@@ -97,6 +103,7 @@ namespace GestionCoutureApp.Services
             depense.DateAnnulation = DateTime.Now;
             depense.NomAnnulateur = nomAnnulateur;
             context.SaveChanges();
+            _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Depense });
         }
 
         public decimal TotalParPeriode(DateTime debut, DateTime fin)

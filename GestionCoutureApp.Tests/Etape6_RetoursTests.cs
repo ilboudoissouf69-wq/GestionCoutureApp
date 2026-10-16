@@ -634,6 +634,10 @@ namespace GestionCoutureApp.Tests
     /// <summary>Stub IParametresService minimal pour AlerteService.</summary>
     internal class ParametresServiceStub : IParametresService
     {
+        // ── Propriétés configurables pour les tests Étape 7 ──────────────
+        public int    RetardAlerteMinutes { get; set; } = 120;
+        public int    RetardReportJours   { get; set; } = 1;
+
         public Task<string?> ObtenirValeur(string cle) => Task.FromResult<string?>(null);
         public Task DefinirValeur(string cle, string valeur) => Task.CompletedTask;
         public Task<int>     ObtenirDelaiAlerteRendezVousHeures()           => Task.FromResult(3);
@@ -682,5 +686,12 @@ namespace GestionCoutureApp.Tests
         public Task          DefinirCouleurAccent(string v)                 => Task.CompletedTask;
         public Task<string>  ObtenirLangue()                                => Task.FromResult("fr");
         public Task          DefinirLangue(string v)                        => Task.CompletedTask;
+        public Task<int>     ObtenirRetardAlerteAvantMinutes()              => Task.FromResult(RetardAlerteMinutes);
+        public Task          DefinirRetardAlerteAvantMinutes(int v)         => Task.CompletedTask;
+        public Task<int>     ObtenirRetardReportJours()                     => Task.FromResult(RetardReportJours);
+        public Task          DefinirRetardReportJours(int v)                => Task.CompletedTask;
+        public Task<string>  ObtenirRetardMessageModele()                   =>
+            Task.FromResult(ParametresService.ModeleExcuseRetardDefaut);
+        public Task          DefinirRetardMessageModele(string v)           => Task.CompletedTask;
     }
 }
