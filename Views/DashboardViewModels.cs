@@ -91,3 +91,19 @@ namespace GestionCoutureApp.Views
             $"⚠ Retards : {NbRetards} · CA : {CaTotal:N0} FCFA";
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// Étape 2-ter : ViewModel pour la carte anti-fraude
+// ══════════════════════════════════════════════════════════════════════
+public class AntiFraudeVm
+{
+    public int IdOperateur { get; set; }
+    public string NomOperateur { get; set; } = string.Empty;
+    public string RoleOperateur { get; set; } = string.Empty;
+    public int Suppressions { get; set; }
+    public int Annulations { get; set; }
+    public int ModificationsPrix { get; set; }
+    public int Total { get; set; }
+    public bool EstAuDessusSeuil { get; set; }
+    public System.Windows.Media.Brush Couleur { get; set; } = System.Windows.Media.Brushes.Gray;
+}

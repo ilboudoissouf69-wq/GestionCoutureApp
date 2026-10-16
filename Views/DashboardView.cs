@@ -44,6 +44,7 @@ namespace GestionCoutureApp.Views
                 await ChargerEcheancesAsync();
                 ChargerGraphiqueRevenus();
                 ChargerStatsCouturiers();
+                ChargerCarteAntiFraude();  // Étape 2-ter
                 ChargerDernieresCommandes();
             }
             catch (Exception ex)
@@ -447,6 +448,80 @@ namespace GestionCoutureApp.Views
             }
 
             ItemsChargeCouturiers.ItemsSource = modeles;
+        }
+
+        // ------------------------------------------------------------------
+        // Étape 2-ter : Carte anti-fraude (Boss uniquement)
+        // ------------------------------------------------------------------
+        private void ChargerCarteAntiFraude()
+        {
+            if (_roleConnecte != "Boss")
+            {
+                if (CarteAntiFraude != null)
+                    CarteAntiFraude.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (CarteAntiFraude != null)
+                CarteAntiFraude.Visibility = Visibility.Visible;
+
+            var auditService = App.Services.GetService<IAuditService>();
+            if (auditService == null) return;
+
+            var depuis = DateTime.UtcNow.AddDays(-30);
+            var indicateurs = auditService.ObtenirIndicateurAntiFraude(depuis);
+
+            // Seuil d'alerte : configurable dans Paramètres (défaut 3)
+            int seuilAlerte = 3;
+            try
+            {
+                var parametresService = App.Services.GetService<IParametresService>();
+                if (parametresService != null)
+                {
+                    var valeur = parametresService.ObtenirValeur("seuil_alerte_antifraude")
+                        .GetAwaiter().GetResult();
+                    if (int.TryParse(valeur, out int s) && s > 0)
+                        seuilAlerte = s;
+                }
+            }
+            catch { }
+
+            // Créer les ViewModels pour l'affichage
+            var vms = indicateurs.Select(i => new AntiFraudeVm
+            {
+                IdOperateur = i.IdOperateur,
+                NomOperateur = i.NomOperateur,
+                RoleOperateur = i.RoleOperateur,
+                Suppressions = i.Suppressions,
+                Annulations = i.Annulations,
+                ModificationsPrix = i.ModificationsPrix,
+                Total = i.Total,
+                EstAuDessusSeuil = i.Total >= seuilAlerte,
+                Couleur = i.Total >= seuilAlerte
+                    ? new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26))  // Rouge
+                    : new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80))  // Gris
+            }).ToList();
+
+            if (ItemsAntiFraude != null)
+                ItemsAntiFraude.ItemsSource = vms;
+
+            // Message si aucune action suspecte
+            if (TxtZeroAntiFraude != null)
+                TxtZeroAntiFraude.Visibility = vms.Count == 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
+
+        // Handler clic sur une ligne : ouvre le journal filtré
+        private void LigneAntiFraude_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is not Border border || border.DataContext is not AntiFraudeVm vm)
+                return;
+
+            // Ouvrir une nouvelle fenêtre JournalAuditWindow filtrée sur cet utilisateur
+            var window = new JournalAuditWindow(vm.IdOperateur, vm.NomOperateur);
+            window.Owner = Window.GetWindow(this);
+            window.ShowDialog();
         }
 
         // ------------------------------------------------------------------

@@ -277,6 +277,14 @@ namespace GestionCoutureApp.Views
                     _fichePanel.Arrange(
                         new Rect(new Point(0, 0), _fichePanel.DesiredSize));
                     pd.PrintVisual(_fichePanel, $"Fiche atelier CMD#{_commande.IdCommande}");
+
+                    // ── Étape 2-ter : marquer le reçu comme imprimé ───────────
+                    // La fiche atelier compte comme une impression du reçu (même
+                    // garde : prix verrouillé pour la Secrétaire après impression).
+                    var commandeService = Microsoft.Extensions.DependencyInjection
+                        .ServiceProviderServiceExtensions.GetRequiredService<ICommandeService>(App.Services);
+                    commandeService.MarquerRecuImprime(_commande.IdCommande);
+
                     MessageBox.Show("Fiche atelier imprimée avec succès !",
                         "Impression", MessageBoxButton.OK, MessageBoxImage.Information);
                 }

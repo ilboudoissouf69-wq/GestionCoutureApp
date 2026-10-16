@@ -76,6 +76,7 @@ namespace GestionCoutureApp
             services.AddSingleton<ITresorerieService, TresorerieService>();
             services.AddSingleton<IAuditService, AuditService>();
             services.AddSingleton<IMesureClientService, MesureClientService>();
+            services.AddSingleton<IBrouillonCommandeService, BrouillonCommandeService>();
             
             // EventAggregator pour notifications globales entre vues
             services.AddSingleton<IEventAggregator, EventAggregator>();

@@ -487,6 +487,55 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- ── Étape 2 : Délai d'annulation rapide ── -->
+                    <Border Style="{StaticResource ParamCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                <Border Width="4" CornerRadius="2"
+                                        Background="#DC2626" Margin="0,0,12,0"/>
+                                <StackPanel>
+                                    <TextBlock Text="Suppression &amp; Annulation"
+                                               FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"/>
+                                    <TextBlock Text="Contrôle des opérations sensibles"
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Background="#FEF2F2" BorderBrush="#FECACA"
+                                    BorderThickness="1" CornerRadius="8" Padding="16,12">
+                                <StackPanel>
+                                    <TextBlock Text="Délai d'annulation rapide de la secrétaire (minutes)"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource PrimaryBrush}"
+                                               Margin="0,0,0,8"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="TxtDelaiAnnulationSecrétaire"
+                                                 Grid.Column="0"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 Text="10"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="Valeur entre 1 et 120 minutes"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,0,0"/>
+                                    </Grid>
+                                    <TextBlock Text="La secrétaire peut annuler une commande qu'elle a créée UNIQUEMENT pendant ce délai, si aucun paiement n'est lié, aucune pièce n'a dépassé « À faire », et le reçu n'a pas été imprimé. Après ce délai ou si l'une de ces conditions n'est pas remplie, seul le Boss peut supprimer (avec motif obligatoire)."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,12,0,0"
+                                               LineHeight="16"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
                     <Button x:Name="BtnSauvegarderMetier"
                             Content="💾  Enregistrer les réglages"
                             Style="{StaticResource BtnSuccess}"

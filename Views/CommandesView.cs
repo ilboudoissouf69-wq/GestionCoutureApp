@@ -27,6 +27,7 @@ namespace GestionCoutureApp.Views
         private readonly IPaiementService _paiementService;
         private readonly IReceiptService _receiptService;
         private readonly IMesureClientService _mesureClientService;
+        private readonly IBrouillonCommandeService _brouillonService;
 
         private int _commandeSelectionneeId;
         private int? _pieceSelectionneeId;
@@ -70,6 +71,11 @@ namespace GestionCoutureApp.Views
 
         // Liste complète des clients (pour le filtre temps réel du combobox modal)
         private List<Client> _tousLesClients = new();
+
+        // ── BROUILLON AUTOMATIQUE (Étape 5A) ────────────────────────────
+        private System.Windows.Threading.DispatcherTimer? _timerBrouillon;
+        private bool _brouillonEnCours = false;
+        
         // ================================================================
         // HELPER OPÉRATEUR
         // ================================================================
@@ -172,6 +178,7 @@ namespace GestionCoutureApp.Views
                 _paiementService = App.Services.GetRequiredService<IPaiementService>();
                 _receiptService  = App.Services.GetRequiredService<IReceiptService>();
                 _mesureClientService = App.Services.GetRequiredService<IMesureClientService>();
+                _brouillonService = App.Services.GetRequiredService<IBrouillonCommandeService>();
 
                 var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
                 _context = contextFactory.CreateDbContext();
@@ -202,6 +209,9 @@ namespace GestionCoutureApp.Views
                 // Fix sidebar : activer le bouton Commandes quelle que soit la page d'origine
                 if (Window.GetWindow(this) is MainWindow mainWin)
                     mainWin.ActiverBoutonCommandes();
+
+                // Étape 5A — Vérifier si un brouillon existe
+                _ = VerifierBrouillonExistantAsync();
             };
             Unloaded += (s, e) =>
             {
@@ -313,6 +323,9 @@ namespace GestionCoutureApp.Views
 
             _ = ChargerCommandes();
             ViderChamps();
+
+            // ── Étape 5A : Initialiser le brouillon automatique ──
+            InitialiserBrouillonAutomatique();
         }
 
         private void OnLanguageChanged(SettingsChangedEvent evt) => Dispatcher.Invoke(() => { });
@@ -426,6 +439,9 @@ namespace GestionCoutureApp.Views
                 // fait dans CmbTypeCarte_SelectionChanged quand le type est choisi.
                 if (!_modalModeCreation)
                     RafraichirPreRemplissageMesuresCartes();
+
+                // Étape 5A — Déclencher sauvegarde brouillon
+                DeclenencherSauvegardeBrouillon();
             }
             else
             {
@@ -2626,40 +2642,99 @@ namespace GestionCoutureApp.Views
 
 
         // ================================================================
-        // SUPPRESSION D'UNE COMMANDE (factorisée)
+        // SUPPRESSION / ANNULATION D'UNE COMMANDE (Étape 2-ter)
         // ================================================================
         private async Task SupprimerCommandeAsync(int idCommande)
         {
-            string? motif = DemanderMotifSuppression();
-            if (string.IsNullOrWhiteSpace(motif)) return;
+            var op    = App.Services.GetRequiredService<IAuthService>().UtilisateurConnecte;
+            int idOp  = op?.IdEmploye ?? 0;
+            string nomOp = op != null ? $"{op.Prenom} {op.Nom}".Trim() : string.Empty;
+            string role = op?.Role ?? "";
 
-            var r = MessageBox.Show(
-                $"Supprimer définitivement cette commande ?\n\nMotif : {motif}\n\nCette action est irréversible.",
-                "Confirmation suppression", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (r != MessageBoxResult.Yes) return;
-
-            try
+            // ── Boss : suppression logique avec motif obligatoire ──────────
+            if (role == "Boss")
             {
-                var op    = App.Services.GetRequiredService<IAuthService>().UtilisateurConnecte;
-                int idOp  = op?.IdEmploye ?? 0;
-                string nomOp = op != null ? $"{op.Prenom} {op.Nom}".Trim() : string.Empty;
+                string? motif = DemanderMotifSuppression();
+                if (string.IsNullOrWhiteSpace(motif)) return;
 
-                IAuditService? auditService = null;
-                try { auditService = App.Services.GetService<IAuditService>(); } catch { }
+                var r = MessageBox.Show(
+                    $"Supprimer définitivement cette commande ?\n\nMotif : {motif}\n\nCette action est irréversible.",
+                    "Confirmation suppression", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (r != MessageBoxResult.Yes) return;
 
-                await _commandeService.SupprimerAsync(idCommande, idOp, nomOp, motif, auditService);
-                await ChargerCommandes();
-                if (_commandeSelectionneeId == idCommande)
+                try
                 {
-                    _commandeSelectionneeId = 0;
-                    ViderChamps();
+                    IAuditService? auditService = null;
+                    try { auditService = App.Services.GetService<IAuditService>(); } catch { }
+
+                    await _commandeService.SupprimerAsync(idCommande, idOp, nomOp, motif, auditService);
+                    await ChargerCommandes();
+                    if (_commandeSelectionneeId == idCommande)
+                    {
+                        _commandeSelectionneeId = 0;
+                        ViderChamps();
+                    }
+                    MessageBox.Show("Commande supprimée avec succès.", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                MessageBox.Show("Commande supprimée avec succès.", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                catch (InvalidOperationException ex)
+                { MessageBox.Show(ex.Message, "Suppression impossible", MessageBoxButton.OK, MessageBoxImage.Warning); }
+                catch (Exception ex)
+                { MessageBox.Show("Erreur inattendue : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
             }
-            catch (InvalidOperationException ex)
-            { MessageBox.Show(ex.Message, "Suppression impossible", MessageBoxButton.OK, MessageBoxImage.Warning); }
-            catch (Exception ex)
-            { MessageBox.Show("Erreur inattendue : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
+            // ── Secrétaire : annulation rapide (fenêtre limitée) ───────────
+            else if (role == "Secretaire")
+            {
+                try
+                {
+                    // Vérifier d'abord si l'annulation est possible
+                    var (autorise, raison) = _commandeService.PeutAnnulerParSecretaire(idCommande, idOp);
+                    if (!autorise)
+                    {
+                        MessageBox.Show(
+                            $"Annulation impossible : {raison}\n\n{CommandeService.MessageDemandezAuBoss}",
+                            "Annulation refusée",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    var r = MessageBox.Show(
+                        "Voulez-vous annuler cette commande ?\n\nCette annulation est tracée dans le journal d'audit.",
+                        "Confirmation annulation",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (r != MessageBoxResult.Yes) return;
+
+                    await _commandeService.AnnulerParSecretaireAsync(idCommande, idOp, nomOp);
+                    await ChargerCommandes();
+                    if (_commandeSelectionneeId == idCommande)
+                    {
+                        _commandeSelectionneeId = 0;
+                        ViderChamps();
+                    }
+                    MessageBox.Show("Commande annulée avec succès.", "Succès", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    MessageBox.Show(
+                        $"Annulation impossible :\n\n{ex.Message}",
+                        "Annulation refusée",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur inattendue : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Vous n'avez pas les droits pour supprimer ou annuler une commande.",
+                    "Accès refusé",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
 
         private string? DemanderMotifSuppression()

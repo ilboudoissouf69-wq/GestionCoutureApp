@@ -315,6 +315,7 @@ namespace GestionCoutureApp.Views
             TxtSalaireSecretaire.Text  = (await _p.ObtenirSalaireMensuelSecretaire()).ToString("N0");
             TxtTauxCommission.Text     = (await _p.ObtenirTauxCommissionDefaut()).ToString();
             TxtPrimeZeroDefaut.Text    = (await _p.ObtenirPrimeZeroDefaut()).ToString("N0");
+            TxtDelaiAnnulationSecrétaire.Text = (await _p.ObtenirDelaiAnnulationSecretaireMinutes()).ToString();
 
             // Messages
             TxtMsgCommandePrete.Text  = await _p.ObtenirMsgCommandePrete();
@@ -732,6 +733,12 @@ namespace GestionCoutureApp.Views
                     out decimal p) || p < 0)
                 { Erreur(TxtMsgMetier, "Prime invalide."); return; }
                 await _p.DefinirPrimeZeroDefaut(p);
+
+                // Étape 2 : délai d'annulation rapide de la Secrétaire
+                if (!int.TryParse(TxtDelaiAnnulationSecrétaire.Text, out int delaiAnnul)
+                    || delaiAnnul < 1 || delaiAnnul > 120)
+                { Erreur(TxtMsgMetier, "Délai annulation doit être entre 1 et 120 minutes."); return; }
+                await _p.DefinirDelaiAnnulationSecretaireMinutes(delaiAnnul);
 
                 OK(TxtMsgMetier, _langueActive == "fr" ? "✅  Enregistré." : "✅  Saved.");
             }

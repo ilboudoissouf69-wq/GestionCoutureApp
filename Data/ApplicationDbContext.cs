@@ -40,6 +40,8 @@ namespace GestionCoutureApp.Data
         // Étape 4 — Mesures réutilisables par client et type de vêtement
         public DbSet<MesureClient> MesuresClient { get; set; }
 
+        // Étape 5 — Brouillon automatique de commande (un seul par utilisateur)
+        public DbSet<BrouillonCommande> BrouillonsCommande { get; set; }
 
         // Point 3 — Depenses
         public DbSet<Depense> Depenses { get; set; }
@@ -195,6 +197,12 @@ namespace GestionCoutureApp.Data
                 .HasForeignKey(r => r.IdCouturierReprise)
                 .OnDelete(DeleteBehavior.SetNull)
                 .IsRequired(false);
+
+            // ── Étape 5 — BrouillonCommande ─────────────────────────────────
+            // Index unique : un seul brouillon par employé
+            modelBuilder.Entity<BrouillonCommande>()
+                .HasIndex(b => b.IdEmploye)
+                .IsUnique();
         }
     }
 }

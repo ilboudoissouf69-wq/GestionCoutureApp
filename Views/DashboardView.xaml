@@ -682,6 +682,87 @@
                 </StackPanel>
             </Border>
 
+            <!-- ══════════════════════════════════════════════════════════
+                 CARTE ANTI-FRAUDE (Boss uniquement, Étape 2-ter)
+            ══════════════════════════════════════════════════════════ -->
+            <Border x:Name="CarteAntiFraude"
+                    Background="White" CornerRadius="16" Padding="20"
+                    BorderBrush="{StaticResource DashBorderBrush}" BorderThickness="1"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="⚠️ Suppressions répétées (30 derniers jours)"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       Foreground="#B91C1C"/>
+                            <TextBlock Text="Utilisateurs ayant supprimé ou annulé plusieurs commandes"
+                                       FontSize="11"
+                                       Foreground="{StaticResource SlateMuted}"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <!-- Trait décoratif rouge -->
+                        <Border Grid.Column="1"
+                                Width="4" CornerRadius="2"
+                                VerticalAlignment="Stretch"
+                                Background="#B91C1C"
+                                Margin="0,2,0,2"/>
+                    </Grid>
+
+                    <!-- Message si aucun opérateur à afficher -->
+                    <TextBlock x:Name="TxtZeroAntiFraude"
+                               Text="Aucun comportement suspect détecté."
+                               FontSize="12"
+                               Foreground="{StaticResource SlateMuted}"
+                               Margin="0,8,0,0"
+                               Visibility="Collapsed"/>
+
+                    <!-- Liste des opérateurs suspects -->
+                    <ItemsControl x:Name="ItemsAntiFraude">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#FFF1F2"
+                                        CornerRadius="8"
+                                        Padding="12,10"
+                                        Margin="0,0,0,8"
+                                        BorderBrush="#FECACA" BorderThickness="1"
+                                        Cursor="Hand"
+                                        MouseLeftButtonDown="LigneAntiFraude_Click"
+                                        Tag="{Binding IdOperateur}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="#991B1B">
+                                                <Run Text="{Binding NomOperateur}"/>
+                                                <Run Text="(" Foreground="{StaticResource SlateMuted}"/>
+                                                <Run Text="{Binding RoleOperateur}" Foreground="{StaticResource SlateMuted}"/>
+                                                <Run Text=")" Foreground="{StaticResource SlateMuted}"/>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Description}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource SlateMuted}"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="Voir le journal →"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="#B91C1C"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </Page>

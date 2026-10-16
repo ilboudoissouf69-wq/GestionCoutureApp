@@ -25,6 +25,7 @@ namespace GestionCoutureApp.Tests
         private IDbContextFactory<ApplicationDbContext> _factory = null!;
         private CommandeService _commandeService = null!;
         private PaiementService _paiementService = null!;
+        private FakeClock _clock = null!;
 
         private const int IdBoss       = 1;
         private const int IdSecretaire = 2;
@@ -39,8 +40,13 @@ namespace GestionCoutureApp.Tests
                 .UseInMemoryDatabase($"T3_{Guid.NewGuid()}")
                 .Options;
             _factory = new T3DbContextFactory(options);
+            // FakeClock injectée pour que le délai d'annulation ne soit jamais
+            // dépassé par la vitesse d'exécution des tests.
+            _clock = new FakeClock(DateTime.UtcNow);
             var log = NullLoggerFactory.Instance;
-            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log));
+            _commandeService = new CommandeService(_factory,
+                new Logger<CommandeService>(log),
+                clock: _clock);
             _paiementService = new PaiementService(_factory, new Logger<PaiementService>(log));
 
             using var ctx = _factory.CreateDbContext();

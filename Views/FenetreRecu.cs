@@ -388,6 +388,16 @@ namespace GestionCoutureApp.Views
                     _receiptPanel.Arrange(
                         new Rect(new Point(0, 0), _receiptPanel.DesiredSize));
                     pd.PrintVisual(_receiptPanel, "Recu " + _paiement.RecuNumero);
+
+                    // ── Étape 2-ter : marquer le reçu comme imprimé ───────────
+                    // Seulement si l'impression est RÉELLEMENT lancée (pas l'aperçu).
+                    // La date de première impression est horodatée et verrouille
+                    // le prix pour la Secrétaire. Une réimpression ne change pas
+                    // la date de première impression mais est tracée dans l'audit.
+                    var commandeService = Microsoft.Extensions.DependencyInjection
+                        .ServiceProviderServiceExtensions.GetRequiredService<ICommandeService>(App.Services);
+                    commandeService.MarquerRecuImprime(_commande.IdCommande);
+
                     MessageBox.Show("Recu imprime avec succes !",
                         "Impression", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
