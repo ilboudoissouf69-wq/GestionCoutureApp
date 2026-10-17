@@ -78,6 +78,7 @@ namespace GestionCoutureApp.Views
         // ══════════════════════════════════════════════════════════════════
         private async Task ChargerDonnees()
         {
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("AlertesView.ChargerDonnees");
             try
             {
                 _alertesProduction = await _alerteService.ObtenirAlertesActuelles();

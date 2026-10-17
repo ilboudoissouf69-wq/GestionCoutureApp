@@ -86,6 +86,7 @@ namespace GestionCoutureApp.Views
         private async Task ChargerRetoursAsync()
         {
             if (!_initialise && TxtRecherche == null) return;
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("RetoursView.ChargerRetoursAsync");
             try
             {
                 string? motCle = TxtRecherche?.Text?.Trim();

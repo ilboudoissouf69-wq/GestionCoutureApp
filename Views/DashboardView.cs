@@ -118,6 +118,7 @@ namespace GestionCoutureApp.Views
             if (_refreshEnCours) return;
             _refreshEnCours = true;
 
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("DashboardView.RafraichirAsync");
             try
             {
                 // Conserver la position de défilement
@@ -134,13 +135,21 @@ namespace GestionCoutureApp.Views
                 // Mise à jour UI sur le thread Dispatcher
                 await Dispatcher.InvokeAsync(async () =>
                 {
+                    using var tUI = GestionCoutureApp.Helpers.PerfLogger.Start("DashboardView.UI");
                     ChargerCartesStats();
+                    tUI.Checkpoint("CartesStats");
                     await ChargerEcheancesAsync();
+                    tUI.Checkpoint("Echeances");
                     ChargerGraphiqueRevenus();
+                    tUI.Checkpoint("GraphiqueRevenus");
                     ChargerStatsCouturiers();
+                    tUI.Checkpoint("StatsCouturiers");
                     ChargerCarteAntiFraude();
+                    tUI.Checkpoint("AntiFraude");
                     await ChargerStatsRetardAsync(); // Étape 7
+                    tUI.Checkpoint("StatsRetard");
                     ChargerDernieresCommandes();
+                    tUI.Checkpoint("DernieresCommandes");
 
                     MettreAJourHorodatage();
 

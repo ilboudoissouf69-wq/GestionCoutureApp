@@ -504,6 +504,7 @@ namespace GestionCoutureApp.Views
         private async Task ChargerCommandes()
         {
             if (_commandeService == null) return;
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("CommandesView.ChargerCommandes");
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;

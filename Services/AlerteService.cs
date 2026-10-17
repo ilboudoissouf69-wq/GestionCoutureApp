@@ -1,3 +1,4 @@
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
@@ -8,19 +9,23 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IParametresService _parametresService;
+        private readonly Microsoft.Extensions.Logging.ILogger<AlerteService> _logger;
 
         public AlerteService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
-            IParametresService parametresService)
+            IParametresService parametresService,
+            Microsoft.Extensions.Logging.ILogger<AlerteService> logger)
         {
-            _contextFactory = contextFactory;
+            _contextFactory    = contextFactory;
             _parametresService = parametresService;
+            _logger            = logger;
         }
 
         // Génère les deux types d'alerte par pièce : "rendez-vous proche" et
         // "pas encore prise en charge" (mi-délai entre dépôt et rendez-vous avec statut "À faire").
         public async Task<List<AlerteRendezVous>> ObtenirAlertesActuelles()
         {
+            using var t = PerfLogger.Start("AlerteService.ObtenirAlertesActuelles", _logger);
             var delaiHeures = await _parametresService.ObtenirDelaiAlerteRendezVousHeures();
             var maintenant = DateTime.Now;
 
@@ -83,6 +88,7 @@ namespace GestionCoutureApp.Services
 
         public async Task<List<AlerteRendezVous>> ObtenirTousRendezVousAVenir()
         {
+            using var t = PerfLogger.Start("AlerteService.ObtenirTousRendezVousAVenir", _logger);
             var maintenant = DateTime.Now;
 
             await using var context = await _contextFactory.CreateDbContextAsync();
@@ -117,6 +123,7 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public async Task<List<AlerteRendezVous>> ObtenirRendezVousSemaine()
         {
+            using var t = PerfLogger.Start("AlerteService.ObtenirRendezVousSemaine", _logger);
             var maintenant = DateTime.Now;
             var finSemaine = maintenant.AddDays(7);
 
@@ -164,6 +171,7 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public async Task<List<AlerteRendezVous>> ObtenirRetards()
         {
+            using var t = PerfLogger.Start("AlerteService.ObtenirRetards", _logger);
             var maintenant = DateTime.Now;
 
             await using var context = await _contextFactory.CreateDbContextAsync();
@@ -220,6 +228,7 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public async Task<List<AlerteRendezVous>> ObtenirAlertesRetours()
         {
+            using var t = PerfLogger.Start("AlerteService.ObtenirAlertesRetours", _logger);
             await using var context = await _contextFactory.CreateDbContextAsync();
 
             var retours = await context.Retours

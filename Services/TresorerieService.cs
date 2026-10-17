@@ -1,4 +1,5 @@
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -28,10 +29,12 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public decimal CalculerChiffreAffaires(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.CalculerChiffreAffaires", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             // AsEnumerable() : SQLite ne supporte pas Sum() sur decimal côté SQL
             var ca = context.Paiements
+                .AsNoTracking()
                 .Where(p => !p.EstAnnule 
                          && p.DatePaiement.Date >= dateDebut.Date 
                          && p.DatePaiement.Date <= dateFin.Date)
@@ -51,9 +54,11 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public decimal CalculerTotalDepenses(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.CalculerTotalDepenses", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             var totalDepenses = context.Depenses
+                .AsNoTracking()
                 .Where(d => d.DateDepense.Date >= dateDebut.Date 
                          && d.DateDepense.Date <= dateFin.Date
                          && d.StatutValidation == "Validee") // Seulement les validées
@@ -74,9 +79,11 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public decimal CalculerTotalCommissions(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.CalculerTotalCommissions", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             var commissions = context.Commissions
+                .AsNoTracking()
                 .Where(c => !c.EstAnnulee 
                          && c.DateCalcul.Date >= dateDebut.Date 
                          && c.DateCalcul.Date <= dateFin.Date)
@@ -101,10 +108,12 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public decimal CalculerTotalMateriaux(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.CalculerTotalMateriaux", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             // Récupérer toutes les commandes de la période
             var commandesPeriode = context.Commandes
+                .AsNoTracking()
                 .Include(c => c.MaterielSupplements)
                 .Where(c => c.DateFin.Date >= dateDebut.Date 
                          && c.DateFin.Date <= dateFin.Date
@@ -124,6 +133,7 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public BilanFinancier CalculerBilan(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.CalculerBilan", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             _logger.LogInformation(
@@ -232,6 +242,7 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public bool PeriodeADesTransactions(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.PeriodeADesTransactions", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             bool aPaiements = context.Paiements
@@ -257,6 +268,7 @@ namespace GestionCoutureApp.Services
         /// </summary>
         public RapportCoherenceFinanciere VerifierCoherenceArgentTravail(DateTime dateDebut, DateTime dateFin)
         {
+            using var t = PerfLogger.Start("TresorerieService.VerifierCoherence", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             _logger.LogInformation(

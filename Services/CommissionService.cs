@@ -1,4 +1,5 @@
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,7 @@ namespace GestionCoutureApp.Services
             DateTime dateDebut, DateTime dateFin, decimal pourcentage,
             bool surMontantEncaisse, int? idCouturierFiltre)
         {
+            using var t = PerfLogger.Start("CommissionService.CalculerApercu", _logger);
             using var context = _contextFactory.CreateDbContext();
 
             var query = context.PiecesCommande
@@ -410,8 +412,10 @@ namespace GestionCoutureApp.Services
 
         public List<Commission> ObtenirHistorique()
         {
+            using var t = PerfLogger.Start("CommissionService.ObtenirHistorique", _logger);
             using var context = _contextFactory.CreateDbContext();
             return context.Commissions
+                .AsNoTracking()
                 .Include(c => c.Employe)
                 .OrderByDescending(c => c.DateCalcul)
                 .ToList();

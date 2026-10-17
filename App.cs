@@ -97,8 +97,15 @@ namespace GestionCoutureApp
 
             Services = services.BuildServiceProvider();
 
+            // ── Chronomètre global démarrage ─────────────────────────────
+            var swDemarrage = System.Diagnostics.Stopwatch.StartNew();
+
             // Initialiser le service de logging
             var logService = Services.GetRequiredService<ILogService>();
+
+            // Configure PerfLogger avec le logger Microsoft de l'app
+            var perfLoggerFactory = Services.GetRequiredService<ILoggerFactory>();
+            Helpers.PerfLogger.Configure(perfLoggerFactory.CreateLogger("PerfLogger"));
             logService.LogInfo("═══════════════════════════════════════════════════");
             logService.LogInfo("Application Gestion Couture démarrée");
             logService.LogInfo($"Version: 2.0 - Retouche Choco");
@@ -452,6 +459,10 @@ namespace GestionCoutureApp
                     return;
                 }
             }
+
+            swDemarrage.Stop();
+            logService.LogInfo($"[PERF] Démarrage application complet — {swDemarrage.ElapsedMilliseconds} ms");
+            System.Diagnostics.Debug.WriteLine($"[PERF] Démarrage application — {swDemarrage.ElapsedMilliseconds} ms");
 
             var loginWindow = new LoginWindow();
             loginWindow.Show();

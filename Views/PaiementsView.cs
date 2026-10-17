@@ -143,6 +143,7 @@ namespace GestionCoutureApp.Views
             // (ex: FiltreStatut_Changed déclenché par IsChecked=True sur RbValides).
             if (_rechercheTimer == null) return;
 
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("PaiementsView.ChargerPaiements");
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
