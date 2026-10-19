@@ -1018,8 +1018,7 @@ namespace GestionCoutureApp.Tests
 
             // Tentative de suppression avec paiement actif → refusée
             var ex1 = Assert.Throws<InvalidOperationException>(() =>
-                _commandeService.SupprimerAsync(cmd.IdCommande, "test suppression",
-                    IdBoss, "Boss DIALLO").GetAwaiter().GetResult());
+                _commandeService.SupprimerAsync(cmd.IdCommande, IdBoss, "Boss DIALLO", "test suppression").GetAwaiter().GetResult());
             Assert.That(ex1, Is.Not.Null, "CL7 Suppression avec paiement actif doit être refusée");
 
             // Annuler le paiement
@@ -1030,8 +1029,7 @@ namespace GestionCoutureApp.Tests
 
             // Tentative de suppression avec paiement annulé → aussi refusée (règle du code)
             var ex2 = Assert.Throws<InvalidOperationException>(() =>
-                _commandeService.SupprimerAsync(cmd.IdCommande, "test suppression 2",
-                    IdBoss, "Boss DIALLO").GetAwaiter().GetResult());
+                _commandeService.SupprimerAsync(cmd.IdCommande, IdBoss, "Boss DIALLO", "test suppression 2").GetAwaiter().GetResult());
             Assert.That(ex2, Is.Not.Null,
                 "CL7 Suppression avec paiement annulé doit également être refusée (traçabilité)");
         }
@@ -1171,6 +1169,8 @@ namespace GestionCoutureApp.Tests
             => Task.FromException(new InvalidOperationException("Audit simulé échoué"));
 
         public List<JournalAudit> ObtenirToutesLesEntrees() => new();
+        public PagedResult<JournalAudit> ObtenirPage(int page, int pageSize, int? idOperateur = null, string? typeAction = null, string? recherche = null, DateTime? debut = null, DateTime? fin = null)
+            => new PagedResult<JournalAudit> { Items = new(), TotalCount = 0, Page = page, PageSize = pageSize };
         public List<JournalAudit> ObtenirParPeriode(DateTime debut, DateTime fin) => new();
         public List<JournalAudit> ObtenirParOperateur(int id) => new();
         public List<JournalAudit> ObtenirParTypeAction(string type) => new();

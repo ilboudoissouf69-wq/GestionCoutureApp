@@ -207,6 +207,87 @@ namespace GestionCoutureApp.Data
                 .HasIndex(b => b.IdEmploye)
                 .IsUnique();
 
+            // ── Étape 9 — Index de performance (non destructifs) ───────────
+            // Ces index correspondent à la migration 20261018000000_IndexesPerformance.
+            // Les déclarer ici permet à EF Core de les inclure dans le snapshot
+            // et de détecter toute divergence future.
+
+            // PiecesCommande
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => p.DateTerminee)
+                .HasDatabaseName("IX_PiecesCommande_DateTerminee");
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => p.Statut)
+                .HasDatabaseName("IX_PiecesCommande_Statut");
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => p.IdCouturier)
+                .HasDatabaseName("IX_PiecesCommande_IdCouturier");
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.IdCommande, p.Statut })
+                .HasDatabaseName("IX_PiecesCommande_IdCommande_Statut");
+
+            // Commandes
+            modelBuilder.Entity<Commande>()
+                .HasIndex(c => c.DateFin)
+                .HasDatabaseName("IX_Commandes_DateFin");
+            modelBuilder.Entity<Commande>()
+                .HasIndex(c => c.Statut)
+                .HasDatabaseName("IX_Commandes_Statut");
+            modelBuilder.Entity<Commande>()
+                .HasIndex(c => c.DateDebut)
+                .HasDatabaseName("IX_Commandes_DateDebut");
+            modelBuilder.Entity<Commande>()
+                .HasIndex(c => new { c.EstSupprimee, c.DateDebut })
+                .HasDatabaseName("IX_Commandes_EstSupprimee_DateDebut");
+
+            // Paiements
+            modelBuilder.Entity<Paiement>()
+                .HasIndex(p => new { p.DatePaiement, p.EstAnnule })
+                .HasDatabaseName("IX_Paiements_DatePaiement_EstAnnule");
+            modelBuilder.Entity<Paiement>()
+                .HasIndex(p => p.IdCommande)
+                .HasDatabaseName("IX_Paiements_IdCommande");
+
+            // Dépenses
+            modelBuilder.Entity<Depense>()
+                .HasIndex(d => new { d.DateDepense, d.StatutValidation })
+                .HasDatabaseName("IX_Depenses_DateDepense_Statut");
+
+            // Retours
+            modelBuilder.Entity<Retour>()
+                .HasIndex(r => r.NumeroRetour)
+                .HasDatabaseName("IX_Retours_NumeroRetour");
+            modelBuilder.Entity<Retour>()
+                .HasIndex(r => new { r.Statut, r.EstAnnule })
+                .HasDatabaseName("IX_Retours_Statut_EstAnnule");
+            modelBuilder.Entity<Retour>()
+                .HasIndex(r => r.DateSignalement)
+                .HasDatabaseName("IX_Retours_DateSignalement");
+            modelBuilder.Entity<Retour>()
+                .HasIndex(r => r.IdPieceCommande)
+                .HasDatabaseName("IX_Retours_IdPieceCommande");
+
+            // Journal d'audit
+            modelBuilder.Entity<JournalAudit>()
+                .HasIndex(j => j.DateHeureUtc)
+                .HasDatabaseName("IX_JournalAudit_DateHeureUtc");
+            modelBuilder.Entity<JournalAudit>()
+                .HasIndex(j => j.IdOperateur)
+                .HasDatabaseName("IX_JournalAudit_IdOperateur");
+            modelBuilder.Entity<JournalAudit>()
+                .HasIndex(j => j.TypeAction)
+                .HasDatabaseName("IX_JournalAudit_TypeAction");
+
+            // Commissions
+            modelBuilder.Entity<Commission>()
+                .HasIndex(c => new { c.DateCalcul, c.EstAnnulee })
+                .HasDatabaseName("IX_Commissions_DateCalcul_EstAnnulee");
+
+            // Clients
+            modelBuilder.Entity<Client>()
+                .HasIndex(c => new { c.Nom, c.Prenom })
+                .HasDatabaseName("IX_Clients_Nom_Prenom");
+
             // Étape 7 — une ligne de suivi par cible
             modelBuilder.Entity<SuiviAlerteRetard>()
                 .HasIndex(s => new { s.TypeCible, s.IdCible })

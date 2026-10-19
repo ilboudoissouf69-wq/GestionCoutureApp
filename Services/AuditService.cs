@@ -149,8 +149,59 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             return context.JournalAudit
+                .AsNoTracking()
                 .OrderByDescending(j => j.DateHeureUtc)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Étape 9 — Pagination du journal d'audit.
+        /// Évite de charger 100 000 lignes en mémoire pour afficher 50 lignes.
+        /// </summary>
+        public PagedResult<JournalAudit> ObtenirPage(
+            int page, int pageSize,
+            int? idOperateur = null,
+            string? typeAction = null,
+            string? recherche = null,
+            DateTime? debut = null,
+            DateTime? fin = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            using var t = Helpers.PerfLogger.Start("AuditService.ObtenirPage");
+
+            var query = context.JournalAudit.AsNoTracking().AsQueryable();
+
+            if (idOperateur.HasValue && idOperateur > 0)
+                query = query.Where(j => j.IdOperateur == idOperateur.Value);
+            if (!string.IsNullOrWhiteSpace(typeAction))
+                query = query.Where(j => j.TypeAction == typeAction);
+            if (debut.HasValue)
+                query = query.Where(j => j.DateHeureUtc >= debut.Value.ToUniversalTime());
+            if (fin.HasValue)
+                query = query.Where(j => j.DateHeureUtc <= fin.Value.AddDays(1).ToUniversalTime());
+            if (!string.IsNullOrWhiteSpace(recherche))
+            {
+                var r = recherche.Trim().ToLower();
+                query = query.Where(j =>
+                    j.NomOperateur.ToLower().Contains(r) ||
+                    j.TypeAction.ToLower().Contains(r) ||
+                    (j.Motif != null && j.Motif.ToLower().Contains(r)));
+            }
+
+            int total = query.Count();
+            var items = query
+                .OrderByDescending(j => j.DateHeureUtc)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PagedResult<JournalAudit>
+            {
+                Items      = items,
+                TotalCount = total,
+                Page       = page,
+                PageSize   = pageSize
+            };
         }
 
         public List<JournalAudit> ObtenirParPeriode(DateTime debut, DateTime fin)
@@ -160,6 +211,7 @@ namespace GestionCoutureApp.Services
             var finUtc = fin.ToUniversalTime();
 
             return context.JournalAudit
+                .AsNoTracking()
                 .Where(j => j.DateHeureUtc >= debutUtc && j.DateHeureUtc <= finUtc)
                 .OrderByDescending(j => j.DateHeureUtc)
                 .ToList();
@@ -169,6 +221,7 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             return context.JournalAudit
+                .AsNoTracking()
                 .Where(j => j.IdOperateur == idOperateur)
                 .OrderByDescending(j => j.DateHeureUtc)
                 .ToList();
@@ -178,6 +231,7 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             return context.JournalAudit
+                .AsNoTracking()
                 .Where(j => j.TypeAction == typeAction)
                 .OrderByDescending(j => j.DateHeureUtc)
                 .ToList();
@@ -187,6 +241,7 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             return context.JournalAudit
+                .AsNoTracking()
                 .Where(j => j.Entite == entite && j.IdEntite == idEntite)
                 .OrderByDescending(j => j.DateHeureUtc)
                 .ToList();

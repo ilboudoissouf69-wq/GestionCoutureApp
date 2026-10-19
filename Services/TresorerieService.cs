@@ -148,6 +148,7 @@ namespace GestionCoutureApp.Services
 
             // 3. Commissions (avec détail primes)
             var commissionsDetaillees = context.Commissions
+                .AsNoTracking()
                 .Where(c => !c.EstAnnulee 
                          && c.DateCalcul.Date >= dateDebut.Date 
                          && c.DateCalcul.Date <= dateFin.Date)
@@ -158,6 +159,7 @@ namespace GestionCoutureApp.Services
 
             // 4. Détail couture vs matériaux (pour analyse)
             var commandesPeriode = context.Commandes
+                .AsNoTracking()
                 .Include(c => c.Pieces)
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Paiements)
@@ -277,6 +279,7 @@ namespace GestionCoutureApp.Services
 
             // 1. Commandes livrées/terminées dans la période (travail effectué et facturé)
             var commandesPeriode = context.Commandes
+                .AsNoTracking()
                 .Include(c => c.Client)
                 .Include(c => c.Pieces)
                 .Include(c => c.MaterielSupplements)
@@ -325,6 +328,7 @@ namespace GestionCoutureApp.Services
 
             // 2. Paiements encaissés dans la période (argent en caisse)
             var paiementsPeriode = context.Paiements
+                .AsNoTracking()
                 .Where(p => p.DatePaiement.Date >= dateDebut.Date 
                          && p.DatePaiement.Date <= dateFin.Date)
                 .ToList();

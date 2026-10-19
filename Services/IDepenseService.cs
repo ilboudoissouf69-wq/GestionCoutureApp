@@ -51,7 +51,7 @@ namespace GestionCoutureApp.Services
         // Bénéfice Net = CA encaissé − commissions − charges d'exploitation
         // Les matériaux NE sont PAS déduits : ce sont des avances remboursées,
         // pas des charges pour l'atelier.
-        public decimal BeneficeNet => CaEncaisse - TotalCommissions - ChargesExploitation;
+        public decimal BeneficeNet => CaEncaisseCouture - TotalCommissions - ChargesExploitation;
 
         // Alias pour compatibilité avec d'autres vues (TresorerieService, etc.)
         public decimal BeneficeCouture => BeneficeNet;

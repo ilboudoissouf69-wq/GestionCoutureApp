@@ -36,8 +36,8 @@ namespace GestionCoutureApp.Views
 
         private int _page = 1;
         private const int PAGE_SIZE = 50;
-        private List<JournalAudit> _toutesLesEntrees = new();
-        private List<JournalAudit> _entreesFiltrées = new();
+        // Étape 9 : plus de chargement global en mémoire — pagination côté DB
+        // _totalEntrees est mis à jour par AfficherPage à chaque navigation.
 
         // Constructeur avec utilisateur pré-filtré (depuis Dashboard)
         public JournalAuditWindow(int idOperateur, string nomOperateur)
@@ -312,84 +312,98 @@ namespace GestionCoutureApp.Views
             Loaded += (s, e) => ChargerDonnees();
         }
 
+        // ── Étape 9 : état pagination côté DB ────────────────────────────
+        private int _totalEntrees = 0;
+
         private void ChargerDonnees()
         {
-            // Charger toutes les entrées d'audit
-            _toutesLesEntrees = _auditService.ObtenirToutesLesEntrees();
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("JournalAuditWindow.ChargerDonnees");
 
-            // Peupler les combos
-            var utilisateurs = _toutesLesEntrees
-                .Select(entry => new { entry.IdOperateur, entry.NomOperateur })
-                .Distinct()
+            // Peupler les combos à partir d'une requête légère (distinct opérateurs/actions)
+            // On n'a plus besoin de tout charger pour peupler les combos :
+            // on utilise ObtenirParOperateur et ObtenirParTypeAction avec projection.
+            // Pour les combos on charge juste la première page (50) pour avoir des valeurs représentatives.
+            var premierePagePourCombos = _auditService.ObtenirPage(1, 200);
+
+            _cmbUtilisateur.Items.Clear();
+            _cmbUtilisateur.Items.Add(new ComboBoxItem { Content = "Tous", Tag = 0 });
+            var utilisateurs = premierePagePourCombos.Items
+                .Select(e => new { e.IdOperateur, e.NomOperateur })
+                .DistinctBy(u => u.IdOperateur)
                 .OrderBy(u => u.NomOperateur)
                 .ToList();
-            _cmbUtilisateur.Items.Add(new ComboBoxItem { Content = "Tous", Tag = 0 });
             foreach (var u in utilisateurs)
                 _cmbUtilisateur.Items.Add(new ComboBoxItem { Content = u.NomOperateur, Tag = u.IdOperateur });
             _cmbUtilisateur.SelectedIndex = 0;
 
-            var actions = _toutesLesEntrees
-                .Select(entry => entry.TypeAction)
+            _cmbTypeAction.Items.Clear();
+            _cmbTypeAction.Items.Add(new ComboBoxItem { Content = "Toutes", Tag = null });
+            var actions = premierePagePourCombos.Items
+                .Select(e => e.TypeAction)
                 .Distinct()
                 .OrderBy(a => a)
                 .ToList();
-            _cmbTypeAction.Items.Add(new ComboBoxItem { Content = "Toutes", Tag = null });
             foreach (var a in actions)
                 _cmbTypeAction.Items.Add(new ComboBoxItem { Content = a, Tag = a });
             _cmbTypeAction.SelectedIndex = 0;
 
+            _page = 1;
             Filtrer(null, null);
         }
 
         private void Filtrer(object? sender, EventArgs? eventArgs)
         {
-            var debut = _dpDebut.SelectedDate ?? DateTime.Today.AddYears(-1);
-            var fin = _dpFin.SelectedDate ?? DateTime.Today;
-            var recherche = _txtRecherche.Text.Trim().ToLowerInvariant();
-            var idUtilisateur = _cmbUtilisateur.SelectedItem is ComboBoxItem u ? (int)u.Tag : 0;
-            var typeAction = _cmbTypeAction.SelectedItem is ComboBoxItem t ? (string?)t.Tag : null;
-            var numCommande = _txtNumeroCommande.Text.Trim();
-
-            _entreesFiltrées = _toutesLesEntrees
-                .Where(e => e.DateHeureUtc.ToLocalTime().Date >= debut.Date && e.DateHeureUtc.ToLocalTime().Date <= fin.Date)
-                .Where(e => idUtilisateur == 0 || e.IdOperateur == idUtilisateur)
-                .Where(e => typeAction == null || e.TypeAction == typeAction)
-                .Where(e => string.IsNullOrEmpty(numCommande) ||
-                           (e.Entite == "Commande" && e.IdEntite.ToString() == numCommande))
-                .Where(e => string.IsNullOrEmpty(recherche) ||
-                           e.NomOperateur.ToLowerInvariant().Contains(recherche) ||
-                           e.TypeAction.ToLowerInvariant().Contains(recherche) ||
-                           (e.Motif ?? "").ToLowerInvariant().Contains(recherche))
-                .OrderByDescending(e => e.DateHeureUtc)
-                .ToList();
-
             _page = 1;
             AfficherPage();
         }
 
+        /// <summary>
+        /// Étape 9 — Pagination côté base de données.
+        /// Plus de chargement de 100 000 lignes en mémoire : seule la page courante
+        /// est rapatriée. Le COUNT total vient d'une requête séparée légère.
+        /// </summary>
         private void AfficherPage()
         {
-            var page = _entreesFiltrées
-                .Skip((_page - 1) * PAGE_SIZE)
-                .Take(PAGE_SIZE)
-                .Select(e => new JournalAuditVm
-                {
-                    DateHeureLocale = e.DateHeureUtc.ToLocalTime(),
-                    NomOperateur = e.NomOperateur,
-                    RoleOperateur = e.RoleOperateur,
-                    ActionAffichee = e.ActionAffichee,
-                    Entite = e.Entite,
-                    IdEntite = e.IdEntite,
-                    DetailsAffichage = ConstruireDetailsAffichage(e)
-                })
-                .ToList();
+            using var t = GestionCoutureApp.Helpers.PerfLogger.Start("JournalAuditWindow.AfficherPage");
 
-            _grid.ItemsSource = page;
+            var debut       = _dpDebut.SelectedDate ?? DateTime.Today.AddYears(-1);
+            var fin         = _dpFin.SelectedDate   ?? DateTime.Today;
+            var recherche   = _txtRecherche.Text.Trim();
+            var idUtil      = _cmbUtilisateur.SelectedItem is ComboBoxItem u && u.Tag is int uid ? uid : 0;
+            var typeAction  = _cmbTypeAction.SelectedItem  is ComboBoxItem ta && ta.Tag is string ts ? ts : null;
+            var numCommande = _txtNumeroCommande.Text.Trim();
 
-            int totalPages = (int)Math.Ceiling((double)_entreesFiltrées.Count / PAGE_SIZE);
-            _txtPagination.Text = $"Page {_page} / {Math.Max(1, totalPages)}  ({_entreesFiltrées.Count} entrées)";
+            // Recherche étendue : si un numéro de commande est saisi on l'ajoute au texte
+            string? rechercheEff = !string.IsNullOrWhiteSpace(numCommande) ? numCommande
+                                 : string.IsNullOrWhiteSpace(recherche) ? null : recherche;
+
+            var result = _auditService.ObtenirPage(
+                _page, PAGE_SIZE,
+                idUtil > 0 ? idUtil : null,
+                typeAction,
+                rechercheEff,
+                debut,
+                fin);
+
+            _totalEntrees = result.TotalCount;
+
+            var vms = result.Items.Select(e => new JournalAuditVm
+            {
+                DateHeureLocale  = e.DateHeureUtc.ToLocalTime(),
+                NomOperateur     = e.NomOperateur,
+                RoleOperateur    = e.RoleOperateur,
+                ActionAffichee   = e.ActionAffichee,
+                Entite           = e.Entite,
+                IdEntite         = e.IdEntite,
+                DetailsAffichage = ConstruireDetailsAffichage(e)
+            }).ToList();
+
+            _grid.ItemsSource = vms;
+
+            int totalPages = (int)Math.Ceiling((double)_totalEntrees / PAGE_SIZE);
+            _txtPagination.Text = $"Page {_page} / {Math.Max(1, totalPages)}  ({_totalEntrees} entrées)";
             _btnPrecedent.IsEnabled = _page > 1;
-            _btnSuivant.IsEnabled = _page < totalPages;
+            _btnSuivant.IsEnabled   = _page < totalPages;
         }
 
         private string ConstruireDetailsAffichage(JournalAudit e)
@@ -411,7 +425,7 @@ namespace GestionCoutureApp.Views
 
         private void BtnSuivant_Click(object sender, RoutedEventArgs e)
         {
-            int totalPages = (int)Math.Ceiling((double)_entreesFiltrées.Count / PAGE_SIZE);
+            int totalPages = (int)Math.Ceiling((double)_totalEntrees / PAGE_SIZE);
             if (_page < totalPages) { _page++; AfficherPage(); }
         }
 
@@ -430,12 +444,34 @@ namespace GestionCoutureApp.Views
 
                 var sb = new StringBuilder();
                 sb.AppendLine("Date/Heure;Opérateur;Rôle;Action;Entité;ID;Motif;Avant;Après");
-                foreach (var entry in _entreesFiltrées)
+
+                // Étape 9 : export de TOUTES les entrées filtrées (sans limite de page),
+                // rechargées depuis la DB avec les filtres courants.
+                var debut      = _dpDebut.SelectedDate ?? DateTime.Today.AddYears(-1);
+                var fin        = _dpFin.SelectedDate   ?? DateTime.Today;
+                var recherche  = _txtRecherche.Text.Trim();
+                var idUtil     = _cmbUtilisateur.SelectedItem is ComboBoxItem ux && ux.Tag is int uid ? uid : 0;
+                var typeAction = _cmbTypeAction.SelectedItem  is ComboBoxItem tax && tax.Tag is string ts ? ts : null;
+                var numCmd     = _txtNumeroCommande.Text.Trim();
+                string? rechercheEff = !string.IsNullOrWhiteSpace(numCmd) ? numCmd
+                                     : string.IsNullOrWhiteSpace(recherche) ? null : recherche;
+
+                int exportPage = 1;
+                const int EXPORT_PAGE_SIZE = 1000;
+                while (true)
                 {
-                    sb.AppendLine($"{entry.DateHeureUtc.ToLocalTime():dd/MM/yyyy HH:mm:ss};" +
-                                  $"{entry.NomOperateur};{entry.RoleOperateur};{entry.ActionAffichee};" +
-                                  $"{entry.Entite};{entry.IdEntite};" +
-                                  $"\"{entry.Motif ?? ""}\";\"{ entry.ValeursAvant ?? ""}\";\"{ entry.ValeursApres ?? ""}\"");
+                    var batch = _auditService.ObtenirPage(exportPage, EXPORT_PAGE_SIZE,
+                        idUtil > 0 ? idUtil : null, typeAction, rechercheEff, debut, fin);
+                    foreach (var entry in batch.Items)
+                    {
+                        sb.AppendLine(
+                            $"{entry.DateHeureUtc.ToLocalTime():dd/MM/yyyy HH:mm:ss};" +
+                            $"{entry.NomOperateur};{entry.RoleOperateur};{entry.ActionAffichee};" +
+                            $"{entry.Entite};{entry.IdEntite};" +
+                            $"\"{entry.Motif ?? ""}\";\"{ entry.ValeursAvant ?? ""}\";\"{ entry.ValeursApres ?? ""}\"");
+                    }
+                    if (batch.Items.Count < EXPORT_PAGE_SIZE) break;
+                    exportPage++;
                 }
 
                 System.IO.File.WriteAllText(dialog.FileName, sb.ToString(), Encoding.UTF8);

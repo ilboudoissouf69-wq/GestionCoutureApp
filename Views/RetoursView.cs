@@ -889,18 +889,41 @@ namespace GestionCoutureApp.Views
             };
             btnImporter.Click += (_, _) =>
             {
-                var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Photo du défaut", Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp" };
+                var dlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Photo du défaut",
+                    Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp"
+                };
                 if (dlg.ShowDialog() != true) return;
+
                 try
                 {
-                    string dossier = Helpers.AppPaths.DossierPhotos;
-                    string ext = System.IO.Path.GetExtension(dlg.FileName).ToLowerInvariant();
-                    string dest = System.IO.Path.Combine(dossier, $"defaut_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N8}{ext}");
+                    var info = new System.IO.FileInfo(dlg.FileName);
+                    string ext = info.Extension.ToLowerInvariant();
+
+                    if (info.Length > 5 * 1024 * 1024)
+                    {
+                        MessageBox.Show("Image trop volumineuse (5 Mo maximum).",
+                            "Fichier trop grand", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    string dossier  = Helpers.AppPaths.DossierPhotos;
+                    string suffixe  = Guid.NewGuid().ToString("N")[..8];
+                    string dest     = System.IO.Path.Combine(dossier,
+                                        $"defaut_{DateTime.Now:yyyyMMdd_HHmmss}_{suffixe}{ext}");
+
                     System.IO.File.Copy(dlg.FileName, dest, true);
-                    Helpers.PhotoCompressor.Compresser(dest, dest);
+
+                    try { Helpers.PhotoCompressor.Compresser(dest, dest); }
+                    catch { /* compression non critique : on garde l'original */ }
+
                     SetPhoto(dest);
                 }
-                catch (Exception ex) { MessageBox.Show("Erreur import : " + ex.Message); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Erreur import : " + ex.Message);
+                }
             };
 
             panelBtnsPhoto.Children.Add(btnWebcam); panelBtnsPhoto.Children.Add(btnImporter);

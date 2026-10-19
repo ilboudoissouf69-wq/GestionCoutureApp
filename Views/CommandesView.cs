@@ -1980,6 +1980,7 @@ namespace GestionCoutureApp.Views
                     propositions.Add((type.Nom,
                         mesuresCarte.Select(m => (m.NomMesure, m.Valeur)).ToList()));
             }
+            
 
             if (propositions.Count == 0) return;
 
@@ -2577,7 +2578,14 @@ namespace GestionCoutureApp.Views
             cmb.Items.Add("Terminee"); cmb.Items.Add("Livree");
             cmb.SelectedIndex = 2;
             panel.Children.Add(cmb);
-            var msgErr = new TextBlock { FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)), Height = 18, Margin = new Thickness(0, 0, 0, 12) };
+           var msgErr = new TextBlock
+            {
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+                TextWrapping = TextWrapping.Wrap,
+                MinHeight = 18,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
             panel.Children.Add(msgErr);
 
             var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -3670,6 +3678,7 @@ namespace GestionCoutureApp.Views
                 Statut = (CmbStatut.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? CmbStatut.Text?.Trim() ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
             };
+            
             var mesures = CollecterMesures();
             try
             {

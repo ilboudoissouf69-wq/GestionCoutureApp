@@ -408,6 +408,9 @@ namespace GestionCoutureApp.Tests
 
         public List<JournalAudit> ObtenirToutesLesEntrees() => new();
 
+        public PagedResult<JournalAudit> ObtenirPage(int page, int pageSize, int? idOperateur = null, string? typeAction = null, string? recherche = null, DateTime? debut = null, DateTime? fin = null)
+            => new PagedResult<JournalAudit> { Items = new(), TotalCount = 0, Page = page, PageSize = pageSize };
+
         public List<JournalAudit> ObtenirParPeriode(DateTime debut, DateTime fin) => new();
         public List<JournalAudit> ObtenirParOperateur(int idOperateur) => new();
         public List<JournalAudit> ObtenirParTypeAction(string typeAction) => new();

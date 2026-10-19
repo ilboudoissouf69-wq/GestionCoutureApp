@@ -57,7 +57,8 @@ namespace GestionCoutureApp.Tests
             var auditStub = new AuditServiceStub();
             var paramStub = new ParametresServiceStub();
             _retourService = new RetourService(_factory, auditStub);
-            _alerteService = new AlerteService(_factory, paramStub);
+            _alerteService = new AlerteService(_factory, paramStub,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AlerteService>.Instance);
 
             using var ctx = _factory.CreateDbContext();
 
@@ -622,6 +623,8 @@ namespace GestionCoutureApp.Tests
             => Task.CompletedTask;
 
         public List<JournalAudit> ObtenirToutesLesEntrees() => new();
+        public PagedResult<JournalAudit> ObtenirPage(int page, int pageSize, int? idOperateur = null, string? typeAction = null, string? recherche = null, DateTime? debut = null, DateTime? fin = null)
+            => new PagedResult<JournalAudit> { Items = new(), TotalCount = 0, Page = page, PageSize = pageSize };
         public List<JournalAudit> ObtenirParPeriode(DateTime debut, DateTime fin) => new();
         public List<JournalAudit> ObtenirParOperateur(int id) => new();
         public List<JournalAudit> ObtenirParTypeAction(string type) => new();

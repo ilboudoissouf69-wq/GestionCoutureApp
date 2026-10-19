@@ -43,7 +43,8 @@ namespace GestionCoutureApp.Tests
                 .UseInMemoryDatabase($"TR_{Guid.NewGuid()}")
                 .Options;
             _factory = new TRDbContextFactory(opts);
-            _alerteService = new AlerteService(_factory, new MockParametresService());
+            _alerteService = new AlerteService(_factory, new MockParametresService(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AlerteService>.Instance);
 
             using var ctx = _factory.CreateDbContext();
             ctx.Clients.Add(new Client

@@ -37,6 +37,10 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("CommissionService.CalculerApercu", _logger);
             using var context = _contextFactory.CreateDbContext();
 
+            // ⚠️ Étape 9 — AsNoTracking retiré ici car EF Core refuse les Includes
+            // cycliques (PieceCommande → Commande → Pieces) en mode no-tracking.
+            // Le calcul d'aperçu est une lecture courte (pas d'accumulation de tracking
+            // dans une boucle longue) : la version tracking reste acceptable.
             var query = context.PiecesCommande
                 .Include(p => p.MaterielSupplements)
                 .Include(p => p.Commande)
@@ -61,9 +65,8 @@ namespace GestionCoutureApp.Services
             var pieces = query.ToList();
 
         // Charger les retours non résolus pour exclure les pièces défectueuses.
-        // Toute pièce avec un retour actif (Signalé ou En reprise) est exclue
-        // de la commission jusqu'à résolution.
         var retoursNonResolus = context.Retours
+                .AsNoTracking()
                 .Where(r => !r.EstAnnule &&
                             (r.Statut == "Signale" || r.Statut == "En reprise"))
                 .Select(r => r.IdPieceCommande)
@@ -79,6 +82,7 @@ namespace GestionCoutureApp.Services
             }
 
             var couturiers = context.Employes
+                .AsNoTracking()
                 .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
                 .ToList();
 
@@ -150,6 +154,7 @@ namespace GestionCoutureApp.Services
 
             // Charger les retours non résolus par couturier pour le calcul de prime
             var retoursParCouturier = context.Retours
+                .AsNoTracking()
                 .Where(r => !r.EstAnnule)
                 .GroupBy(r => r.IdCouturier)
                 .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })

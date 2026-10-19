@@ -226,6 +226,8 @@ namespace GestionCoutureApp.Views
 
         // ------------------------------------------------------------------
         // 4 cartes de statistiques — formules alignées sur TresorerieService
+        // Correction perf : projections Select au lieu de charger les entités
+        // complètes, AsNoTracking partout.
         // ------------------------------------------------------------------
         private void ChargerCartesStats()
         {
@@ -235,35 +237,44 @@ namespace GestionCoutureApp.Views
             var debutMois  = new DateTime(aujourdhui.Year, aujourdhui.Month, 1);
             var finMois    = debutMois.AddMonths(1).AddDays(-1);
 
-            // KPI 1 — Encaissé ce mois
-            // MÊME formule que TresorerieService.CalculerChiffreAffaires :
-            //   SUM(Paiements.MontantPaye WHERE !EstAnnule AND date IN [debutMois, aujourd'hui])
+            // KPI 1 — Encaissé ce mois (projection : uniquement les 2 champs utiles)
             decimal caMois = context.Paiements
-                .Where(p => p.DatePaiement.Date >= debutMois
-                         && p.DatePaiement.Date <= aujourdhui
-                         && !p.EstAnnule)
+                .AsNoTracking()
+                .Where(p => p.DatePaiement >= debutMois && p.DatePaiement <= aujourdhui.AddDays(1) && !p.EstAnnule)
+                .Select(p => p.MontantPaye)
                 .AsEnumerable()
-                .Sum(p => p.MontantPaye);
+                .Sum();
             TxtKpiEncaisseMois.Text = caMois.ToString("N0");
 
             decimal caJour = context.Paiements
-                .Where(p => p.DatePaiement.Date == aujourdhui && !p.EstAnnule)
+                .AsNoTracking()
+                .Where(p => p.DatePaiement >= aujourdhui && p.DatePaiement < aujourdhui.AddDays(1) && !p.EstAnnule)
+                .Select(p => p.MontantPaye)
                 .AsEnumerable()
-                .Sum(p => p.MontantPaye);
+                .Sum();
             TxtCaJour.Text = caJour.ToString("N0");
 
-            // KPI 2 — Commandes non livrées (StatutGlobal est [NotMapped], calcul en mémoire)
-            var commandesAvecPieces = context.Commandes
+            // KPI 2 & 3 — Commandes en cours / retards
+            // StatutGlobal est [NotMapped] donc on charge uniquement IdCommande,
+            // DateFin et les statuts des pièces (pas les mesures ni les paiements).
+            var commandesLight = context.Commandes
+                .AsNoTracking()
                 .Where(c => !c.EstSupprimee && !c.EstAnnulee)
-                .Include(c => c.Pieces)
+                .Select(c => new
+                {
+                    c.IdCommande,
+                    c.DateFin,
+                    Statuts = c.Pieces.Select(p => p.Statut).ToList()
+                })
                 .ToList();
 
-            int enCours = commandesAvecPieces.Count(c => c.StatutGlobal != "Livree");
+            // StatutGlobal: "Livree" si toutes les pièces sont Livree
+            int enCours = commandesLight.Count(c =>
+                c.Statuts.Count == 0 || c.Statuts.Any(s => s != "Livree"));
             TxtKpiCommandesEnCours.Text = enCours.ToString();
 
-            // KPI 3 — Retards
-            int retards = commandesAvecPieces.Count(c =>
-                c.StatutGlobal != "Livree" &&
+            int retards = commandesLight.Count(c =>
+                (c.Statuts.Count == 0 || c.Statuts.Any(s => s != "Livree")) &&
                 c.DateFin != default &&
                 c.DateFin.Date < aujourdhui);
             TxtKpiRetards.Text = retards.ToString();
@@ -274,21 +285,20 @@ namespace GestionCoutureApp.Views
                 CarteDepensesMois.Visibility = Visibility.Visible;
                 CarteClients.Visibility      = Visibility.Collapsed;
 
-                // MÊME formule que TresorerieService.CalculerTotalDepenses :
-                //   SUM(Depenses.Montant WHERE StatutValidation == "Validee" AND date IN période)
                 decimal depMois = context.Depenses
-                    .Where(d => d.DateDepense.Date >= debutMois
-                             && d.DateDepense.Date <= finMois
+                    .AsNoTracking()
+                    .Where(d => d.DateDepense >= debutMois && d.DateDepense <= finMois.AddDays(1)
                              && d.StatutValidation == "Validee")
+                    .Select(d => d.Montant)
                     .AsEnumerable()
-                    .Sum(d => d.Montant);
+                    .Sum();
                 TxtKpiDepensesMois.Text = depMois.ToString("N0");
             }
             else
             {
                 CarteDepensesMois.Visibility = Visibility.Collapsed;
                 CarteClients.Visibility      = Visibility.Visible;
-                TxtTotalClients.Text = context.Clients.Count().ToString();
+                TxtTotalClients.Text = context.Clients.AsNoTracking().Count().ToString();
             }
 
             // Badge "À attribuer"
@@ -343,21 +353,32 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // Graphique barres 7 jours
+        // Graphique barres 7 jours — une requête unique (correction N+1)
         // ------------------------------------------------------------------
         private void ChargerGraphiqueRevenus()
         {
             using var context = _contextFactory.CreateDbContext();
             GridGraphique.Children.Clear();
 
+            var debut7j = DateTime.Today.AddDays(-6);
+            var fin7j   = DateTime.Today;
+
+            // UNE seule requête pour les 7 jours, groupée par date côté DB
+            // On ne peut pas faire .Date sur SQLite en LINQ, on filtre la période
+            // puis on groupe en mémoire (7 jours = au plus ~30 000 paiements au pire)
+            var paiements7j = context.Paiements
+                .AsNoTracking()
+                .Where(p => p.DatePaiement >= debut7j && p.DatePaiement <= fin7j.AddDays(1) && !p.EstAnnule)
+                .Select(p => new { p.DatePaiement, p.MontantPaye })
+                .AsEnumerable()
+                .GroupBy(p => p.DatePaiement.Date)
+                .ToDictionary(g => g.Key, g => g.Sum(p => p.MontantPaye));
+
             var revenus = new List<(string Jour, decimal Montant)>();
             for (int i = 6; i >= 0; i--)
             {
-                var date  = DateTime.Today.AddDays(-i);
-                decimal total = context.Paiements
-                    .Where(p => p.DatePaiement.Date == date && !p.EstAnnule)
-                    .AsEnumerable()
-                    .Sum(p => p.MontantPaye);
+                var date = DateTime.Today.AddDays(-i);
+                decimal total = paiements7j.TryGetValue(date, out var m) ? m : 0m;
                 revenus.Add((date.ToString("ddd dd"), total));
             }
 
@@ -427,28 +448,50 @@ namespace GestionCoutureApp.Views
         }
 
         // ------------------------------------------------------------------
-        // Charge par couturier
+        // Charge par couturier — requête unique groupée (corrige le N+1)
         // ------------------------------------------------------------------
         private void ChargerStatsCouturiers()
         {
             using var context = _contextFactory.CreateDbContext();
             var aujourdhui = DateTime.Today;
 
+            // 1. Tous les couturiers en une requête
             var couturiers = context.Employes
+                .AsNoTracking()
                 .Where(e => e.Role == "Couturier")
                 .ToList();
+
+            // 2. Toutes les pièces non livrées + leur DateFin commande — UNE SEULE requête
+            //    Projection : on ne charge que les champs nécessaires (évite de rapatrier
+            //    toutes les colonnes Commande et PieceCommande).
+            var piecesParCouturier = context.PiecesCommande
+                .AsNoTracking()
+                .Where(p => p.IdCouturier.HasValue)
+                .Select(p => new
+                {
+                    p.IdCouturier,
+                    p.IdPieceCommande,
+                    p.IdCommande,
+                    p.Statut,
+                    p.MontantCouture,
+                    CommandeDateFin     = p.Commande != null ? p.Commande.DateFin : (DateTime?)null,
+                    CommandeEstValide   = p.Commande != null
+                })
+                .ToList(); // un seul aller-retour DB
+
+            // 3. Grouper en mémoire par couturier
+            var groupes = piecesParCouturier
+                .GroupBy(p => p.IdCouturier!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
             var modeles = new List<ChargeCouturierVm>();
 
             foreach (var c in couturiers)
             {
-                var pieces = context.PiecesCommande
-                    .Include(p => p.Commande)
-                    .Where(p => p.IdCouturier == c.IdEmploye)
-                    .ToList();
+                var pieces = groupes.TryGetValue(c.IdEmploye, out var lst) ? lst : new();
 
                 var actives = pieces
-                    .Where(p => p.Statut != "Livree" && p.Commande != null)
+                    .Where(p => p.Statut != "Livree" && p.CommandeEstValide)
                     .ToList();
 
                 int terminees = actives.Count(p => p.Statut == "Terminee");
@@ -458,9 +501,9 @@ namespace GestionCoutureApp.Views
 
                 int nbRetards = pieces
                     .Where(p => p.Statut != "Livree" &&
-                                p.Commande != null &&
-                                p.Commande.DateFin != default &&
-                                p.Commande.DateFin.Date < aujourdhui)
+                                p.CommandeEstValide &&
+                                p.CommandeDateFin.HasValue &&
+                                p.CommandeDateFin.Value.Date < aujourdhui)
                     .Select(p => p.IdCommande)
                     .Distinct()
                     .Count();
@@ -469,20 +512,20 @@ namespace GestionCoutureApp.Views
 
                 var vm = new ChargeCouturierVm
                 {
-                    NomComplet    = c.NomComplet,
-                    TotalPieces   = total,
-                    PiecesAFaire  = aFaire,
-                    PiecesEnCours = enCours,
+                    NomComplet      = c.NomComplet,
+                    TotalPieces     = total,
+                    PiecesAFaire    = aFaire,
+                    PiecesEnCours   = enCours,
                     PiecesTerminees = terminees,
-                    NbRetards = nbRetards,
-                    CaTotal   = caTotal
+                    NbRetards       = nbRetards,
+                    CaTotal         = caTotal
                 };
 
                 if (total > 0)
                 {
                     vm.LargeurTerminees = new GridLength(terminees, GridUnitType.Star);
-                    vm.LargeurEnCours   = new GridLength(enCours, GridUnitType.Star);
-                    vm.LargeurReste     = new GridLength(aFaire, GridUnitType.Star);
+                    vm.LargeurEnCours   = new GridLength(enCours,   GridUnitType.Star);
+                    vm.LargeurReste     = new GridLength(aFaire,    GridUnitType.Star);
                 }
                 else
                 {

@@ -38,6 +38,17 @@ namespace GestionCoutureApp.Services
         List<JournalAudit> ObtenirToutesLesEntrees();
 
         /// <summary>
+        /// Étape 9 — Pagination du journal d'audit (évite de charger 100k lignes).
+        /// </summary>
+        PagedResult<JournalAudit> ObtenirPage(
+            int page, int pageSize,
+            int? idOperateur = null,
+            string? typeAction = null,
+            string? recherche = null,
+            DateTime? debut = null,
+            DateTime? fin = null);
+
+        /// <summary>
         /// Récupère les entrées du journal pour une période donnée
         /// </summary>
         List<JournalAudit> ObtenirParPeriode(DateTime debut, DateTime fin);

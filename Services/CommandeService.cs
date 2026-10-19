@@ -1655,6 +1655,19 @@ namespace GestionCoutureApp.Services
             var piecesATraiter = pieces.Where(p => p.Statut != nouveauStatut).ToList();
             if (piecesATraiter.Count == 0) return;
 
+                        if (nouveauStatut == "Terminee" || nouveauStatut == "Livree")
+            {
+                var sansCouturier = piecesATraiter
+                    .Where(p => p.IdCouturier == null)
+                    .Select(p => $"« {p.TypeVetement} »")
+                    .ToList();
+                if (sansCouturier.Count > 0)
+                    throw new InvalidOperationException(
+                        "Assignez d'abord un couturier aux pièces suivantes : " +
+                        string.Join(", ", sansCouturier) + ". " +
+                        "Un vêtement terminé doit avoir un couturier (commission).");
+            }
+
             // InMemory ne supporte pas les vraies transactions : on les saute silencieusement.
             // SQLite (production) les supporte. On détecte par le nom du provider.
             bool avecTransaction = context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
