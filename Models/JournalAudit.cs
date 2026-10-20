@@ -121,7 +121,15 @@ namespace GestionCoutureApp.Models
         public string CalculerHash()
         {
             // Toutes les colonnes métier, sauf IdJournal (clé technique).
-            var data = $"{DateHeureUtc:O}|{IdOperateur}|{NomOperateur}|{RoleOperateur}|" +
+            // DateHeureUtc est tronquée à la milliseconde (SQLite ne conserve pas les ticks
+            // sub-millisecondes lors de la sérialisation TEXT ISO 8601 — tronquer garantit
+            // que le hash recalculé après relecture correspond exactement au hash stocké).
+            var dateNormalisee = new DateTime(
+                DateHeureUtc.Year, DateHeureUtc.Month, DateHeureUtc.Day,
+                DateHeureUtc.Hour, DateHeureUtc.Minute, DateHeureUtc.Second,
+                DateHeureUtc.Millisecond, DateTimeKind.Utc);
+
+            var data = $"{dateNormalisee:O}|{IdOperateur}|{NomOperateur}|{RoleOperateur}|" +
                       $"{TypeAction}|{Entite}|{IdEntite}|{ValeursAvant ?? ""}|{ValeursApres ?? ""}|" +
                       $"{Motif ?? ""}|{HashPrecedent ?? ""}|{AdresseIp ?? ""}";
 
@@ -161,6 +169,7 @@ namespace GestionCoutureApp.Models
             "PIECE_MODIFIEE" => "Pièce modifiée",
             "DEPENSE_VALIDEE" => "Dépense validée",
             "COMMISSION_ENREGISTREE" => "Commission enregistrée",
+            "TENTATIVE_REFUSEE" => "Tentative refusée",
             _ => TypeAction
         };
 

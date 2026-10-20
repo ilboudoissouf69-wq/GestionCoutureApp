@@ -356,7 +356,8 @@ namespace GestionCoutureApp.Services
                         RoleOperateur     = dernier.RoleOperateur,
                         Suppressions      = g.Count(e => e.TypeAction == ActionsAntiFraude.Suppression),
                         Annulations       = g.Count(e => e.TypeAction == ActionsAntiFraude.Annulation),
-                        ModificationsPrix = g.Count(e => ActionsAntiFraude.ModificationsPrix.Contains(e.TypeAction))
+                        ModificationsPrix = g.Count(e => ActionsAntiFraude.ModificationsPrix.Contains(e.TypeAction)),
+                        TentativesRefusees = g.Count(e => e.TypeAction == ActionsAntiFraude.TentativeRefusee)
                     };
                 })
                 .OrderByDescending(i => i.Total)

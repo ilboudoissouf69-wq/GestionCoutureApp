@@ -2673,10 +2673,7 @@ namespace GestionCoutureApp.Views
 
                 try
                 {
-                    IAuditService? auditService = null;
-                    try { auditService = App.Services.GetService<IAuditService>(); } catch { }
-
-                    await _commandeService.SupprimerAsync(idCommande, idOp, nomOp, motif, auditService);
+                    await _commandeService.SupprimerAsync(idCommande, idOp, nomOp, motif);
                     await ChargerCommandes();
                     if (_commandeSelectionneeId == idCommande)
                     {

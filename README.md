@@ -119,6 +119,7 @@ Ou double-clic sur `GestionCoutureApp.exe` dans `bin\Release\net8.0-windows\`.
 - Peut supprimer une commande sans paiement (motif obligatoire, tracé dans l'audit)
 - Peut rétrograder le statut d'une pièce (retour arrière) avec motif obligatoire
 - Peut forcer la livraison d'une commande non soldée avec motif
+- Accès au **journal d'audit complet** depuis le menu principal (Boss uniquement)
 
 ### Secrétaire
 
@@ -176,14 +177,42 @@ Ou double-clic sur `GestionCoutureApp.exe` dans `bin\Release\net8.0-windows\`.
 | **Dépenses** | Enregistrement et validation des dépenses réelles de l'atelier |
 | **Trésorerie** | Bilan financier par période, rapport de cohérence |
 | **Alertes RDV** | Rafraîchissement auto toutes les 60 s, niveaux J-1/jour/retard, son + popup, badge menu |
-| **Journal d'audit** | Traçabilité immuable de toutes les actions sensibles (Boss, lecture seule) |
+| **Journal d'audit** | Traçabilité immuable de toutes les actions sensibles. Audit **obligatoire et atomique** : si l'écriture échoue, l'opération entière est annulée (rollback). Tentatives refusées tracées. Accès Boss uniquement depuis le menu principal. |
 | **Sauvegarde auto** | Toutes les 4 heures, rotation 15 fichiers locaux, optionnel Google Drive |
 | **File "À attribuer"** | Badge compteur des pièces actives sans couturier assigné |
 | **Suggestion couturier** | À la création : propose le couturier le moins chargé (Indisponibles exclus) |
 
 ---
 
-## Règles financières
+## Traçabilité des actions sensibles (Étape 10)
+
+### Audit obligatoire et atomique
+
+Le service d'audit est une **dépendance obligatoire** de `CommandeService` (plus jamais `null`). Pour les actions sensibles suivantes, l'écriture dans le journal d'audit se fait dans la **même transaction** que l'opération :
+
+- Suppression de commande
+- Annulation rapide par la Secrétaire
+- Rétrogradation de statut (avec ou sans annulation de commission)
+- Livraison forcée non soldée
+- Suppression de pièce
+
+**Si l'audit échoue → rollback complet** : la commande, la pièce ou la commission reste dans son état d'origine.
+
+### Tentatives refusées
+
+Quand une action sensible est refusée (droits insuffisants, délai dépassé, paiement lié, etc.) une ligne `TENTATIVE_REFUSEE` est écrite dans un commit séparé, avec : l'action demandée, l'opérateur, l'entité, et la raison du refus. Ces tentatives apparaissent dans la carte anti-fraude du Dashboard (nouvelle colonne "Tentatives refusées") et dans le Journal d'audit.
+
+### Accès au journal d'audit
+
+- **Menu principal** → "Journal d'audit" : visible et actif **Boss uniquement**
+- **Dashboard** → bouton "Voir tout le journal" sous la carte anti-fraude (visible même si la carte est vide)
+- `JournalAuditWindow` refuse l'accès dans son constructeur si l'utilisateur connecté n'est pas Boss
+
+### Intégrité de la chaîne de hash
+
+Le hash de chaque entrée est calculé sur `DateHeureUtc` tronquée à la milliseconde (résistance aux variations de précision SQLite). `VerifierIntegriteChaine()` valide l'ensemble de la chaîne à tout moment.
+
+---
 
 ### Matériaux (tissu, boutons, galon…)
 
@@ -198,29 +227,28 @@ Le galon circule mais ne reste pas dans la caisse atelier
 **Formule du bénéfice (unique, appliquée partout) :**
 
 ```
-Bénéfice net = CA encaissé − commissions − charges d'exploitation
+Bénéfice net = CaEncaisseCouture − commissions − charges d'exploitation
 ```
 
-où les charges = dépenses validées (loyer, électricité, salaires…) + salaire secrétaire proratisé.
+où :
+- `CaEncaisseCouture` = part couture du CA encaissé (règle "matériaux remboursés EN PREMIER")
+- charges = dépenses validées (loyer, électricité, salaires…) + salaire secrétaire proratisé
 
-Les matériaux **ne sont jamais déduits** du bénéfice. Ils apparaissent en ligne séparée
-pour information ("dont matériaux : X FCFA").
+Les matériaux refacturés (argent de passage) **ne gonflent pas** le bénéfice.
 
-**Répartition couture / matériaux encaissés (règle "matériaux EN PREMIER") :**
-
-Pour calculer la *part couture* du CA encaissé (informatif uniquement, non utilisé dans le bénéfice) :
+**Règle "matériaux remboursés EN PREMIER" :**
 
 ```
 Matériaux encaissés (par commande) = min( total payé non annulé, total matériaux facturés )
-CA couture encaissé (par commande) = max( 0, total payé non annulé − total matériaux facturés )
+CaEncaisseCouture  (par commande)  = max( 0, total payé non annulé − total matériaux facturés )
 ```
 
 Exemples chiffrés :
 
-| Cas | Couture | Matériaux | Paiement | Mat encaissés | Couture encaissée |
-|-----|---------|-----------|----------|---------------|-------------------|
+| Cas | Couture | Matériaux | Paiement | CaEncaisseCouture | BeneficeNet |
+|-----|---------|-----------|----------|-------------------|-------------|
 | Paiement complet | 1 000 | 1 000 | 2 000 | 1 000 | 1 000 |
-| Acompte partiel | 2 000 | 1 000 | 1 500 | 1 000 | 500 |
+| Acompte partiel | 2 000 | 1 000 | 1 500 | 500 | 500 |
 | Sans paiement | 5 000 | 2 000 | 0 | 0 | 0 |
 
 Cette méthode est implémentée dans `TresorerieService.CalculerRepartitionCa()` et appelée par
@@ -229,15 +257,16 @@ Cette méthode est implémentée dans `TresorerieService.CalculerRepartitionCa()
 **Affichage en cascade (DepensesView, TresorerieView, Dashboard) :**
 
 ```
-CA encaissé                    X FCFA
-  dont matériaux refacturés    − Y FCFA  (argent de passage, non compté dans le bénéfice)
-  dont couture                 = Z FCFA  (informatif)
-Matériaux avancés non remboursés        (alerte créances)
-− Commissions couturiers       − C FCFA
-− Charges d'exploitation       − D FCFA
-─────────────────────────────────────
-Bénéfice net                   = X−C−D FCFA
+CA encaissé                       X FCFA
+  − matériaux refacturés         − Y FCFA  (argent de passage remboursé par le client)
+  = CA couture encaissé          = Z FCFA  ← BASE DU BÉNÉFICE
+  − Commissions couturiers       − C FCFA
+  − Charges d'exploitation       − D FCFA
+  ─────────────────────────────────────
+  = Bénéfice net                 = Z−C−D FCFA
 ```
+
+Chaque ligne de la cascade est arithmétiquement exacte.
 
 ### Commissions
 
@@ -281,7 +310,7 @@ cd c:\chemin\vers\GestionCoutureApp
 dotnet test GestionCoutureApp.Tests
 ```
 
-Résultat attendu : **318/318 réussis, 0 échec.**
+Résultat attendu : **326/326 réussis, 0 échec.**
 
 ---
 
@@ -308,7 +337,7 @@ l'import de photo par fichier.
 |---|---|
 | `DateTerminee` sur PieceCommande | Seule façon d'avoir une date de terminaison réelle, indépendante du RDV |
 | Rattrapage historique via journal audit → DateFin | Avant T1, aucune date de terminaison n'existait. DateFin est une approximation conservative (à valider avec le propriétaire) |
-| Matériaux = avance, jamais déduites du bénéfice | Règle métier confirmée par l'exemple galon du cahier des charges |
+| Matériaux = avance remboursée, jamais comptés dans le bénéfice | Règle métier confirmée par l'exemple galon du cahier des charges. BeneficeNet = CaEncaisseCouture − commissions − charges |
 | MaterielSupplement ne crée pas de Depense auto | Confirmé après audit du code : aucun lien automatique n'existe |
 | Secrétaire peut supprimer si aucun paiement + statut initial | Correction d'erreurs légitimes sans argent engagé |
 | Flux strict + retour arrière Boss avec motif | Prévient les régressions accidentelles ; motif tracé dans l'audit |

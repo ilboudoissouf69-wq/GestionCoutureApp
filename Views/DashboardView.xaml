@@ -814,6 +814,41 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Étape 10 — Bouton "Voir tout le journal" visible même si la carte est vide -->
+                    <Button x:Name="BtnVoirJournalAudit"
+                            Content="📜  Voir tout le journal d'audit"
+                            HorizontalAlignment="Left"
+                            Height="34" Padding="14,0"
+                            Margin="0,10,0,0"
+                            Cursor="Hand"
+                            Click="BtnVoirJournalAudit_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bg"
+                                        CornerRadius="8"
+                                        Padding="{TemplateBinding Padding}"
+                                        Background="#F1F5F9"
+                                        BorderBrush="#E2E8F0"
+                                        BorderThickness="1">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bg" Property="Background" Value="#E2E8F0"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Resources>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Foreground" Value="#475569"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
                 </StackPanel>
             </Border>
 

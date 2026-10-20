@@ -57,7 +57,8 @@ namespace GestionCoutureApp.Tests
             _clientService    = new ClientService(_factory,
                 new Logger<ClientService>(logFactory));
             _commandeService  = new CommandeService(_factory,
-                new Logger<CommandeService>(logFactory));
+                new Logger<CommandeService>(logFactory),
+                TestDbHelper.NoOpAudit);
             _commissionService = new CommissionService(_factory,
                 new Logger<CommissionService>(logFactory),
                 new MockParametresService());
@@ -740,7 +741,8 @@ namespace GestionCoutureApp.Tests
             _factory = new BugFixDbContextFactory(options);
             var log  = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance;
             _commandeService = new CommandeService(_factory,
-                new Microsoft.Extensions.Logging.Logger<CommandeService>(log));
+                new Microsoft.Extensions.Logging.Logger<CommandeService>(log),
+                TestDbHelper.NoOpAudit);
 
             using var ctx = _factory.CreateDbContext();
             ctx.Employes.Add(new Employe

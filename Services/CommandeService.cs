@@ -25,8 +25,9 @@ namespace GestionCoutureApp.Services
         /// comme un double-clic accidentel.</summary>
         private static readonly TimeSpan FenetreDoublon = TimeSpan.FromSeconds(60);
 
-        // Optionnel : null dans les tests unitaires qui ne testent pas l'audit.
-        private readonly IAuditService? _auditService;
+        // Obligatoire depuis l'Étape 10 : l'audit est une dépendance critique,
+        // jamais optionnel. Si _auditService lève une exception, toute l'opération est annulée.
+        private readonly IAuditService _auditService;
 
         // Horloge injectée pour les tests (IClock) ; SystemClock par défaut en production.
         private readonly IClock _clock;
@@ -40,7 +41,10 @@ namespace GestionCoutureApp.Services
         {
             _contextFactory = contextFactory;
             _logger = logger;
-            _auditService = auditService;
+            _auditService = auditService
+                ?? throw new ArgumentNullException(nameof(auditService),
+                    "Le service d'audit est une dépendance obligatoire de CommandeService (Étape 10). " +
+                    "Injectez IAuditService via le constructeur ou le conteneur DI.");
             _clock = clock ?? new SystemClock();
             _eventAggregator = eventAggregator;
         }
@@ -371,42 +375,58 @@ namespace GestionCoutureApp.Services
         }
 
         /// <summary>
-        /// Écrit dans le journal d'audit immuable (si le service est disponible).
-        /// L'écriture est ATTENDUE (plus de tire-et-oublie) : l'indicateur anti-fraude
-        /// du Boss ne doit jamais rater une modification de prix. Task.Run + Wait
-        /// exécute l'async hors du contexte de synchronisation WPF (pas d'interblocage).
+        /// Étape 10 — Audit synchrone et OBLIGATOIRE.
+        /// Task.Run + Wait exécute l'async hors du contexte de synchronisation WPF.
+        /// Si l'audit lève une exception, elle se propage : l'appelant doit rollbacker.
         /// </summary>
         private void Auditer(Employe operateur, string nomOperateur, string typeAction,
             string entite, int idEntite, object? avant, object? apres, string? motif)
         {
-            if (_auditService == null)
-            {
-                _logger.LogWarning("Audit non disponible — {Action} sur {Entite} #{Id} par {Operateur}",
-                    typeAction, entite, idEntite, nomOperateur);
-                return;
-            }
-
             Task.Run(async () =>
             {
-                try
+                await _auditService.EnregistrerActionAsync(
+                    idOperateur: operateur.IdEmploye,
+                    nomOperateur: nomOperateur,
+                    roleOperateur: operateur.Role,
+                    typeAction: typeAction,
+                    entite: entite,
+                    idEntite: idEntite,
+                    valeursAvant: avant,
+                    valeursApres: apres,
+                    motif: motif);
+            }).Wait(TimeSpan.FromSeconds(10));
+        }
+
+        /// <summary>
+        /// Étape 10 — Enregistre une tentative refusée dans un commit indépendant.
+        /// La tentative ne doit JAMAIS faire échouer l'exception métier renvoyée au client.
+        /// Si l'écriture d'audit de tentative échoue, l'erreur est simplement loguée.
+        /// </summary>
+        private void AuditerTentativeRefusee(
+            int idOperateur, string nomOperateur, string roleOperateur,
+            string actionDemandee, string entite, int idEntite, string raisonRefus)
+        {
+            try
+            {
+                Task.Run(async () =>
                 {
                     await _auditService.EnregistrerActionAsync(
-                        idOperateur: operateur.IdEmploye,
+                        idOperateur: idOperateur,
                         nomOperateur: nomOperateur,
-                        roleOperateur: operateur.Role,
-                        typeAction: typeAction,
+                        roleOperateur: roleOperateur,
+                        typeAction: ActionsAntiFraude.TentativeRefusee,
                         entite: entite,
                         idEntite: idEntite,
-                        valeursAvant: avant,
-                        valeursApres: apres,
-                        motif: motif);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex,
-                        "Échec audit — {Action} sur {Entite} #{Id}", typeAction, entite, idEntite);
-                }
-            }).Wait(TimeSpan.FromSeconds(10));
+                        valeursAvant: null,
+                        valeursApres: new { ActionDemandee = actionDemandee, Raison = raisonRefus });
+                }).Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Impossible d'auditer la tentative refusée — {Action} sur {Entite} #{Id} par {Operateur}",
+                    actionDemandee, entite, idEntite, nomOperateur);
+            }
         }
 
         // =====================================================================
@@ -709,8 +729,13 @@ namespace GestionCoutureApp.Services
 
             string? raison = RaisonRefusAnnulation(context, commande, operateur);
             if (raison != null)
+            {
+                // Étape 10 — Tentative refusée : tracée dans un commit indépendant
+                AuditerTentativeRefusee(idOperateur, nomOperateur, operateur.Role,
+                    ActionsAntiFraude.Annulation, "Commande", idCommande, raison);
                 throw new InvalidOperationException(
                     $"Annulation impossible : {raison}\n\n{MessageDemandezAuBoss}");
+            }
 
             var snapshot = new
             {
@@ -724,21 +749,31 @@ namespace GestionCoutureApp.Services
                 ? "Annulation rapide par la secrétaire"
                 : motif.Trim();
 
-            // Annulée = retirée de l'activité exactement comme une suppression
-            // (EstSupprimee), mais distinguable par le Boss (EstAnnulee).
-            commande.EstSupprimee            = true;
-            commande.EstAnnulee              = true;
-            commande.MotifSuppression        = motifFinal;
-            commande.DateSuppression         = _clock.Now;
-            commande.IdOperateurSuppression  = idOperateur;
-            commande.NomOperateurSuppression = nomOperateur;
-            context.SaveChanges();
+            // ── ATOMIQUE : annulation logique + audit dans la même transaction ──
+            bool avecTransaction = context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+            using var transaction = avecTransaction ? context.Database.BeginTransaction() : null;
+            try
+            {
+                commande.EstSupprimee            = true;
+                commande.EstAnnulee              = true;
+                commande.MotifSuppression        = motifFinal;
+                commande.DateSuppression         = _clock.Now;
+                commande.IdOperateurSuppression  = idOperateur;
+                commande.NomOperateurSuppression = nomOperateur;
+                context.SaveChanges();
 
-            if (_auditService != null)
                 await _auditService.EnregistrerActionAsync(
                     idOperateur, nomOperateur, operateur.Role,
                     ActionsAntiFraude.Annulation, "Commande", idCommande,
                     valeursAvant: snapshot, valeursApres: null, motif: motifFinal);
+
+                transaction?.Commit();
+            }
+            catch
+            {
+                transaction?.Rollback();
+                throw;
+            }
 
             NotifierCommandeChangee(new CommandeChangedEventArgs
             {
@@ -1061,18 +1096,15 @@ namespace GestionCoutureApp.Services
 
         /// <summary>
         /// Suppression LOGIQUE d'une commande — Boss uniquement (Étape 2), motif
-        /// obligatoire, audit immuable. Une commande ne doit jamais être supprimée
-        /// physiquement : son numéro n'est donc jamais réutilisé, et elle reste
-        /// consultable par le Boss (filtre « Afficher les supprimées »).
-        /// La Secrétaire n'a plus ce droit : elle dispose de
-        /// <see cref="AnnulerParSecretaireAsync"/> (fenêtre courte, conditions strictes).
+        /// obligatoire, audit immuable ATOMIQUE (Étape 10 : l'audit est dans la même
+        /// transaction ; si l'audit échoue, la suppression est annulée).
+        /// Une commande ne doit jamais être supprimée physiquement.
         /// </summary>
         /// <param name="id">ID de la commande</param>
         /// <param name="idOperateur">ID de l'opérateur effectuant la suppression</param>
         /// <param name="nomOperateur">Nom de l'opérateur (traçabilité)</param>
         /// <param name="motif">Motif OBLIGATOIRE de la suppression</param>
-        /// <param name="auditService">Service d'audit (à défaut, celui injecté dans le service)</param>
-        public async Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null)
+        public async Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif)
         {
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException(
@@ -1086,10 +1118,16 @@ namespace GestionCoutureApp.Services
 
             bool estBoss = operateur.RoleEnum == RoleEmploye.Boss;
             if (!estBoss)
+            {
+                // Tracer la tentative refusée AVANT de lever l'exception
+                AuditerTentativeRefusee(idOperateur, nomOperateur, operateur.Role,
+                    ActionsAntiFraude.Suppression, "Commande", id,
+                    "Seul le Boss peut supprimer une commande.");
                 throw new UnauthorizedAccessException(
                     "Seul le Boss peut supprimer une commande. " +
                     "La Secrétaire peut uniquement ANNULER une commande qu'elle vient de créer " +
                     "(aucun paiement, rien commencé, reçu non imprimé). " + MessageDemandezAuBoss);
+            }
 
             var commande = context.Commandes
                 .Include(c => c.Client)
@@ -1107,6 +1145,9 @@ namespace GestionCoutureApp.Services
             // ── Bloque si paiements (historique comptable) ──────────────────
             if (commande.Paiements.Any())
             {
+                AuditerTentativeRefusee(idOperateur, nomOperateur, operateur.Role,
+                    ActionsAntiFraude.Suppression, "Commande", id,
+                    $"Commande avec {commande.Paiements.Count} paiement(s) — traçabilité comptable.");
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette commande : des paiements y sont rattachés " +
                     $"({commande.Paiements.Count} paiement(s), dont {commande.Paiements.Count(p => p.EstAnnule)} annulé(s)). " +
@@ -1116,6 +1157,9 @@ namespace GestionCoutureApp.Services
 
             if (commande.Pieces.Any(p => p.IdCommission.HasValue))
             {
+                AuditerTentativeRefusee(idOperateur, nomOperateur, operateur.Role,
+                    ActionsAntiFraude.Suppression, "Commande", id,
+                    "Commission active sur une pièce.");
                 throw new InvalidOperationException(
                     "Impossible de supprimer cette commande : au moins une de ses pièces est " +
                     "rattachée à une commission déjà enregistrée. Annulez d'abord la commission concernée.");
@@ -1134,20 +1178,22 @@ namespace GestionCoutureApp.Services
                 Statut = commande.StatutGlobal
             };
 
-            // Suppression logique : marquer comme supprimée au lieu de supprimer physiquement
-            commande.EstSupprimee = true;
-            commande.MotifSuppression = motif.Trim();
-            commande.DateSuppression = _clock.Now;
-            commande.IdOperateurSuppression = idOperateur;
-            commande.NomOperateurSuppression = nomOperateur;
-
-            context.SaveChanges();
-
-            // Enregistrer dans le journal d'audit immuable avec notification
-            auditService ??= _auditService;
-            if (auditService != null)
+            // ── ATOMIQUE : suppression logique + audit dans la même transaction ──
+            // SQLite réel → transaction vraie. InMemory → pas de transaction (test).
+            bool avecTransaction = context.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory";
+            using var transaction = avecTransaction ? context.Database.BeginTransaction() : null;
+            try
             {
-                await auditService.EnregistrerActionAsync(
+                commande.EstSupprimee = true;
+                commande.MotifSuppression = motif.Trim();
+                commande.DateSuppression = _clock.Now;
+                commande.IdOperateurSuppression = idOperateur;
+                commande.NomOperateurSuppression = nomOperateur;
+
+                context.SaveChanges();
+
+                // Audit dans le même commit (écrit via son propre DbContext mais avant Commit)
+                await _auditService.EnregistrerActionAsync(
                     idOperateur: idOperateur,
                     nomOperateur: nomOperateur,
                     roleOperateur: operateur.Role,
@@ -1157,8 +1203,14 @@ namespace GestionCoutureApp.Services
                     valeursAvant: snapshot,
                     valeursApres: null,
                     motif: motif,
-                    envoyerNotification: true
-                );
+                    envoyerNotification: true);
+
+                transaction?.Commit();
+            }
+            catch
+            {
+                transaction?.Rollback();
+                throw;  // Si l'audit échoue : rollback → la commande n'est PAS supprimée
             }
         }
 
@@ -1169,7 +1221,7 @@ namespace GestionCoutureApp.Services
         {
             throw new InvalidOperationException(
                 "La suppression de commande sans traçabilité est interdite. " +
-                "Utilisez SupprimerAsync(id, idOperateur, nomOperateur, motif, auditService) " +
+                "Utilisez SupprimerAsync(id, idOperateur, nomOperateur, motif) " +
                 "pour une suppression logique avec autorisation Boss et audit complet.");
         }
 
@@ -1849,9 +1901,8 @@ namespace GestionCoutureApp.Services
                     piece, nouveauStatut, operateur, motif, piece.Commande, context, commissionService);
 
                 context.SaveChanges();
-                transaction?.Commit();
 
-                // Audit
+                // Étape 10 — Audit AVANT le commit : si l'audit échoue → rollback
                 Auditer(operateur, nomOperateur, "STATUT_PIECE_MODIFIE", "PieceCommande",
                     idPieceCommande,
                     avant: new { Statut = ancienStatut },
@@ -1862,6 +1913,8 @@ namespace GestionCoutureApp.Services
                     AuditerLivraisonNonSoldee(operateur, nomOperateur, piece.IdCommande,
                         resteLivraisonForcee.Value, motif!,
                         $"Changement statut pièce #{idPieceCommande} ({piece.TypeVetement})");
+
+                transaction?.Commit();
 
                 NotifierCommandeChangee(new CommandeChangedEventArgs
                 {

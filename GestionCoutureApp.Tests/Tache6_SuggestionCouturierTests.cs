@@ -38,7 +38,8 @@ namespace GestionCoutureApp.Tests
                 .UseInMemoryDatabase($"T6_{Guid.NewGuid()}").Options;
             _factory = new T6DbContextFactory(opts);
             var log  = NullLoggerFactory.Instance;
-            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log));
+            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log),
+                TestDbHelper.NoOpAudit);
 
             using var ctx = _factory.CreateDbContext();
             ctx.Employes.AddRange(

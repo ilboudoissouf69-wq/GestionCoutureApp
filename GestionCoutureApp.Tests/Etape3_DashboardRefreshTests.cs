@@ -326,6 +326,7 @@ namespace GestionCoutureApp.Tests
             var client = CreerClient(ctx);
 
             var svc = new CommandeService(_factory, NullLogger<CommandeService>.Instance,
+                auditService: TestDbHelper.NoOpAudit,
                 eventAggregator: _ea);
 
             // Créer une commande minimale directement en base

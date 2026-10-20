@@ -421,6 +421,27 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Séparateur groupe sécurité — Boss uniquement -->
+                        <Border Height="1" Background="#1E293B" Margin="16,10"
+                                x:Name="SepSecurite" Visibility="Collapsed"/>
+
+                        <TextBlock Text="SÉCURITÉ"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="#475569"
+                                   Margin="20,0,0,6"
+                                   Visibility="Collapsed"
+                                   x:Name="LblGroupeSecurite"/>
+
+                        <Button x:Name="BtnJournalAudit"
+                                Style="{StaticResource NavBtn}"
+                                Visibility="Collapsed"
+                                Click="BtnJournalAudit_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="📜" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Journal d'audit"  FontSize="13" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
                         <StackPanel Height="16"/>
                     </StackPanel>
                 </ScrollViewer>

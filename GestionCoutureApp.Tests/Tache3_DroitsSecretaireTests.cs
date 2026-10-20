@@ -46,6 +46,7 @@ namespace GestionCoutureApp.Tests
             var log = NullLoggerFactory.Instance;
             _commandeService = new CommandeService(_factory,
                 new Logger<CommandeService>(log),
+                auditService: TestDbHelper.NoOpAudit,
                 clock: _clock);
             _paiementService = new PaiementService(_factory, new Logger<PaiementService>(log));
 

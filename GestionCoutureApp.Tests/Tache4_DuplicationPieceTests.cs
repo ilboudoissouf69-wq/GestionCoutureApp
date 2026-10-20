@@ -39,7 +39,8 @@ namespace GestionCoutureApp.Tests
                 .UseInMemoryDatabase($"T4_{Guid.NewGuid()}").Options;
             _factory = new T4DbContextFactory(opts);
             var log  = NullLoggerFactory.Instance;
-            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log));
+            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log),
+                TestDbHelper.NoOpAudit);
             _paiementService = new PaiementService(_factory, new Logger<PaiementService>(log));
 
             using var ctx = _factory.CreateDbContext();

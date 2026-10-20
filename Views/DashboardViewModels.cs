@@ -103,7 +103,15 @@ public class AntiFraudeVm
     public int Suppressions { get; set; }
     public int Annulations { get; set; }
     public int ModificationsPrix { get; set; }
+    /// <summary>Étape 10 — Tentatives d'actions sensibles refusées.</summary>
+    public int TentativesRefusees { get; set; }
     public int Total { get; set; }
     public bool EstAuDessusSeuil { get; set; }
     public System.Windows.Media.Brush Couleur { get; set; } = System.Windows.Media.Brushes.Gray;
+
+    /// <summary>Description lisible pour le XAML.</summary>
+    public string Description =>
+        $"Suppressions : {Suppressions}  |  Annulations : {Annulations}  |  " +
+        $"Modif. prix : {ModificationsPrix}  |  Tentatives refusées : {TentativesRefusees}  " +
+        $"→  Total : {Total}";
 }

@@ -40,7 +40,8 @@ namespace GestionCoutureApp.Tests
             var opts = TestDbHelper.CreerOptions("MC");
             _factory        = new E4DbContextFactory(opts);
             _service        = new MesureClientService(_factory, NullLogger<MesureClientService>.Instance);
-            _commandeService = new CommandeService(_factory, NullLogger<CommandeService>.Instance);
+            _commandeService = new CommandeService(_factory, NullLogger<CommandeService>.Instance,
+                TestDbHelper.NoOpAudit);
 
             using var ctx = _factory.CreateDbContext();
             ctx.Clients.AddRange(

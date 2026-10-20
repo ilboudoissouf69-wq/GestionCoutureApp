@@ -95,16 +95,21 @@ namespace GestionCoutureApp.Services
     /// </summary>
     public static class ActionsAntiFraude
     {
-        public const string Suppression    = "COMMANDE_SUPPRIMEE";
-        public const string Annulation     = "COMMANDE_ANNULEE";
-        public const string PrixModifie    = "COMMANDE_PRIX_MODIFIE";
-        public const string PieceAjoutee   = "PIECE_AJOUTEE";
-        public const string PieceSupprimee = "PIECE_SUPPRIMEE";
+        public const string Suppression       = "COMMANDE_SUPPRIMEE";
+        public const string Annulation        = "COMMANDE_ANNULEE";
+        public const string PrixModifie       = "COMMANDE_PRIX_MODIFIE";
+        public const string PieceAjoutee      = "PIECE_AJOUTEE";
+        public const string PieceSupprimee    = "PIECE_SUPPRIMEE";
+        /// <summary>
+        /// Étape 10 — Tentative d'action sensible refusée par une règle métier.
+        /// La tentative est tracée même si l'opération n'a pas eu lieu.
+        /// </summary>
+        public const string TentativeRefusee  = "TENTATIVE_REFUSEE";
 
         /// <summary>Actions comptées comme « modification de prix » (le total facturé change).</summary>
         public static readonly string[] ModificationsPrix = { PrixModifie, PieceAjoutee, PieceSupprimee };
 
-        public static readonly string[] Toutes = { Suppression, Annulation, PrixModifie, PieceAjoutee, PieceSupprimee };
+        public static readonly string[] Toutes = { Suppression, Annulation, PrixModifie, PieceAjoutee, PieceSupprimee, TentativeRefusee };
     }
 
     /// <summary>Une ligne de l'indicateur anti-fraude : un utilisateur sur la période.</summary>
@@ -116,7 +121,9 @@ namespace GestionCoutureApp.Services
         public int Suppressions { get; set; }
         public int Annulations { get; set; }
         public int ModificationsPrix { get; set; }
-        public int Total => Suppressions + Annulations + ModificationsPrix;
+        /// <summary>Étape 10 — Tentatives d'actions sensibles refusées par une règle métier.</summary>
+        public int TentativesRefusees { get; set; }
+        public int Total => Suppressions + Annulations + ModificationsPrix + TentativesRefusees;
     }
 
     /// <summary>

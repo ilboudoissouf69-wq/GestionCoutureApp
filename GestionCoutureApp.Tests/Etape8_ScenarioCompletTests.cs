@@ -184,7 +184,7 @@ namespace GestionCoutureApp.Tests
 
             _commandeService   = new CommandeService(_factory,
                 new Microsoft.Extensions.Logging.Logger<CommandeService>(logFactory),
-                auditService: null, clock: _clock);
+                auditService: TestDbHelper.NoOpAudit, clock: _clock);
             _paiementService   = new PaiementService(_factory,
                 new Microsoft.Extensions.Logging.Logger<PaiementService>(logFactory),
                 clock: _clock);
@@ -584,10 +584,12 @@ namespace GestionCoutureApp.Tests
                 $"e) Total dépenses attendu = {depAttendu:N0}, obtenu = {depObtenu:N0}");
 
             // f) Bénéfice (BilanNet)
-            //    BilanNet = CA − dépenses − commissions − primes
-            //             = 69 000 − 5 000 − 19 500 − 0 = 44 500
+            //    Aucune commande n'a de matériaux dans ce scénario
+            //    → CaEncaisseCouture = CA encaissé = 69 000
+            //    BilanNet = CaEncaisseCouture − commissions − primes − dépenses
+            //             = 69 000 − 19 500 − 0 − 5 000 = 44 500
             //    (SalaireSecrétaire = 0 dans notre mock, primes = 0 car seuil=100)
-            decimal bilanAttendu = caAttendu - depAttendu - totalCommAttendu - 0m; // = 44 500
+            decimal bilanAttendu = caAttendu - totalCommAttendu - 0m - depAttendu; // = 44 500
             var bilan = _tresorerieService.CalculerBilan(_debut, _fin);
             Assert.That(bilan.BilanNet, Is.EqualTo(bilanAttendu),
                 $"f) BilanNet attendu = {bilanAttendu:N0}, obtenu = {bilan.BilanNet:N0}");
@@ -862,11 +864,13 @@ namespace GestionCoutureApp.Tests
         }
 
         // =====================================================================
-        // CAS LIMITE 5 — Atomicité : erreur au milieu de « annuler commission +
-        //               rétrograder » → rollback réel (rien n'a changé)
+        // CAS LIMITE 5 — Atomicité (Étape 10) : si l'écriture d'audit échoue
+        //               lors d'une rétrogradation avec annulation de commission,
+        //               TOUTE l'opération est annulée (pièce et commission inchangées).
+        // Ancienne règle : "audit non bloquant" → remplacée par "audit obligatoire et atomique".
         // =====================================================================
         [Test]
-        public void E8_CL5_Atomicite_AnnulationCommission_Retrograde_Rollback()
+        public void E8_CL5_Atomicite_AuditEchoue_Rollback_PieceEtCommissionInchangees()
         {
             // Préparer une pièce Terminée commissionnée
             CommandeService.ViderCacheDoublonPourTests();
@@ -881,51 +885,51 @@ namespace GestionCoutureApp.Tests
             _commandeService.TransitionnerStatutPiece(piece.IdPieceCommande, "En cours", IdBoss, "Boss DIALLO", null);
             _commandeService.TransitionnerStatutPiece(piece.IdPieceCommande, "Terminee", IdBoss, "Boss DIALLO", null);
 
+            // Enregistrer la commission
             var apercu = _commissionService.CalculerApercu(_debut, _fin, TauxCommission, false, null);
             _commissionService.EnregistrerCommissions(apercu, _debut, _fin,
                 TauxCommission, false, IdBoss, "Boss DIALLO");
 
             int idCommission;
-            string statutAvant;
             using (var ctx = _factory.CreateDbContext())
             {
                 var pc = ctx.PiecesCommande.Find(piece.IdPieceCommande)!;
                 idCommission = pc.IdCommission!.Value;
-                statutAvant  = pc.Statut; // "Terminee"
+                Assert.That(pc.Statut, Is.EqualTo("Terminee"), "CL5 Pré-condition : pièce Terminée");
+                Assert.That(pc.IdCommission, Is.Not.Null,       "CL5 Pré-condition : commission liée");
             }
-            _ = statutAvant; // référencé pour éviter le warning CS0219
 
-            // Simuler un audit qui échoue : on utilise un AuditService qui lance une exception
-            // après la première action (le vraie test d'atomicité repose sur les transactions SQLite)
-            // La méthode TransitionnerStatutPieceAvecCommission utilise une transaction EF.
-            // On vérifie que si l'opération échoue, la DB reste cohérente.
-            // Ici on teste la voie heureuse + annulation manuelle pour vérifier l'atomicité indirecte.
-            // Pour un vrai rollback, on provoque l'échec en fournissant un idCouturier inexistant.
+            // Étape 10 — Nouvelle règle : un audit qui échoue doit annuler TOUTE l'opération.
+            // On crée un CommandeService avec un AuditService qui lève toujours une exception.
+            // TransitionnerStatutPiece avec rétrogradation doit appeler AnnulerDansTransaction
+            // + audit dans la même transaction. Si l'audit échoue : rollback complet.
             var auditQuiEchoue = new AuditServiceStubLancantException();
-            var cmdSvcAvecAuditFaulty = new CommandeService(
+            var cmdSvcAuditFaulty = new CommandeService(
                 _factory,
                 new Microsoft.Extensions.Logging.Logger<CommandeService>(NullLoggerFactory.Instance),
                 auditService: auditQuiEchoue,
                 clock: _clock);
 
-            // L'exception d'audit est gérée silencieusement (log uniquement, pas de rollback)
-            // La règle est que l'audit ne doit pas bloquer l'opération métier.
-            // DONC : l'opération réussit même si l'audit échoue.
-            // Ce test vérifie le comportement défini (non un rollback sur audit).
-            Assert.DoesNotThrow(() =>
-                cmdSvcAvecAuditFaulty.TransitionnerStatutPiece(
+            // L'opération doit lever une exception
+            var exCl5 = Assert.Catch<Exception>(() =>
+                cmdSvcAuditFaulty.TransitionnerStatutPiece(
                     piece.IdPieceCommande, "En cours",
-                    IdBoss, "Boss DIALLO", "test atomicité",
-                    _commissionService),
-                "CL5 L'opération doit réussir même si l'audit échoue (audit non bloquant)");
+                    IdBoss, "Boss DIALLO", "test échec audit",
+                    _commissionService));
+            Assert.That(exCl5, Is.Not.Null,
+                "CL5 (Étape 10) — Si l'audit échoue, l'exception doit se propager");
 
+            // Vérification : rollback total → pièce et commission inchangées
             using (var ctx = _factory.CreateDbContext())
             {
                 var pc   = ctx.PiecesCommande.Find(piece.IdPieceCommande)!;
                 var comm = ctx.Commissions.Find(idCommission)!;
-                Assert.That(pc.Statut,      Is.EqualTo("En cours"), "CL5 Statut bien rétrogradé");
-                Assert.That(comm.EstAnnulee, Is.True,               "CL5 Commission bien annulée");
-                Assert.That(pc.IdCommission, Is.Null,               "CL5 IdCommission déverrouillé");
+                Assert.That(pc.Statut,       Is.EqualTo("Terminee"),
+                    "CL5 (Étape 10) — Rollback : la pièce doit rester Terminée (pas rétrogradée)");
+                Assert.That(comm.EstAnnulee, Is.False,
+                    "CL5 (Étape 10) — Rollback : la commission ne doit PAS être annulée");
+                Assert.That(pc.IdCommission, Is.EqualTo(idCommission),
+                    "CL5 (Étape 10) — Rollback : IdCommission doit rester lié");
             }
         }
 

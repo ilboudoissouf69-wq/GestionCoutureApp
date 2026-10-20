@@ -60,6 +60,10 @@ namespace GestionCoutureApp.Views
                     BtnTypesVetements.Visibility= Visibility.Visible;
                     BtnEmployes.Visibility      = Visibility.Visible;
                     BtnParametres.Visibility    = Visibility.Visible;
+                    // Groupe Sécurité — Boss uniquement
+                    SepSecurite.Visibility       = Visibility.Visible;
+                    LblGroupeSecurite.Visibility = Visibility.Visible;
+                    BtnJournalAudit.Visibility   = Visibility.Visible;
                     ContentFrame.Navigate(new DashboardView());
                     SetBoutonActif(BtnTableauDeBord);
                 }
@@ -334,6 +338,21 @@ namespace GestionCoutureApp.Views
             catch (UnauthorizedAccessException)
             {
                 MessageBox.Show("Accès refusé.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnJournalAudit_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RoleAutorise("Boss")) return;
+            try
+            {
+                var fenetre = new JournalAuditWindow { Owner = this };
+                fenetre.ShowDialog();
+                // Pas de SetBoutonActif car c'est une fenêtre flottante, pas une page
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show(ex.Message, "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

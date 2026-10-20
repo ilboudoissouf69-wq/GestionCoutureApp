@@ -612,14 +612,15 @@ namespace GestionCoutureApp.Views
 
             var vms = indicateurs.Select(i => new AntiFraudeVm
             {
-                IdOperateur      = i.IdOperateur,
-                NomOperateur     = i.NomOperateur,
-                RoleOperateur    = i.RoleOperateur,
-                Suppressions     = i.Suppressions,
-                Annulations      = i.Annulations,
+                IdOperateur       = i.IdOperateur,
+                NomOperateur      = i.NomOperateur,
+                RoleOperateur     = i.RoleOperateur,
+                Suppressions      = i.Suppressions,
+                Annulations       = i.Annulations,
                 ModificationsPrix = i.ModificationsPrix,
-                Total            = i.Total,
-                EstAuDessusSeuil = i.Total >= seuilAlerte,
+                TentativesRefusees = i.TentativesRefusees,
+                Total             = i.Total,
+                EstAuDessusSeuil  = i.Total >= seuilAlerte,
                 Couleur = i.Total >= seuilAlerte
                     ? new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26))
                     : new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80))
@@ -641,6 +642,20 @@ namespace GestionCoutureApp.Views
             var window = new JournalAuditWindow(vm.IdOperateur, vm.NomOperateur);
             window.Owner = Window.GetWindow(this);
             window.ShowDialog();
+        }
+
+        // Étape 10 — Bouton "Voir tout le journal" sous la carte anti-fraude
+        private void BtnVoirJournalAudit_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var window = new JournalAuditWindow { Owner = Window.GetWindow(this) };
+                window.ShowDialog();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                MessageBox.Show(ex.Message, "Accès refusé", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         // ------------------------------------------------------------------

@@ -28,10 +28,11 @@ namespace GestionCoutureApp.Services
         /// <summary>
         /// Calcule le Bilan Financier sur une période donnée.
         ///
-        /// FORMULE UNIQUE :
-        ///   BilanNet = CA encaissé − commissions − primes − charges d'exploitation
+        /// FORMULE UNIQUE (identique à DepenseService.ObtenirStats.BeneficeNet) :
+        ///   BilanNet = CaEncaisseCouture − commissions − primes − charges d'exploitation
         ///
-        /// Les matériaux ne sont pas déduits (flux neutre).
+        /// Les matériaux refacturés ne gonflent PAS le bénéfice.
+        /// CaEncaisseCouture est calculé par CalculerRepartitionCa (règle "matériaux EN PREMIER").
         /// </summary>
         BilanFinancier CalculerBilan(DateTime dateDebut, DateTime dateFin);
 
@@ -128,8 +129,9 @@ namespace GestionCoutureApp.Services
         public decimal TotalPrimesQualite { get; set; }
 
         /// <summary>
-        /// Bénéfice net = CA encaissé − commissions − primes − charges
-        /// Les matériaux NE sont PAS déduits (flux neutre).
+        /// Bénéfice net = CA couture encaissé − commissions − primes − charges
+        /// Les matériaux refacturés (argent de passage) ne comptent PAS dans le bénéfice.
+        /// Identique à StatsFinancieres.BeneficeNet de DepenseService.
         /// </summary>
         public decimal BilanNet { get; set; }
 

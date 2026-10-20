@@ -37,17 +37,21 @@ namespace GestionCoutureApp.Tests
 
             // Initialisation des services
             var loggerFactory = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance;
-            
-            _commandeService = new CommandeService(
-                _contextFactory, loggerFactory.CreateLogger<CommandeService>());
-            _paiementService = new PaiementService(
-                _contextFactory, 
-                loggerFactory.CreateLogger<PaiementService>());
+
             _auditService = new AuditService(
                 _contextFactory,
                 new MockWhatsAppService(),
                 new MockParametresService(),
                 loggerFactory.CreateLogger<AuditService>());
+
+            // _commandeService utilise le vrai AuditService pour que Test09 fonctionne
+            // (Test09 vérifie qu'une entrée d'audit est créée après suppression).
+            _commandeService = new CommandeService(
+                _contextFactory, loggerFactory.CreateLogger<CommandeService>(),
+                _auditService);
+            _paiementService = new PaiementService(
+                _contextFactory,
+                loggerFactory.CreateLogger<PaiementService>());
             _tresorerieService = new TresorerieService(
                 _contextFactory,
                 loggerFactory.CreateLogger<TresorerieService>());
@@ -241,8 +245,7 @@ namespace GestionCoutureApp.Tests
                     id: commande.IdCommande,
                     idOperateur: 1, // Boss
                     nomOperateur: "Mamadou DIALLO",
-                    motif: "Commande annulée",
-                    auditService: _auditService
+                    motif: "Commande annulée"
                 );
             });
 
@@ -486,8 +489,7 @@ namespace GestionCoutureApp.Tests
                     id: commande.IdCommande,
                     idOperateur: 1, // Boss
                     nomOperateur: "Mamadou DIALLO",
-                    motif: "", // Motif vide
-                    auditService: _auditService
+                    motif: "" // Motif vide
                 );
             });
 
@@ -541,8 +543,7 @@ namespace GestionCoutureApp.Tests
                 id: commande1.IdCommande,
                 idOperateur: 1,
                 nomOperateur: "Mamadou DIALLO",
-                motif: "Annulation client",
-                auditService: _auditService
+                motif: "Annulation client"
             );
 
             // Act : Récupérer toutes les commandes
@@ -582,8 +583,7 @@ namespace GestionCoutureApp.Tests
                 id: commande.IdCommande,
                 idOperateur: 1,
                 nomOperateur: "Mamadou DIALLO",
-                motif: "Erreur de saisie initiale",
-                auditService: _auditService
+                motif: "Erreur de saisie initiale"
             );
 
             // Assert : Vérifier qu'une entrée d'audit existe
@@ -664,6 +664,8 @@ namespace GestionCoutureApp.Tests
         public Task NotifierCommandePreteAsync(Commande commande) => Task.CompletedTask;
         public Task NotifierRappelRdvAsync(Commande commande) => Task.CompletedTask;
         public Task ContacterClientAsync(Client client) => Task.CompletedTask;
+        public Task NotifierRetardAsync(Commande commande) => Task.CompletedTask;
+        public Task NotifierRetourPreteAsync(Retour retour) => Task.CompletedTask;
     }
 
     public class MockParametresService : IParametresService

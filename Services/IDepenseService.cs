@@ -34,26 +34,35 @@ namespace GestionCoutureApp.Services
 
         // ── Formules financières ──────────────────────────────────────────────
         //
-        // RÈGLE MÉTIER : matériaux remboursés EN PREMIER
+        // RÈGLE MÉTIER (validée par le Boss) :
+        //   Les matériaux sont une avance remboursée par le client.
+        //   L'achat n'est PAS saisi comme dépense ; le remboursement n'est PAS un gain.
+        //   → Seule la part couture encaissée entre dans le bénéfice.
         //
-        //   Exemple 1 : couture 1 000 + galon 1 000, client paie 2 000
-        //     CaEncaisse = 2 000
-        //     CaEncaisseCouture = max(0, 2 000 − 1 000) = 1 000  ← couture pure
-        //     BeneficeNet = 2 000 − 0 − 0 = 2 000  (matériaux flux neutre)
+        //   Règle "matériaux remboursés EN PREMIER" :
+        //     Matériaux encaissés (par commande) = min( paye, totalMat )
+        //     CaEncaisseCouture  (par commande)  = max( 0, paye − totalMat )
         //
-        //   Exemple 2 : couture 2 000 + mat 1 000, acompte 1 500
-        //     CaEncaisse = 1 500
-        //     matériaux encaissés = min(1 500, 1 000) = 1 000
-        //     CaEncaisseCouture = max(0, 1 500 − 1 000) = 500
-        //     BeneficeNet = 1 500 − 0 − 0 = 1 500  (matériaux flux neutre)
+        //   Exemples chiffrés :
+        //     1) couture 1 000 + galon 1 000, client paie 2 000
+        //          CaEncaisse = 2 000
+        //          matériaux enc = min(2 000, 1 000) = 1 000
+        //          CaEncaisseCouture = max(0, 2 000 − 1 000) = 1 000
+        //          BeneficeNet = 1 000 − 0 − 0 = 1 000  ✓
         //
-        //   Exemple 3 : commande sans paiement
-        //     CaEncaisse = 0, CaEncaisseCouture = 0, BeneficeNet = 0
+        //     2) couture 2 000 + matériaux 1 000, acompte 1 500
+        //          CaEncaisse = 1 500
+        //          matériaux enc = min(1 500, 1 000) = 1 000
+        //          CaEncaisseCouture = max(0, 1 500 − 1 000) = 500
+        //          BeneficeNet = 500 − 0 − 0 = 500  ✓
+        //
+        //     3) commande sans paiement
+        //          CaEncaisse = 0, CaEncaisseCouture = 0, BeneficeNet = 0  ✓
 
         /// <summary>
-        /// CA couture encaissé (règle "matériaux EN PREMIER") — informatif.
-        /// Utilise CaEncaisseCoutureCalc si calculé par la méthode centrale,
-        /// sinon max(0, CA − matériaux) comme approximation.
+        /// CA couture encaissé (règle "matériaux remboursés EN PREMIER").
+        /// Calculé par TresorerieService.CalculerRepartitionCa (méthode centrale).
+        /// C'est la BASE du bénéfice net.
         /// </summary>
         public decimal CaEncaisseCouture =>
             CaEncaisseCoutureCalc > 0m || CaEncaisse == 0m
@@ -63,16 +72,16 @@ namespace GestionCoutureApp.Services
         // Charges exploitation = Dépenses validées + Salaire Secrétaire proraté
         public decimal ChargesExploitation => TotalDepenses + SalaireSecretaire;
 
-        // Marge Brute = CA encaissé − commissions couturiers (matériaux flux neutre)
-        public decimal MargeBrute => CaEncaisse - TotalCommissions;
+        // Marge Brute couture = CA couture − commissions
+        public decimal MargeBrute => CaEncaisseCouture - TotalCommissions;
 
         // ── FORMULE UNIQUE DU BÉNÉFICE ────────────────────────────────────────
         //
-        //   BeneficeNet = CA encaissé − commissions − charges d'exploitation
+        //   BeneficeNet = CaEncaisseCouture − commissions − charges d'exploitation
         //
-        // Les matériaux NE sont PAS déduits : avance remboursée = flux neutre.
+        // Les matériaux refacturés (argent de passage) ne gonfient PAS le bénéfice.
         // IDENTIQUE au BilanNet de TresorerieService.CalculerBilan.
-        public decimal BeneficeNet => CaEncaisse - TotalCommissions - ChargesExploitation;
+        public decimal BeneficeNet => CaEncaisseCouture - TotalCommissions - ChargesExploitation;
 
         // Alias pour compatibilité avec d'autres vues
         public decimal BeneficeCouture => BeneficeNet;

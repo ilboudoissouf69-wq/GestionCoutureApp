@@ -83,8 +83,8 @@ namespace GestionCoutureApp.Services
         void ModifierInfosCommande(int idCommande, int idClient, DateTime dateFin,
             TimeSpan heureDebut, TimeSpan? heureFin, int idOperateur, string nomOperateur);
 
-        // Suppression logique — BOSS UNIQUEMENT (Étape 2), motif obligatoire, audit.
-        Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif, IAuditService? auditService = null);
+        // Suppression logique — BOSS UNIQUEMENT (Étape 2), motif obligatoire, audit atomique (Étape 10).
+        Task SupprimerAsync(int id, int idOperateur, string nomOperateur, string motif);
 
         // ===== Étape 2 — Annulation rapide par la Secrétaire =====
 

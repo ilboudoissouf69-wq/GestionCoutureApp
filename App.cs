@@ -87,19 +87,20 @@ namespace GestionCoutureApp
             services.AddSingleton<IClock, SystemClock>();       // Phase 2 : horloge injectable
             services.AddSingleton<IAuthService, AuthService>();
             services.AddSingleton<IClientService, ClientService>();
+            services.AddSingleton<IWhatsAppService, WhatsAppService>();
+            services.AddSingleton<IParametresService, ParametresService>();
+            // AuditService enregistré tôt : CommandeService en a besoin (Étape 10 — obligatoire)
+            services.AddSingleton<IAuditService, AuditService>();
             services.AddSingleton<ICommandeService, CommandeService>();
             services.AddSingleton<IPaiementService, PaiementService>();
             services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
-            services.AddSingleton<IParametresService, ParametresService>();
             // RetourService dépend de IAuditService — déclaré après ce dernier
             services.AddSingleton<IRetourService, RetourService>();
             services.AddSingleton<IAlerteService, AlerteService>();
             services.AddSingleton<IDepenseService, DepenseService>();
             services.AddSingleton<IMaterielService, MaterielService>();
-            services.AddSingleton<IWhatsAppService, WhatsAppService>();
             services.AddSingleton<ITresorerieService, TresorerieService>();
-            services.AddSingleton<IAuditService, AuditService>();
             services.AddSingleton<IMesureClientService, MesureClientService>();
             services.AddSingleton<IBrouillonCommandeService, BrouillonCommandeService>();
             services.AddSingleton<IRetardAlerteService, RetardAlerteService>();

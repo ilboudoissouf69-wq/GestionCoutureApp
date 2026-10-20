@@ -48,7 +48,8 @@ namespace GestionCoutureApp.Tests
             _factory = new T1DbContextFactory(options);
 
             var logFactory = NullLoggerFactory.Instance;
-            _commandeService   = new CommandeService(_factory,  new Logger<CommandeService>(logFactory));
+            _commandeService   = new CommandeService(_factory,  new Logger<CommandeService>(logFactory),
+                TestDbHelper.NoOpAudit);
             _commissionService = new CommissionService(_factory, new Logger<CommissionService>(logFactory), new MockParametresService());
             _paiementService   = new PaiementService(_factory,  new Logger<PaiementService>(logFactory));
 

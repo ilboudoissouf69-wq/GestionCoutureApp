@@ -49,7 +49,8 @@ namespace GestionCoutureApp.Tests
 
             var loggerFactory = NullLoggerFactory.Instance;
             _commandeService = new CommandeService(
-                _factory, loggerFactory.CreateLogger<CommandeService>());
+                _factory, loggerFactory.CreateLogger<CommandeService>(),
+                TestDbHelper.NoOpAudit);
             _clientService = new ClientService(
                 _factory, loggerFactory.CreateLogger<ClientService>());
             _depenseService  = new DepenseService(_factory);

@@ -53,7 +53,8 @@ namespace GestionCoutureApp.Tests
             _factory = new T2DbContextFactory(options);
 
             var logFactory = NullLoggerFactory.Instance;
-            _commandeService   = new CommandeService(_factory, new Logger<CommandeService>(logFactory));
+            _commandeService   = new CommandeService(_factory, new Logger<CommandeService>(logFactory),
+                TestDbHelper.NoOpAudit);
             _depenseService    = new DepenseService(_factory);
             _tresorerieService = new TresorerieService(_factory, new Logger<TresorerieService>(logFactory));
             _paiementService   = new PaiementService(_factory, new Logger<PaiementService>(logFactory));
@@ -81,10 +82,9 @@ namespace GestionCoutureApp.Tests
         //     Matériaux encaissés = min(2 000, 1 000) = 1 000  (remboursés EN PREMIER)
         //     CA couture encaissé = max(0, 2 000 − 1 000) = 1 000
         //     CA encaissé total   = 2 000
-        //     BeneficeNet = 2 000 − 0 (commissions) − 0 (charges) = 2 000
-        //       → Le flux matériaux est neutre ; il reste 1 000 de couture dans les 2 000,
-        //         mais le bénéfice brut est bien 2 000 avant déduction de charges.
-        //         Pour connaître la part couture pure : CaEncaisseCouture = 1 000.
+        //     BeneficeNet = CaEncaisseCouture − 0 (commissions) − 0 (charges) = 1 000
+        //       → Seule la couture compte dans le bénéfice.
+        //         Le galon est remboursé (argent de passage), pas un gain.
 
         [Test]
         public void T2_01_Exemple_Cahier_Couture_1000_Galon_1000_Benefice_1000()
@@ -110,36 +110,33 @@ namespace GestionCoutureApp.Tests
             var stats = _depenseService.ObtenirStats(debut, fin);
             var bilan = _tresorerieService.CalculerBilan(debut, fin);
 
-            // ── Vérifications manuelles ────────────────────────────────────────
-            // CA encaissé = 2 000
+            // CA encaissé total = 2 000
             Assert.That(stats.CaEncaisse, Is.EqualTo(2000m),
                 "CA encaissé = couture 1 000 + galon 1 000 = 2 000");
 
-            // Matériaux facturés (informative) = 1 000
+            // Matériaux facturés (informatif) = 1 000
             Assert.That(stats.TotalMateriaux, Is.EqualTo(1000m),
-                "Matériaux facturés = 1 000");
+                "TotalMateriaux = 1 000 (informatif)");
 
-            // CaEncaisseCouture (règle "matériaux EN PREMIER")
-            //   = max(0, 2 000 − 1 000) = 1 000
+            // CaEncaisseCouture = max(0, 2 000 − 1 000) = 1 000
             Assert.That(stats.CaEncaisseCouture, Is.EqualTo(1000m),
-                "CA couture encaissé = max(0, 2 000 − 1 000) = 1 000 (matériaux remboursés EN PREMIER)");
+                "CaEncaisseCouture = max(0, 2 000 − 1 000) = 1 000");
 
-            // BeneficeNet = CA encaissé − commissions − charges = 2 000 − 0 − 0 = 2 000
-            // (les matériaux sont flux neutre, pas déduits du bénéfice)
-            Assert.That(stats.BeneficeNet, Is.EqualTo(2000m),
-                "BeneficeNet = 2 000 − 0 − 0 = 2 000 (matériaux flux neutre, non déduits)");
+            // BeneficeNet = CaEncaisseCouture − commissions − charges = 1 000 − 0 − 0 = 1 000
+            Assert.That(stats.BeneficeNet, Is.EqualTo(1000m),
+                "BeneficeNet = CaEncaisseCouture 1 000 − 0 − 0 = 1 000");
 
-            // BilanNet (TresorerieService) = même résultat
-            Assert.That(bilan.BilanNet, Is.EqualTo(2000m),
-                "BilanNet (TresorerieService) = 2 000 (formule identique)");
+            // BilanNet (TresorerieService) = même résultat = 1 000
+            Assert.That(bilan.BilanNet, Is.EqualTo(1000m),
+                "BilanNet (TresorerieService) = 1 000");
 
             // Cohérence des deux services
             Assert.That(stats.BeneficeNet, Is.EqualTo(bilan.BilanNet),
                 "BeneficeNet (DepenseService) == BilanNet (TresorerieService)");
 
-            // CaEncaisseCouture du BilanFinancier = 1 000
+            // ChiffreAffairesCouture du BilanFinancier = 1 000
             Assert.That(bilan.ChiffreAffairesCouture, Is.EqualTo(1000m),
-                "BilanFinancier.ChiffreAffairesCouture = 1 000 (règle matériaux EN PREMIER)");
+                "BilanFinancier.ChiffreAffairesCouture = 1 000");
         }
 
         // ── T2_02 : MaterielSupplement ne crée pas de Depense ────────────
@@ -168,14 +165,14 @@ namespace GestionCoutureApp.Tests
                 "L'ajout d'un matériau ne doit jamais créer une Dépense automatiquement");
         }
 
-        // ── T2_03 : StatsFinancieres.BeneficeNet sans déduction matériaux ─
+        // ── T2_03 : StatsFinancieres.BeneficeNet = couture encaissée seulement ─
         //
         //   VALEURS ATTENDUES (calculées à la main) :
         //     Couture = 10 000, matériaux = 5 000, paiement = 15 000 (tout)
         //     Matériaux encaissés = min(15 000, 5 000) = 5 000
-        //     CA couture encaissé = max(0, 15 000 − 5 000) = 10 000
-        //     BeneficeNet = 15 000 − 0 − 0 = 15 000  (matériaux flux neutre)
-        //     CaEncaisseCouture = 10 000
+        //     CaEncaisseCouture = max(0, 15 000 − 5 000) = 10 000
+        //     BeneficeNet = CaEncaisseCouture − 0 − 0 = 10 000
+        //       → Les 5 000 de matériaux remboursés ne sont PAS un gain.
 
         [Test]
         public void T2_03_StatsFinancieres_BeneficeNet_Exclut_Materiaux()
@@ -194,17 +191,26 @@ namespace GestionCoutureApp.Tests
                 DatePaiement = DateTime.Today, ModePaiement = "Espèces"
             }, IdBoss, "Mamadou DIALLO");
 
-            var stats = _depenseService.ObtenirStats(DateTime.Today.AddDays(-1), DateTime.Today.AddDays(1));
-
-            // BeneficeNet = 15 000 − 0 (commissions) − 0 (charges) = 15 000
-            // Les matériaux ne sont pas déduits (flux neutre)
-            Assert.That(stats.BeneficeNet, Is.EqualTo(15000m),
-                "BeneficeNet = 15 000 − 0 − 0 = 15 000 (matériaux flux neutre, non déduits)");
+            var debut = DateTime.Today.AddDays(-1);
+            var fin   = DateTime.Today.AddDays(1);
+            var stats = _depenseService.ObtenirStats(debut, fin);
+            var bilan = _tresorerieService.CalculerBilan(debut, fin);
 
             // CaEncaisseCouture = max(0, 15 000 − 5 000) = 10 000
-            // Règle "matériaux EN PREMIER" : les 5 000 de matériaux sont remboursés en premier
             Assert.That(stats.CaEncaisseCouture, Is.EqualTo(10000m),
-                "CaEncaisseCouture = max(0, 15 000 − 5 000) = 10 000 (matériaux remboursés EN PREMIER)");
+                "CaEncaisseCouture = max(0, 15 000 − 5 000) = 10 000");
+
+            // BeneficeNet = CaEncaisseCouture 10 000 − 0 − 0 = 10 000
+            // Les 5 000 de matériaux remboursés ne sont PAS comptés dans le bénéfice
+            Assert.That(stats.BeneficeNet, Is.EqualTo(10000m),
+                "BeneficeNet = CaEncaisseCouture 10 000 − 0 − 0 = 10 000");
+
+            // BilanNet identique
+            Assert.That(bilan.BilanNet, Is.EqualTo(10000m),
+                "BilanNet (TresorerieService) = 10 000");
+
+            Assert.That(stats.BeneficeNet, Is.EqualTo(bilan.BilanNet),
+                "BeneficeNet (DepenseService) == BilanNet (TresorerieService)");
 
             // TotalMateriaux = 5 000 (informatif)
             Assert.That(stats.TotalMateriaux, Is.EqualTo(5000m),
@@ -215,12 +221,12 @@ namespace GestionCoutureApp.Tests
         //
         //   VALEURS ATTENDUES (calculées à la main) :
         //     Couture = 8 000, boutons = 10 × 200 = 2 000, paiement = 10 000 (tout)
+        //     Matériaux encaissés = min(10 000, 2 000) = 2 000
+        //     CaEncaisseCouture = max(0, 10 000 − 2 000) = 8 000
         //     Dépense loyer = 30 000
-        //     CA encaissé = 10 000
-        //     BeneficeNet = 10 000 − 0 (commissions) − 30 000 (loyer) = −20 000
-        //     (bilan négatif car loyer > CA)
+        //     BeneficeNet = CaEncaisseCouture 8 000 − 0 − 30 000 = −22 000
         //
-        //   Les deux services doivent donner −20 000.
+        //   Les deux services donnent −22 000.
 
         [Test]
         public void T2_04_DepenseService_Et_TresorerieService_Meme_Benefice()
@@ -253,22 +259,21 @@ namespace GestionCoutureApp.Tests
             var stats = _depenseService.ObtenirStats(debut, fin);
             var bilan = _tresorerieService.CalculerBilan(debut, fin);
 
-            // ── Vérifications manuelles ────────────────────────────────────────
             // CA encaissé = 10 000 (couture 8 000 + boutons 2 000)
             Assert.That(stats.CaEncaisse, Is.EqualTo(10000m),
                 "CA encaissé = 10 000");
 
             // CaEncaisseCouture = max(0, 10 000 − 2 000) = 8 000
             Assert.That(stats.CaEncaisseCouture, Is.EqualTo(8000m),
-                "CaEncaisseCouture = max(0, 10 000 − 2 000) = 8 000 (matériaux EN PREMIER)");
+                "CaEncaisseCouture = max(0, 10 000 − 2 000) = 8 000");
 
-            // BeneficeNet = 10 000 − 0 − 30 000 = −20 000
-            Assert.That(stats.BeneficeNet, Is.EqualTo(-20000m),
-                "BeneficeNet = 10 000 CA − 30 000 loyer = −20 000");
+            // BeneficeNet = CaEncaisseCouture 8 000 − 0 − 30 000 = −22 000
+            Assert.That(stats.BeneficeNet, Is.EqualTo(-22000m),
+                "BeneficeNet = CaEncaisseCouture 8 000 − 30 000 loyer = −22 000");
 
             // BilanNet (TresorerieService) = même résultat
-            Assert.That(bilan.BilanNet, Is.EqualTo(-20000m),
-                "BilanNet (TresorerieService) = −20 000 (formule identique)");
+            Assert.That(bilan.BilanNet, Is.EqualTo(-22000m),
+                "BilanNet (TresorerieService) = −22 000");
 
             // Les deux services donnent exactement le même bénéfice
             Assert.That(stats.BeneficeNet, Is.EqualTo(bilan.BilanNet),
@@ -334,19 +339,18 @@ namespace GestionCoutureApp.Tests
         //   VALEURS ATTENDUES (calculées à la main) :
         //
         //   Commande 1 : couture = 10 000, matériaux = 0,     paiement = 10 000
-        //     mat encaissés = min(10 000, 0) = 0
-        //     couture enc   = max(0, 10 000 − 0) = 10 000
+        //     matériaux enc = min(10 000, 0) = 0
+        //     CaEncaisseCouture = max(0, 10 000 − 0) = 10 000
         //
         //   Commande 2 : couture = 8 000,  matériaux = 3 000, paiement = 11 000
-        //     mat encaissés = min(11 000, 3 000) = 3 000
-        //     couture enc   = max(0, 11 000 − 3 000) = 8 000
+        //     matériaux enc = min(11 000, 3 000) = 3 000
+        //     CaEncaisseCouture = max(0, 11 000 − 3 000) = 8 000
         //
-        //   CA encaissé total       = 10 000 + 11 000 = 21 000
-        //   CA couture encaissé     = 10 000 + 8 000  = 18 000
-        //   CA matériaux encaissé   = 0 + 3 000       = 3 000
-        //   TotalMatériaux facturés = 0 + 3 000        = 3 000
+        //   CA encaissé total        = 10 000 + 11 000 = 21 000
+        //   CaEncaisseCouture total  = 10 000 + 8 000  = 18 000
+        //   TotalMatériaux facturés  = 0 + 3 000        = 3 000
         //   Loyer = 20 000
-        //   BeneficeNet = 21 000 − 0 (commissions) − 20 000 (loyer) = 1 000
+        //   BeneficeNet = CaEncaisseCouture 18 000 − 0 − 20 000 = −2 000
 
         [Test]
         public void T2_07_Plusieurs_Commandes_Benefice_Coherent()
@@ -370,29 +374,25 @@ namespace GestionCoutureApp.Tests
             var stats = _depenseService.ObtenirStats(debut, fin);
             var bilan = _tresorerieService.CalculerBilan(debut, fin);
 
-            // ── Vérifications manuelles ────────────────────────────────────────
             // CA encaissé = 10 000 + 11 000 = 21 000
             Assert.That(stats.CaEncaisse, Is.EqualTo(21000m),
                 "CA encaissé = 10 000 + 11 000 = 21 000");
 
-            // CA couture encaissé = 10 000 + 8 000 = 18 000
-            // Cmd1 : max(0, 10 000 − 0) = 10 000
-            // Cmd2 : max(0, 11 000 − 3 000) = 8 000
+            // CaEncaisseCouture = 10 000 + 8 000 = 18 000
             Assert.That(stats.CaEncaisseCouture, Is.EqualTo(18000m),
-                "CaEncaisseCouture = 10 000 + 8 000 = 18 000 (matériaux remboursés EN PREMIER)");
+                "CaEncaisseCouture = 10 000 + 8 000 = 18 000");
 
             // TotalMateriaux facturés = 3 000 (informatif)
             Assert.That(stats.TotalMateriaux, Is.EqualTo(3000m),
-                "TotalMateriaux facturés = 3 000 (informatif)");
+                "TotalMateriaux = 3 000 (informatif)");
 
-            // BeneficeNet = 21 000 − 0 − 20 000 = 1 000
-            // Les matériaux sont flux neutre : on ne les déduit pas
-            Assert.That(stats.BeneficeNet, Is.EqualTo(1000m),
-                "BeneficeNet = 21 000 CA − 20 000 loyer = 1 000 (matériaux flux neutre)");
+            // BeneficeNet = CaEncaisseCouture 18 000 − 0 − 20 000 = −2 000
+            Assert.That(stats.BeneficeNet, Is.EqualTo(-2000m),
+                "BeneficeNet = CaEncaisseCouture 18 000 − 20 000 loyer = −2 000");
 
-            // BilanNet (TresorerieService) = 1 000 également
-            Assert.That(bilan.BilanNet, Is.EqualTo(1000m),
-                "BilanNet (TresorerieService) = 21 000 − 0 − 20 000 = 1 000");
+            // BilanNet (TresorerieService) = −2 000 également
+            Assert.That(bilan.BilanNet, Is.EqualTo(-2000m),
+                "BilanNet (TresorerieService) = 18 000 − 0 − 20 000 = −2 000");
 
             // ChiffreAffairesCouture dans le bilan = 18 000
             Assert.That(bilan.ChiffreAffairesCouture, Is.EqualTo(18000m),
@@ -407,12 +407,12 @@ namespace GestionCoutureApp.Tests
         //
         //   VALEURS ATTENDUES (calculées à la main) :
         //     Couture = 2 000, matériaux = 1 000, paiement acompte = 1 500
-        //     mat encaissés = min(1 500, 1 000) = 1 000  (matériaux EN PREMIER)
-        //     couture enc   = max(0, 1 500 − 1 000) = 500
-        //     CA encaissé   = 1 500
+        //     matériaux enc = min(1 500, 1 000) = 1 000
+        //     CaEncaisseCouture = max(0, 1 500 − 1 000) = 500
+        //     BeneficeNet = 500 − 0 − 0 = 500
         //
         //   Commande sans paiement :
-        //     CA = 0, couture = 0, matériaux = 0
+        //     CA = 0, CaEncaisseCouture = 0, BeneficeNet = 0
 
         [Test]
         public void T2_07b_Acompte_Partiel_Et_Sans_Paiement()

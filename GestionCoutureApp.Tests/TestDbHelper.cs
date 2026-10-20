@@ -1,4 +1,6 @@
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Models;
+using GestionCoutureApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -21,5 +23,39 @@ namespace GestionCoutureApp.Tests
                 .UseInMemoryDatabase($"{prefix}_{Guid.NewGuid()}")
                 .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
+
+        /// <summary>
+        /// Étape 10 — IAuditService no-op partagé pour les tests qui n'ont pas besoin
+        /// de vérifier l'audit. L'audit est désormais une dépendance OBLIGATOIRE de
+        /// CommandeService ; les tests doivent fournir au moins ce stub.
+        /// </summary>
+        public static readonly IAuditService NoOpAudit = new NoOpAuditService();
+    }
+
+    /// <summary>
+    /// IAuditService sans effet de bord pour les tests unitaires qui ne testent
+    /// pas l'audit. Ne persiste rien, ne lève jamais d'exception.
+    /// Étape 10 : remplace le passage de null à CommandeService (désormais interdit).
+    /// </summary>
+    internal sealed class NoOpAuditService : IAuditService
+    {
+        public Task EnregistrerActionAsync(int idOperateur, string nomOperateur,
+            string roleOperateur, string typeAction, string entite, int idEntite,
+            object? valeursAvant = null, object? valeursApres = null,
+            string? motif = null, bool envoyerNotification = false)
+            => Task.CompletedTask;
+
+        public List<JournalAudit> ObtenirToutesLesEntrees() => new();
+        public PagedResult<JournalAudit> ObtenirPage(int page, int pageSize,
+            int? idOperateur = null, string? typeAction = null,
+            string? recherche = null, DateTime? debut = null, DateTime? fin = null)
+            => new() { Items = new(), TotalCount = 0, Page = page, PageSize = pageSize };
+        public List<JournalAudit> ObtenirParPeriode(DateTime debut, DateTime fin) => new();
+        public List<JournalAudit> ObtenirParOperateur(int id) => new();
+        public List<JournalAudit> ObtenirParTypeAction(string type) => new();
+        public List<JournalAudit> ObtenirParEntite(string entite, int id) => new();
+        public (bool Integre, string Message) VerifierIntegriteChaine() => (true, "Stub — aucune entrée");
+        public StatistiquesAudit ObtenirStatistiques(DateTime debut, DateTime fin) => new();
+        public List<IndicateurAntiFraude> ObtenirIndicateurAntiFraude(DateTime depuisUtc) => new();
     }
 }

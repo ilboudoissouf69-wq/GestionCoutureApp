@@ -56,7 +56,8 @@ namespace GestionCoutureApp.Tests
             _factory = new TrDbContextFactory(opts);
 
             var log = NullLoggerFactory.Instance;
-            _commandeService   = new CommandeService(_factory, new Logger<CommandeService>(log));
+            _commandeService   = new CommandeService(_factory, new Logger<CommandeService>(log),
+                TestDbHelper.NoOpAudit);
             _tresorerieService = new TresorerieService(_factory, new Logger<TresorerieService>(log));
             _paiementService   = new PaiementService(_factory, new Logger<PaiementService>(log));
             _commissionService = new CommissionService(

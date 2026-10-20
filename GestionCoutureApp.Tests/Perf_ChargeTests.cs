@@ -95,7 +95,8 @@ namespace GestionCoutureApp.Tests
             _alerteService     = new AlerteService(_factory, mockParam, new Microsoft.Extensions.Logging.Logger<AlerteService>(log));
             _retourService     = new RetourService(_factory, _auditService);
             _paiementService   = new PaiementService(_factory, new Microsoft.Extensions.Logging.Logger<PaiementService>(log));
-            _commandeService   = new CommandeService(_factory, new Microsoft.Extensions.Logging.Logger<CommandeService>(log));
+            _commandeService   = new CommandeService(_factory, new Microsoft.Extensions.Logging.Logger<CommandeService>(log),
+                TestDbHelper.NoOpAudit);
         }
 
         [OneTimeTearDown]

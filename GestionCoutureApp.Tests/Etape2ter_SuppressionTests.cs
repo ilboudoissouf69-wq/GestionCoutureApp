@@ -275,8 +275,7 @@ namespace GestionCoutureApp.Tests
 
             var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await _commandeService.SupprimerAsync(
-                    idCommande, IdBoss, "Mamadou DIALLO", motif: "   ",
-                    auditService: _auditService));
+                    idCommande, IdBoss, "Mamadou DIALLO", motif: "   "));
             Assert.That(ex!.Message, Does.Contain("motif").IgnoreCase
                 .Or.Contain("obligatoire").IgnoreCase);
         }
@@ -291,8 +290,7 @@ namespace GestionCoutureApp.Tests
             Assert.DoesNotThrowAsync(async () =>
                 await _commandeService.SupprimerAsync(
                     idCommande, IdBoss, "Mamadou DIALLO",
-                    motif: "Client injoignable après 3 appels",
-                    auditService: _auditService));
+                    motif: "Client injoignable après 3 appels"));
 
             using var ctx = _factory.CreateDbContext();
             var cmd = ctx.Commandes.Find(idCommande)!;
@@ -310,9 +308,9 @@ namespace GestionCoutureApp.Tests
             int id1 = CreerCommandeParSecretaire(typeVetement: "Pantalon");
             int id2 = CreerCommandeParSecretaire(typeVetement: "Robe");
             await _commandeService.SupprimerAsync(id1, IdBoss, "Mamadou DIALLO",
-                "Motif 1", _auditService);
+                "Motif 1");
             await _commandeService.SupprimerAsync(id2, IdBoss, "Mamadou DIALLO",
-                "Motif 2", _auditService);
+                "Motif 2");
 
             // Secrétaire annule 1 commande (dans le délai)
             int id3 = CreerCommandeParSecretaire(typeVetement: "Chemise");

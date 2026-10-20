@@ -56,7 +56,8 @@ namespace GestionCoutureApp.Tests
                 .Options;
             _factory = new T5DbContextFactory(opts);
             var log  = NullLoggerFactory.Instance;
-            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log));
+            _commandeService = new CommandeService(_factory, new Logger<CommandeService>(log),
+                TestDbHelper.NoOpAudit);
             _paiementService = new PaiementService(_factory, new Logger<PaiementService>(log));
 
             using var ctx = _factory.CreateDbContext();

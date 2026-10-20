@@ -228,12 +228,11 @@ namespace GestionCoutureApp.Services
         /// <summary>
         /// Calcule le bilan financier complet avec tous les détails.
         ///
-        /// FORMULE UNIQUE (identique à DepenseService.ObtenirStats) :
-        ///   BilanNet = CA encaissé − commissions − primes − charges d'exploitation
+        /// FORMULE UNIQUE (identique à DepenseService.ObtenirStats.BeneficeNet) :
+        ///   BilanNet = CaEncaisseCouture − commissions − primes − charges d'exploitation
         ///
-        /// Les matériaux NE sont PAS déduits : ce sont des avances remboursées par
-        /// le client (flux neutre). Seul CaEncaisseCouture (informatif) applique la
-        /// règle "matériaux remboursés EN PREMIER".
+        /// Les matériaux refacturés (argent de passage) ne gonflent PAS le bénéfice.
+        /// CaEncaisseCouture est calculé par CalculerRepartitionCa (règle "matériaux EN PREMIER").
         /// </summary>
         public BilanFinancier CalculerBilan(DateTime dateDebut, DateTime dateFin)
         {
@@ -297,13 +296,14 @@ namespace GestionCoutureApp.Services
                 .Count(c => c.Statut == "Terminee" || c.Statut == "Livree");
 
             // 7. FORMULE UNIQUE du bénéfice net
-            //    BilanNet = CA encaissé − commissions − primes − charges d'exploitation
-            //    Les matériaux ne sont PAS déduits (flux neutre : avance remboursée)
-            decimal bilanNet = ca - totalCommissions - totalPrimes - depenses;
+            //    BilanNet = CaEncaisseCouture − commissions − primes − charges d'exploitation
+            //    Les matériaux refacturés (argent de passage) ne gonflent PAS le bénéfice.
+            decimal bilanNet = repartition.CaEncaisseCouture - totalCommissions - totalPrimes - depenses;
 
             _logger.LogInformation(
-                "Bilan calculé — CA: {CA:N0} (dont mat encaissés: {MatE:N0}, couture: {CoutE:N0}), " +
-                "Dépenses: {Dep:N0}, Commissions: {Com:N0}, Primes: {Pri:N0}, BILAN NET: {Bilan:N0} FCFA",
+                "Bilan calculé — CA total: {CA:N0}, MatEncaissés: {MatE:N0}, " +
+                "CaEncaisseCouture: {CoutE:N0}, Dépenses: {Dep:N0}, Commissions: {Com:N0}, " +
+                "Primes: {Pri:N0}, BILAN NET: {Bilan:N0} FCFA",
                 ca, repartition.CaEncaisseMateriaux, repartition.CaEncaisseCouture,
                 depenses, totalCommissions, totalPrimes, bilanNet);
 
