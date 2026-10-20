@@ -454,9 +454,15 @@ namespace GestionCoutureApp.Tests
             // les paiements VALIDES seulement (selon la règle AnnulerParSecretaireAsync)
             // Note : AnnulerParSecretaireAsync vérifie "aucun paiement (même annulé)"
             // → avec un paiement annulé, l'annulation rapide est interdite.
-            // On utilise donc la suppression Boss pour C5.
-            _commandeService.SupprimerAsync(cmdC5.IdCommande, IdBoss, "Boss DIALLO", "scénario C5 annulé")
-                .GetAwaiter().GetResult();
+            // La suppression Boss est AUSSI refusée : une commande ayant un paiement
+            // (même annulé) doit rester pour la traçabilité comptable (cohérent avec
+            // E8_CL7). C5 reste donc en base, mais son paiement annulé (net = 0) et sa
+            // pièce « A faire » n'ont AUCUN effet sur le CA ni les commissions
+            // (cf. assertions a/d/f plus bas).
+            Assert.Throws<InvalidOperationException>(() =>
+                _commandeService.SupprimerAsync(cmdC5.IdCommande, IdBoss, "Boss DIALLO", "scénario C5 annulé")
+                    .GetAwaiter().GetResult(),
+                "C5 : suppression refusée car un paiement (même annulé) est rattaché (traçabilité, cf. E8_CL7)");
 
             // ── Versement des commissions de A (C1) et B (C2) ───────────────────
             // C3 reste En cours → aucune commission pour A sur C3
@@ -594,7 +600,7 @@ namespace GestionCoutureApp.Tests
             var coherence = _tresorerieService.VerifierCoherenceArgentTravail(_debut, _fin);
             // Les paiements valides = 69 000
             // Travail effectué (pièces Terminée/Livrée) : C1=15 000, C2=20 000, C4=30 000 = 65 000
-            // (C3 est "En cours" donc non comptée, C5 supprimée donc non comptée)
+            // (C3 est "En cours" donc non comptée, C5 paiement annulé donc non comptée)
             // Écart = paiements valides − total facturé pièces terminées/livrées
             // = 69 000 − 65 000 = 4 000 (acompte C3 sans pièces terminées)
             // CoherenceOk = écart < 15% de totalFacture

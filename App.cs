@@ -17,8 +17,33 @@ namespace GestionCoutureApp
     {
         public static IServiceProvider Services { get; private set; } = null!;
 
+        // Verrou d'instance unique : empêche de lancer deux fenêtres en parallèle
+        // (sinon deux minuteries de sauvegarde/alertes tournent sur la même base
+        // SQLite → « database is locked » et sauvegardes en double).
+        // Conservé en champ statique pour ne pas être libéré par le GC.
+        private static Mutex? _instanceUnique;
+
         protected override void OnStartup(StartupEventArgs e)
         {
+            // ── Instance unique ───────────────────────────────────────────────
+            // Un Mutex nommé (portée session) est détenu jusqu'à la fermeture du
+            // processus. Un second lancement ne peut pas le créer → on prévient
+            // l'utilisateur et on quitte proprement (aucune fenêtre, aucun timer).
+            _instanceUnique = new Mutex(initiallyOwned: true,
+                name: @"Local\GestionCoutureApp_InstanceUnique_v1",
+                createdNew: out bool premierLancement);
+
+            if (!premierLancement)
+            {
+                MessageBox.Show(
+                    "L'application Gestion Couture est déjà ouverte.\n\n" +
+                    "Une seule instance est autorisée, pour protéger la base de données " +
+                    "(sauvegardes et alertes en double sur la même base).",
+                    "Gestion Couture", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Shutdown();
+                return;
+            }
+
             base.OnStartup(e);
 
             // Filet de sécurité pour les exceptions non gérées sur les threads

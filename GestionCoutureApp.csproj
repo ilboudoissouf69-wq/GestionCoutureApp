@@ -8,6 +8,26 @@
     <UseWPF>true</UseWPF>
     <!-- Permet dotnet run sur une app WPF (UseWindowsShell=true lance le processus via l'OS) -->
     <UseWindowsShellExecute>true</UseWindowsShellExecute>
+
+    <!-- Icône de l'exécutable (visible dans l'explorateur, la barre des tâches, l'installeur) -->
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+
+    <!-- Numéro de version unique (visible dans les propriétés de l'exe) -->
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0</AssemblyVersion>
+    <FileVersion>2.0.0</FileVersion>
+  </PropertyGroup>
+
+  <!-- Publication autonome (pas besoin d'installer .NET chez le client).
+       Utilisation : dotnet publish -p:PublishProfile=SelfContainedWin64
+       (défini dans un profil pour ne pas imposer le RID aux builds de dev). -->
+  <PropertyGroup Condition="'$(PublishProfile)' == 'SelfContainedWin64'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>

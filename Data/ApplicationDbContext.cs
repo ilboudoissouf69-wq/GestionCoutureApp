@@ -254,8 +254,15 @@ namespace GestionCoutureApp.Data
                 .HasDatabaseName("IX_Depenses_DateDepense_Statut");
 
             // Retours
+            // Index UNIQUE et filtré sur NumeroRetour : deux retours ne peuvent pas
+            // porter le même numéro (format RET-AAAA-NNNNN). Le filtre exclut les
+            // chaînes vides (valeur par défaut avant numérotation).
+            // Déclaré ici pour qu'EnsureCreated() (tests SQLite) le crée comme le fait
+            // la migration manuelle App.cs (20261015000001) en production.
             modelBuilder.Entity<Retour>()
                 .HasIndex(r => r.NumeroRetour)
+                .IsUnique()
+                .HasFilter("\"NumeroRetour\" != ''")
                 .HasDatabaseName("IX_Retours_NumeroRetour");
             modelBuilder.Entity<Retour>()
                 .HasIndex(r => new { r.Statut, r.EstAnnule })

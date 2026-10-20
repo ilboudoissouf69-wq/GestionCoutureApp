@@ -99,13 +99,16 @@ namespace GestionCoutureApp.Views
             {
                 var stats = _depenseService.ObtenirStats(_debutPeriode, _finPeriode);
 
-                TxtCaEncaisse.Text    = stats.CaEncaisseCouture.ToString("N0");
+                // CA encaissé TOTAL (couture + matériaux remboursés) — base du waterfall
+                // brut → net, identique au BilanNet de la Trésorerie. La part « couture
+                // pure (hors matériaux) » reste consultable dans la ligne de détail.
+                TxtCaEncaisse.Text    = stats.CaEncaisse.ToString("N0");
                 TxtCharges.Text       = stats.ChargesExploitation.ToString("N0");
                 TxtChargesDetail.Text = $"FCFA (dépenses {stats.TotalDepenses:N0} + salaire {stats.SalaireSecretaire:N0})";
 
-                // Marge Brute = CA couture − commissions (avant charges fixes)
+                // Marge Brute = CA encaissé − commissions (avant charges fixes)
                 TxtMargeBrute.Text = stats.MargeBrute.ToString("N0");
-                TxtMargeBruteDetail.Text = $"FCFA (CA couture {stats.CaEncaisseCouture:N0} − commissions {stats.TotalCommissions:N0})";
+                TxtMargeBruteDetail.Text = $"FCFA (CA encaissé {stats.CaEncaisse:N0} − commissions {stats.TotalCommissions:N0})";
 
                 // Bénéfice Net = Marge Brute − charges d'exploitation
                 TxtBeneficeNet.Text = stats.BeneficeNet.ToString("N0");

@@ -33,7 +33,7 @@ namespace GestionCoutureApp.Services
         //   CA encaissé = 5 000
         //   Dont matériaux = 3 000  (récupérés, flux neutre pour l'atelier)
         //   CaEncaisseCouture = 5 000 − 3 000 = 2 000  (part couture pure)
-        //   Marge brute = CaEncaisseCouture − commissions  (ce qui reste à l'atelier, hors matériaux)
+        //   Marge brute = CA encaissé − commissions  (résultat avant charges fixes)
         //   Bénéfice net = CA encaissé − commissions − charges  (matériaux NON déduits : flux neutre)
         //
         // CaEncaisseCouture = part couture pure (CA − matériaux) — informatif
@@ -43,15 +43,19 @@ namespace GestionCoutureApp.Services
         // Charges exploitation = Dépenses validées + Salaire Secrétaire proraté
         public decimal ChargesExploitation => TotalDepenses + SalaireSecretaire;
 
-        // Marge Brute = CA couture pure − commissions couturiers
-        // (les matériaux sont exclus : flux neutre, remboursés par le client)
+        // Marge Brute = CA encaissé (couture + matériaux) − commissions couturiers.
+        // Les matériaux sont un flux neutre (avance remboursée par le client) : ils
+        // restent dans le CA pour que « Résultat brut → Résultat net » soit cohérent
+        // et identique au BilanNet affiché par la Trésorerie.
         public decimal MargeBrute =>
-            CaEncaisseCouture - TotalCommissions;
+            CaEncaisse - TotalCommissions;
 
-        // Bénéfice Net = CA encaissé − commissions − charges d'exploitation
-        // Les matériaux NE sont PAS déduits : ce sont des avances remboursées,
-        // pas des charges pour l'atelier.
-        public decimal BeneficeNet => CaEncaisseCouture - TotalCommissions - ChargesExploitation;
+        // Bénéfice Net = CA encaissé − commissions − charges d'exploitation.
+        // Les matériaux NE sont PAS déduits : ce sont des avances remboursées par
+        // le client (flux neutre), pas des charges pour l'atelier.
+        // IDENTIQUE au BilanNet de TresorerieService : les deux écrans affichent
+        // le même bénéfice (cf. tests T2_04 / T2_07).
+        public decimal BeneficeNet => CaEncaisse - TotalCommissions - ChargesExploitation;
 
         // Alias pour compatibilité avec d'autres vues (TresorerieService, etc.)
         public decimal BeneficeCouture => BeneficeNet;

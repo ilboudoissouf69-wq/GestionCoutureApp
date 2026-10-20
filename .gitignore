@@ -70,3 +70,10 @@ client_secret*.json
 
 # ── Script de lancement obsolète ─────────────────────────────────────────────
 run.bat
+
+# ── Publication et installeur (artefacts de déploiement) ──────────────────────
+publish/
+installer/Output/
+
+# ── Note de scratch locale ───────────────────────────────────────────────────
+b.txt

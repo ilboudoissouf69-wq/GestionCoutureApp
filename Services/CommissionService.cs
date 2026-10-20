@@ -433,13 +433,18 @@ namespace GestionCoutureApp.Services
         /// L'appelant est responsable du SaveChanges et du Commit.
         /// </summary>
         internal void AnnulerDansTransaction(
+            ApplicationDbContext context,
             int idCommission, string motif, int idAnnulateur, string nomAnnulateur)
         {
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
-            using var context = _contextFactory.CreateDbContext();
-
+            // IMPORTANT : on réutilise le DbContext ET la transaction de l'appelant
+            // (CommandeService.TransitionnerStatutPiece). Ne PAS ouvrir une nouvelle
+            // connexion ici : sous SQLite, une 2e connexion pendant qu'une transaction
+            // est ouverte provoque un verrouillage (« database is locked ») d'environ
+            // 30 s puis un échec. L'annulation et la rétrogradation doivent aussi être
+            // atomiques (tout ou rien) — l'appelant gère le SaveChanges + Commit.
             var annulateur = context.Employes.Find(idAnnulateur);
             if (annulateur == null || annulateur.Statut != "Actif")
                 throw new UnauthorizedAccessException("Opérateur introuvable ou inactif.");
@@ -466,8 +471,8 @@ namespace GestionCoutureApp.Services
             foreach (var piece in commission.Pieces)
                 piece.IdCommission = null;
 
-            context.SaveChanges();
-
+            // PAS de SaveChanges() ici : l'appelant (TransitionnerStatutPiece) persiste
+            // et commet SA transaction → annulation + rétrogradation réellement atomiques.
             _logger.LogWarning(
                 "Commission {Id} ANNULÉE (dans transaction) par {Annulateur} — {NbPieces} pièce(s) déverrouillée(s) — motif : {Motif}",
                 idCommission, nomAnnulateur, commission.Pieces.Count, motif);

@@ -77,10 +77,16 @@ namespace GestionCoutureApp.Migrations
                 "ON Depenses (DateDepense, StatutValidation);");
 
             // ── Retours ───────────────────────────────────────────────────
-            // NumeroRetour : recherche texte dans RetoursView
+            // NumeroRetour : index UNIQUE filtré (vides exclus) — cohérent avec le
+            // modèle EF (IsUnique + HasFilter) et la migration manuelle App.cs.
+            // On supprime l'éventuel index non-unique existant avant de créer l'index
+            // unique, car SQLite refuse de remplacer un index existant par une définition
+            // différente.
+            migrationBuilder.Sql("DROP INDEX IF EXISTS IX_Retours_NumeroRetour;");
             migrationBuilder.Sql(
-                "CREATE INDEX IF NOT EXISTS IX_Retours_NumeroRetour " +
-                "ON Retours (NumeroRetour);");
+                "CREATE UNIQUE INDEX IF NOT EXISTS IX_Retours_NumeroRetour " +
+                "ON Retours (NumeroRetour) " +
+                "WHERE NumeroRetour != '';");
 
             // Statut + EstAnnule : FiltrerParStatut, ObtenirPageAsync
             migrationBuilder.Sql(

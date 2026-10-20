@@ -447,6 +447,7 @@ namespace GestionCoutureApp.Services
             Employe operateur,
             string? motif,
             Commande? commande,
+            ApplicationDbContext context,
             CommissionService? commissionService = null)
         {
             string ancienStatut = piece.Statut;
@@ -503,7 +504,7 @@ namespace GestionCoutureApp.Services
 
                     // Annuler la commission DANS la même transaction (l'appelant gère le commit)
                     commissionService.AnnulerDansTransaction(
-                        piece.IdCommission.Value, motif!,
+                        context, piece.IdCommission.Value, motif!,
                         operateur.IdEmploye, $"{operateur.Prenom} {operateur.Nom}".Trim());
                     // IdCommission mis à null par AnnulerDansTransaction
                 }
@@ -941,7 +942,7 @@ namespace GestionCoutureApp.Services
                 {
                     // Passe par le noyau : flux strict, IClock, garde commission, garde livraison
                     TransitionnerStatutPieceCoeur(pieceExistante, piece.Statut, operateur,
-                        null, existante);
+                        null, existante, context);
                 }
 
                 // Pièce terminée/livrée : ses mesures sont figées.
@@ -1429,7 +1430,7 @@ namespace GestionCoutureApp.Services
             {
                 // Passe par le noyau unique : flux strict, IClock, garde commission, garde livraison
                 resteLivraisonForcee = TransitionnerStatutPieceCoeur(
-                    pieceExistante, piece.Statut, operateur, motifLivraisonNonSoldee, commande);
+                    pieceExistante, piece.Statut, operateur, motifLivraisonNonSoldee, commande, context);
             }
 
             // Remplacement des mesures — figées une fois la pièce terminée/livrée.
@@ -1679,7 +1680,7 @@ namespace GestionCoutureApp.Services
                 foreach (var piece in piecesATraiter)
                 {
                     decimal? reste = TransitionnerStatutPieceCoeur(
-                        piece, nouveauStatut, operateur, motifLivraisonNonSoldee, commande);
+                        piece, nouveauStatut, operateur, motifLivraisonNonSoldee, commande, context);
                     // On garde le dernier reste (toutes les pièces d'une commande ont le même)
                     if (reste.HasValue) resteLivraisonForcee = reste;
                 }
@@ -1845,7 +1846,7 @@ namespace GestionCoutureApp.Services
             try
             {
                 decimal? resteLivraisonForcee = TransitionnerStatutPieceCoeur(
-                    piece, nouveauStatut, operateur, motif, piece.Commande, commissionService);
+                    piece, nouveauStatut, operateur, motif, piece.Commande, context, commissionService);
 
                 context.SaveChanges();
                 transaction?.Commit();
