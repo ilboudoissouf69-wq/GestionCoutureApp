@@ -198,13 +198,46 @@ Le galon circule mais ne reste pas dans la caisse atelier
 **Formule du bénéfice (unique, appliquée partout) :**
 
 ```
-Bénéfice = CA encaissé − commissions − charges d'exploitation
+Bénéfice net = CA encaissé − commissions − charges d'exploitation
 ```
 
 où les charges = dépenses validées (loyer, électricité, salaires…) + salaire secrétaire proratisé.
 
 Les matériaux **ne sont jamais déduits** du bénéfice. Ils apparaissent en ligne séparée
 pour information ("dont matériaux : X FCFA").
+
+**Répartition couture / matériaux encaissés (règle "matériaux EN PREMIER") :**
+
+Pour calculer la *part couture* du CA encaissé (informatif uniquement, non utilisé dans le bénéfice) :
+
+```
+Matériaux encaissés (par commande) = min( total payé non annulé, total matériaux facturés )
+CA couture encaissé (par commande) = max( 0, total payé non annulé − total matériaux facturés )
+```
+
+Exemples chiffrés :
+
+| Cas | Couture | Matériaux | Paiement | Mat encaissés | Couture encaissée |
+|-----|---------|-----------|----------|---------------|-------------------|
+| Paiement complet | 1 000 | 1 000 | 2 000 | 1 000 | 1 000 |
+| Acompte partiel | 2 000 | 1 000 | 1 500 | 1 000 | 500 |
+| Sans paiement | 5 000 | 2 000 | 0 | 0 | 0 |
+
+Cette méthode est implémentée dans `TresorerieService.CalculerRepartitionCa()` et appelée par
+`TresorerieService.CalculerBilan()` et `DepenseService.ObtenirStats()` — aucune formule dupliquée.
+
+**Affichage en cascade (DepensesView, TresorerieView, Dashboard) :**
+
+```
+CA encaissé                    X FCFA
+  dont matériaux refacturés    − Y FCFA  (argent de passage, non compté dans le bénéfice)
+  dont couture                 = Z FCFA  (informatif)
+Matériaux avancés non remboursés        (alerte créances)
+− Commissions couturiers       − C FCFA
+− Charges d'exploitation       − D FCFA
+─────────────────────────────────────
+Bénéfice net                   = X−C−D FCFA
+```
 
 ### Commissions
 
@@ -214,8 +247,9 @@ pour information ("dont matériaux : X FCFA").
 
 ### Indicateur "matériaux non remboursés"
 
-Affiché dans DepensesView et TresorerieView : matériaux avancés dont la commande
-n'est pas encore soldée. Alerte sur les créances clients en attente.
+Affiché dans DepensesView et TresorerieView : matériaux de commandes **non soldées**.
+Une commande est considérée "non soldée" si `total payé < total facturé (couture + matériaux)`.
+C'est une alerte sur les créances clients en attente — ces matériaux ne sont pas encore récupérés.
 
 ---
 
@@ -247,7 +281,7 @@ cd c:\chemin\vers\GestionCoutureApp
 dotnet test GestionCoutureApp.Tests
 ```
 
-Résultat attendu : **141/141 réussis, 0 échec.**
+Résultat attendu : **318/318 réussis, 0 échec.**
 
 ---
 

@@ -27,11 +27,12 @@ namespace GestionCoutureApp.Services
 
         /// <summary>
         /// Calcule le Bilan Financier sur une période donnée.
-        /// Bilan = CA - Dépenses - Commissions
+        ///
+        /// FORMULE UNIQUE :
+        ///   BilanNet = CA encaissé − commissions − primes − charges d'exploitation
+        ///
+        /// Les matériaux ne sont pas déduits (flux neutre).
         /// </summary>
-        /// <returns>
-        /// Objet BilanFinancier contenant le détail complet des calculs
-        /// </returns>
         BilanFinancier CalculerBilan(DateTime dateDebut, DateTime dateFin);
 
         /// <summary>
@@ -39,6 +40,18 @@ namespace GestionCoutureApp.Services
         /// Utile pour distinguer CA couture vs CA matériaux.
         /// </summary>
         decimal CalculerTotalMateriaux(DateTime dateDebut, DateTime dateFin);
+
+        /// <summary>
+        /// MÉTHODE CENTRALE — Répartition matériaux / couture encaissés.
+        ///
+        /// Règle métier : matériaux remboursés EN PREMIER.
+        ///   Matériaux encaissés (cmd) = min( paiementsValides, totalMatériaux )
+        ///   Couture encaissée (cmd)   = max( 0, paiementsValides − totalMatériaux )
+        ///
+        /// Appelée par CalculerBilan et par DepenseService.ObtenirStats
+        /// pour garantir la cohérence des formules.
+        /// </summary>
+        RepartitionCaResult CalculerRepartitionCa(DateTime dateDebut, DateTime dateFin);
 
         /// <summary>
         /// Vérifie si une période a des données financières.
@@ -50,6 +63,25 @@ namespace GestionCoutureApp.Services
         /// Signale les écarts significatifs qui pourraient indiquer une disparition d'argent.
         /// </summary>
         RapportCoherenceFinanciere VerifierCoherenceArgentTravail(DateTime dateDebut, DateTime dateFin);
+    }
+
+    /// <summary>
+    /// Résultat de la répartition CA couture / CA matériaux selon la règle
+    /// "matériaux remboursés EN PREMIER".
+    /// </summary>
+    public class RepartitionCaResult
+    {
+        /// <summary>Part du CA encaissé correspondant aux matériaux (argent de passage).</summary>
+        public decimal CaEncaisseMateriaux    { get; set; }
+
+        /// <summary>Part du CA encaissé correspondant à la couture pure.</summary>
+        public decimal CaEncaisseCouture      { get; set; }
+
+        /// <summary>Total matériaux facturés (tous clients, quelle que soit la situation de paiement).</summary>
+        public decimal TotalMateriauxFactures { get; set; }
+
+        /// <summary>Matériaux avancés dont la commande n'est pas encore soldée (alerte créances).</summary>
+        public decimal MateriauxNonRembourses { get; set; }
     }
 
     /// <summary>
@@ -66,14 +98,19 @@ namespace GestionCoutureApp.Services
         public decimal ChiffreAffaires { get; set; }
 
         /// <summary>
-        /// Chiffre d'affaires couture uniquement (base des commissions)
+        /// CA couture encaissé (règle "matériaux EN PREMIER") — informatif
         /// </summary>
         public decimal ChiffreAffairesCouture { get; set; }
 
         /// <summary>
-        /// Chiffre d'affaires matériaux uniquement (non commissionné)
+        /// CA matériaux encaissé (règle "matériaux EN PREMIER") — argent de passage, non compté dans le bénéfice
         /// </summary>
         public decimal ChiffreAffairesMateriaux { get; set; }
+
+        /// <summary>
+        /// Total matériaux facturés (quelle que soit la situation de paiement) — informatif
+        /// </summary>
+        public decimal TotalMateriauxFactures { get; set; }
 
         /// <summary>
         /// Total des dépenses (achats, charges, etc.)
@@ -91,7 +128,8 @@ namespace GestionCoutureApp.Services
         public decimal TotalPrimesQualite { get; set; }
 
         /// <summary>
-        /// Bilan net = CA - Dépenses - Commissions - Primes
+        /// Bénéfice net = CA encaissé − commissions − primes − charges
+        /// Les matériaux NE sont PAS déduits (flux neutre).
         /// </summary>
         public decimal BilanNet { get; set; }
 
@@ -101,19 +139,18 @@ namespace GestionCoutureApp.Services
         public int NombrePaiements { get; set; }
 
         /// <summary>
-        /// Nombre de commandes livrées sur la période
+        /// Nombre de commandes livrées/terminées sur la période
         /// </summary>
         public int NombreCommandesLivrees { get; set; }
 
         /// <summary>
-        /// Reste à encaisser (commandes livrées non soldées)
+        /// Reste à encaisser (commandes de la période non soldées)
         /// </summary>
         public decimal ResteAEncaisser { get; set; }
 
         /// <summary>
-        /// TÂCHE 2 — Matériaux avancés non encore remboursés par les clients.
-        /// Flux de trésorerie sortant non encore compensé par un paiement complet.
-        /// Informatif uniquement — n'entre pas dans le calcul du bénéfice.
+        /// Matériaux avancés non encore remboursés par les clients.
+        /// Flux de trésorerie sortant non encore compensé — informatif uniquement.
         /// </summary>
         public decimal MateriauxNonRembourses { get; set; }
     }

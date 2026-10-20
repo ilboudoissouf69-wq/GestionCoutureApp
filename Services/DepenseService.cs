@@ -8,13 +8,16 @@ namespace GestionCoutureApp.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IEventAggregator? _eventAggregator;
+        private readonly ITresorerieService? _tresorerieService;
 
         public DepenseService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
-            IEventAggregator? eventAggregator = null)
+            IEventAggregator? eventAggregator = null,
+            ITresorerieService? tresorerieService = null)
         {
             _contextFactory = contextFactory;
             _eventAggregator = eventAggregator;
+            _tresorerieService = tresorerieService;
         }
 
         public List<Depense> ObtenirTous()
@@ -130,7 +133,7 @@ namespace GestionCoutureApp.Services
                 .AsEnumerable()
                 .Sum(p => p.MontantPaye);
 
-            // Commissions validées
+            // Commissions validées (couturiers + primes)
             decimal totalCommissions = context.Commissions
                 .Where(c => !c.EstAnnulee &&
                             c.DateCalcul.Date >= debut.Date &&
@@ -138,37 +141,80 @@ namespace GestionCoutureApp.Services
                 .AsEnumerable()
                 .Sum(c => c.MontantCommission + c.PrimeQualite);
 
-            // Les matériaux ne sont comptés que sur les commandes ayant au moins un paiement reçu.
-            // Une commande terminée sans aucun paiement ne doit pas faire gonfler les matériaux
-            // affichés dans les stats — ils ne sont pas encore remboursés par le client.
-            decimal totalMateriaux = context.MaterielsSupplements
-                .Include(m => m.Commande)
-                    .ThenInclude(c => c!.Paiements)
-                .Where(m => m.Commande != null &&
-                            m.Commande.DateFin.Date >= debut.Date &&
-                            m.Commande.DateFin.Date <= fin.Date)
-                .AsEnumerable()
-                .Where(m => m.Commande!.Paiements.Any(p => !p.EstAnnule))   // au moins 1 paiement réel
-                .Sum(m => m.Quantite * m.PrixUnitaire);
+            // ── RÉPARTITION MATÉRIAUX / COUTURE via la méthode centrale ─────────────
+            // Si TresorerieService est injecté on délègue directement pour éviter toute
+            // duplication de formule. Sinon on applique la même logique en local.
+            // Règle : matériaux remboursés EN PREMIER
+            //   matériaux encaissés (cmd) = min( paye, totalMat )
+            //   couture encaissée  (cmd)  = max( 0, paye − totalMat )
+            decimal totalMateriaux;
+            decimal materiauxNonRembourses;
+            decimal caEncaisseCoutureCalcule;
 
-            // Matériaux non remboursés : matériaux sur commandes non soldées ou abandonnées
-            // (la commande a des matériaux mais le client n'a pas encore tout payé)
-            decimal materiauxNonRembourses = context.MaterielsSupplements
-                .Include(m => m.Commande)
-                    .ThenInclude(c => c!.Paiements)
-                .Include(m => m.Commande)
-                    .ThenInclude(c => c!.Pieces)
-                .Where(m => m.Commande != null && !m.Commande.EstSupprimee)
-                .AsEnumerable()
-                .Where(m =>
+            if (_tresorerieService != null)
+            {
+                var repartition = _tresorerieService.CalculerRepartitionCa(debut, fin);
+                totalMateriaux         = repartition.TotalMateriauxFactures;
+                materiauxNonRembourses = repartition.MateriauxNonRembourses;
+                caEncaisseCoutureCalcule = repartition.CaEncaisseCouture;
+            }
+            else
+            {
+                // Fallback : même logique que TresorerieService.CalculerRepartitionCa
+                var commandes = context.Commandes
+                    .Include(c => c.Pieces)
+                    .Include(c => c.MaterielSupplements)
+                    .Include(c => c.Paiements)
+                    .Where(c => !c.EstSupprimee
+                             && c.DateFin.Date >= debut.Date
+                             && c.DateFin.Date <= fin.Date)
+                    .AsNoTracking()
+                    .AsEnumerable()
+                    .ToList();
+
+                decimal matFactures   = 0m;
+                decimal matNonRemb    = 0m;
+                decimal coutureEnc    = 0m;
+
+                var idsCommandesPeriode = commandes.Select(c => c.IdCommande).ToHashSet();
+
+                foreach (var cmd in commandes)
                 {
-                    var cmd = m.Commande!;
-                    decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture)
-                                     + cmd.MaterielSupplements.Sum(x => x.Quantite * x.PrixUnitaire);
-                    decimal paye = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
-                    return paye < totalCmd - 0.01m;
-                })
-                .Sum(m => m.Quantite * m.PrixUnitaire);
+                    decimal totalMat = cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                    decimal paye     = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                    decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture) + totalMat;
+
+                    matFactures += totalMat;
+
+                    if (totalMat <= 0m)
+                    {
+                        coutureEnc += paye;
+                        continue;
+                    }
+
+                    decimal matEnc = Math.Min(paye, totalMat);
+                    coutureEnc   += Math.Max(0m, paye - totalMat);
+
+                    // Matériaux non remboursés = commande non soldée qui a des matériaux
+                    // (alerte : les matériaux peuvent ne pas être intégralement récupérés)
+                    if (paye < totalCmd - 0.01m)
+                        matNonRemb += totalMat;
+                }
+
+                // Paiements hors-période (commandes hors DateFin)
+                var payHors = context.Paiements
+                    .Where(p => !p.EstAnnule
+                             && p.DatePaiement.Date >= debut.Date
+                             && p.DatePaiement.Date <= fin.Date
+                             && !idsCommandesPeriode.Contains(p.IdCommande))
+                    .AsEnumerable()
+                    .Sum(p => p.MontantPaye);
+                coutureEnc += payHors;
+
+                totalMateriaux           = matFactures;
+                materiauxNonRembourses   = matNonRemb;
+                caEncaisseCoutureCalcule = coutureEnc;
+            }
 
             // Dépenses validées
             decimal totalDepenses = context.Depenses
@@ -179,24 +225,26 @@ namespace GestionCoutureApp.Services
                 .AsEnumerable()
                 .Sum(d => d.Montant);
 
-            // Salaire secrétaire depuis Paramètres
+            // Salaire secrétaire depuis Paramètres (proratisé)
             decimal salaireSecretaire = 0m;
             var paramSalaire = context.Parametres.Find("SalaireMensuelSecretaire");
             if (paramSalaire != null)
                 decimal.TryParse(paramSalaire.Valeur, out salaireSecretaire);
 
-            // Prorata mensuel du salaire selon la période
             double nbJoursPeriode = (fin.Date - debut.Date).TotalDays + 1;
-            double nbJoursMois = DateTime.DaysInMonth(debut.Year, debut.Month);
-            salaireSecretaire = Math.Round(salaireSecretaire * (decimal)(nbJoursPeriode / nbJoursMois), 0, MidpointRounding.AwayFromZero);
+            double nbJoursMois    = DateTime.DaysInMonth(debut.Year, debut.Month);
+            salaireSecretaire = Math.Round(
+                salaireSecretaire * (decimal)(nbJoursPeriode / nbJoursMois),
+                0, MidpointRounding.AwayFromZero);
 
             return new StatsFinancieres
             {
-                CaEncaisse       = caEncaisse,
-                TotalCommissions = totalCommissions,
-                TotalMateriaux   = totalMateriaux,
-                TotalDepenses    = totalDepenses,
-                SalaireSecretaire = salaireSecretaire,
+                CaEncaisse             = caEncaisse,
+                TotalCommissions       = totalCommissions,
+                TotalMateriaux         = totalMateriaux,
+                CaEncaisseCoutureCalc  = caEncaisseCoutureCalcule,
+                TotalDepenses          = totalDepenses,
+                SalaireSecretaire      = salaireSecretaire,
                 MateriauxNonRembourses = materiauxNonRembourses
             };
         }

@@ -127,9 +127,113 @@ namespace GestionCoutureApp.Services
             return totalMateriaux;
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
+        // MÉTHODE CENTRALE — Répartition matériaux / couture encaissés
+        // ─────────────────────────────────────────────────────────────────────────
+        /// <summary>
+        /// Calcule, pour chaque commande ayant des matériaux, la part encaissée attribuable
+        /// aux matériaux et la part attribuable à la couture, selon la règle métier :
+        ///
+        ///   RÈGLE : les matériaux sont remboursés EN PREMIER.
+        ///   Matériaux encaissés (cmd) = min( paiementsValides, totalMatériaux )
+        ///   Couture encaissée (cmd)   = max( 0, paiementsValides − totalMatériaux )
+        ///   Si paiementsValides = 0  →  matériaux = 0, couture = 0
+        ///
+        /// Retourne :
+        ///   caEncaisseMateriaux : part du CA encaissé correspondant aux matériaux (argent de passage)
+        ///   caEncaisseCouture   : part du CA encaissé correspondant à la couture pure
+        ///   totalMateriauxFactures : total matériaux tous clients confondus (informatif)
+        ///   materiauxNonRembourses : matériaux sur commandes non soldées
+        /// </summary>
+        public RepartitionCaResult CalculerRepartitionCa(DateTime dateDebut, DateTime dateFin)
+        {
+            using var context = _contextFactory.CreateDbContext();
+
+            // Toutes les commandes de la période (DateFin dans la période)
+            // On inclut toutes les commandes non supprimées (pas seulement Terminee/Livree)
+            // car une commande En cours peut avoir des paiements.
+            var commandes = context.Commandes
+                .AsNoTracking()
+                .Include(c => c.Pieces)
+                .Include(c => c.MaterielSupplements)
+                .Include(c => c.Paiements)
+                .Where(c => !c.EstSupprimee
+                         && c.DateFin.Date >= dateDebut.Date
+                         && c.DateFin.Date <= dateFin.Date)
+                .ToList();
+
+            decimal caEncaisseMateriaux  = 0m;
+            decimal caEncaisseCouture    = 0m;
+            decimal totalMateriauxFactures = 0m;
+            decimal materiauxNonRembourses = 0m;
+
+            foreach (var cmd in commandes)
+            {
+                decimal totalMat  = cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                decimal paye      = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+
+                // Matériaux facturés (tous, quelle que soit la situation de paiement)
+                totalMateriauxFactures += totalMat;
+
+                if (totalMat <= 0m)
+                {
+                    // Pas de matériaux : tout le paiement va à la couture
+                    caEncaisseCouture += paye;
+                    continue;
+                }
+
+                // Règle "matériaux EN PREMIER" : les matériaux sont remboursés avant la couture
+                decimal matEncaisses = Math.Min(paye, totalMat);
+                decimal coutureEncaissee = Math.Max(0m, paye - totalMat);
+
+                caEncaisseMateriaux += matEncaisses;
+                caEncaisseCouture   += coutureEncaissee;
+
+                // Matériaux non remboursés = commande non soldée qui a des matériaux
+                // (alerte de créances : le client n'a pas encore tout réglé)
+                decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture) + totalMat;
+                if (paye < totalCmd - 0.01m)
+                    materiauxNonRembourses += totalMat;
+            }
+
+            // Pour les paiements hors-période (paiements dont la commande n'est pas dans la période)
+            // On récupère les paiements de la période sur des commandes hors-DateFin
+            var idsCommandesPeriode = commandes.Select(c => c.IdCommande).ToHashSet();
+            var paiementsHorsPeriode = context.Paiements
+                .AsNoTracking()
+                .Where(p => !p.EstAnnule
+                         && p.DatePaiement.Date >= dateDebut.Date
+                         && p.DatePaiement.Date <= dateFin.Date
+                         && !idsCommandesPeriode.Contains(p.IdCommande))
+                .AsEnumerable()
+                .ToList();
+
+            // Ces paiements sont considérés entièrement comme "couture" (pas de matériaux associés dans la période)
+            caEncaisseCouture += paiementsHorsPeriode.Sum(p => p.MontantPaye);
+
+            _logger.LogDebug(
+                "Répartition CA — MatEncaissés: {MatE:N0}, CoutureEncaissée: {CoutE:N0}, " +
+                "MatFacturés: {MatF:N0}, MatNonRemb: {MatNR:N0}",
+                caEncaisseMateriaux, caEncaisseCouture, totalMateriauxFactures, materiauxNonRembourses);
+
+            return new RepartitionCaResult
+            {
+                CaEncaisseMateriaux    = caEncaisseMateriaux,
+                CaEncaisseCouture      = caEncaisseCouture,
+                TotalMateriauxFactures = totalMateriauxFactures,
+                MateriauxNonRembourses = materiauxNonRembourses
+            };
+        }
+
         /// <summary>
         /// Calcule le bilan financier complet avec tous les détails.
-        /// FORMULE : Bilan = CA - Dépenses - Commissions - Primes
+        ///
+        /// FORMULE UNIQUE (identique à DepenseService.ObtenirStats) :
+        ///   BilanNet = CA encaissé − commissions − primes − charges d'exploitation
+        ///
+        /// Les matériaux NE sont PAS déduits : ce sont des avances remboursées par
+        /// le client (flux neutre). Seul CaEncaisseCouture (informatif) applique la
+        /// règle "matériaux remboursés EN PREMIER".
         /// </summary>
         public BilanFinancier CalculerBilan(DateTime dateDebut, DateTime dateFin)
         {
@@ -140,13 +244,13 @@ namespace GestionCoutureApp.Services
                 "Calcul bilan financier — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy}",
                 dateDebut, dateFin);
 
-            // 1. Chiffre d'affaires (encaissements réels)
+            // 1. Chiffre d'affaires total (encaissements réels — couture + matériaux)
             decimal ca = CalculerChiffreAffaires(dateDebut, dateFin);
 
-            // 2. Dépenses
+            // 2. Dépenses validées
             decimal depenses = CalculerTotalDepenses(dateDebut, dateFin);
 
-            // 3. Commissions (avec détail primes)
+            // 3. Commissions et primes (avec détail)
             var commissionsDetaillees = context.Commissions
                 .AsNoTracking()
                 .Where(c => !c.EstAnnulee 
@@ -155,86 +259,71 @@ namespace GestionCoutureApp.Services
                 .ToList();
 
             decimal totalCommissions = commissionsDetaillees.Sum(c => c.MontantCommission);
-            decimal totalPrimes = commissionsDetaillees.Sum(c => c.PrimeQualite);
+            decimal totalPrimes      = commissionsDetaillees.Sum(c => c.PrimeQualite);
 
-            // 4. Détail couture vs matériaux (pour analyse)
+            // 4. Répartition couture / matériaux via la méthode centrale
+            //    Règle : matériaux remboursés EN PREMIER (min(paye, totalMat))
+            var repartition = CalculerRepartitionCa(dateDebut, dateFin);
+
+            // 5. Reste à encaisser (commandes de la période non soldées)
             var commandesPeriode = context.Commandes
                 .AsNoTracking()
                 .Include(c => c.Pieces)
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Paiements)
-                .Where(c => c.DateFin.Date >= dateDebut.Date 
-                         && c.DateFin.Date <= dateFin.Date
-                         && (c.Statut == "Terminee" || c.Statut == "Livree"))
+                .Where(c => !c.EstSupprimee
+                         && c.DateFin.Date >= dateDebut.Date 
+                         && c.DateFin.Date <= dateFin.Date)
                 .ToList();
 
-            decimal caCouture = commandesPeriode
-                .SelectMany(c => c.Pieces)
-                .Sum(p => p.MontantCouture);
-
-            decimal caMateriaux = commandesPeriode
-                .SelectMany(c => c.MaterielSupplements)
-                .Sum(m => m.Quantite * m.PrixUnitaire);
-
-            // 5. Reste à encaisser (commandes livrées non soldées)
             decimal resteAEncaisser = 0m;
             foreach (var cmd in commandesPeriode)
             {
                 decimal totalFacture = cmd.Pieces.Sum(p => p.MontantCouture) 
                                      + cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
-                decimal encaisse = cmd.Paiements
-                    .Where(p => !p.EstAnnule)
-                    .Sum(p => p.MontantPaye);
+                decimal encaisse = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
                 decimal reste = totalFacture - encaisse;
                 if (reste > 0)
                     resteAEncaisser += reste;
             }
 
-            // 6. Statistiques
+            // 6. Statistiques de comptage
             int nombrePaiements = context.Paiements
                 .Count(p => !p.EstAnnule 
                          && p.DatePaiement.Date >= dateDebut.Date 
                          && p.DatePaiement.Date <= dateFin.Date);
 
-            int nombreCommandesLivrees = commandesPeriode.Count;
+            int nombreCommandesLivrees = commandesPeriode
+                .Count(c => c.Statut == "Terminee" || c.Statut == "Livree");
 
-            // Bilan net : CA encaissé contient couture + matériaux.
-            // Les matériaux s'annulent (atelier avance → client rembourse).
-            // Seules les dépenses réelles (loyer, élec, salaires, etc.) sont déduites.
-            decimal bilanNet = ca - depenses - totalCommissions - totalPrimes;
-
-            // 8. Matériaux non remboursés (commandes avec matériaux et solde non nul)
-            decimal materiauxNonRembourses = 0m;
-            foreach (var cmd in commandesPeriode)
-            {
-                decimal totalMat = cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
-                if (totalMat <= 0m) continue;
-                decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture) + totalMat;
-                decimal paye = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
-                if (paye < totalCmd - 0.01m)
-                    materiauxNonRembourses += totalMat;
-            }
+            // 7. FORMULE UNIQUE du bénéfice net
+            //    BilanNet = CA encaissé − commissions − primes − charges d'exploitation
+            //    Les matériaux ne sont PAS déduits (flux neutre : avance remboursée)
+            decimal bilanNet = ca - totalCommissions - totalPrimes - depenses;
 
             _logger.LogInformation(
-                "Bilan calculé — CA: {CA:N0}, Dépenses: {Dep:N0}, Commissions: {Com:N0}, " +
-                "Primes: {Pri:N0}, BILAN NET: {Bilan:N0} FCFA",
-                ca, depenses, totalCommissions, totalPrimes, bilanNet);
+                "Bilan calculé — CA: {CA:N0} (dont mat encaissés: {MatE:N0}, couture: {CoutE:N0}), " +
+                "Dépenses: {Dep:N0}, Commissions: {Com:N0}, Primes: {Pri:N0}, BILAN NET: {Bilan:N0} FCFA",
+                ca, repartition.CaEncaisseMateriaux, repartition.CaEncaisseCouture,
+                depenses, totalCommissions, totalPrimes, bilanNet);
 
             return new BilanFinancier
             {
-                DateDebut = dateDebut.Date,
-                DateFin = dateFin.Date,
-                ChiffreAffaires = ca,
-                ChiffreAffairesCouture = caCouture,
-                ChiffreAffairesMateriaux = caMateriaux,
-                TotalDepenses = depenses,
-                TotalCommissions = totalCommissions,
+                DateDebut  = dateDebut.Date,
+                DateFin    = dateFin.Date,
+                ChiffreAffaires          = ca,
+                // Informatifs : répartition selon règle "matériaux EN PREMIER"
+                ChiffreAffairesCouture   = repartition.CaEncaisseCouture,
+                ChiffreAffairesMateriaux = repartition.CaEncaisseMateriaux,
+                TotalMateriauxFactures   = repartition.TotalMateriauxFactures,
+                TotalDepenses      = depenses,
+                TotalCommissions   = totalCommissions,
                 TotalPrimesQualite = totalPrimes,
-                BilanNet = bilanNet,
-                NombrePaiements = nombrePaiements,
-                NombreCommandesLivrees = nombreCommandesLivrees,
-                ResteAEncaisser = resteAEncaisser,
-                MateriauxNonRembourses = materiauxNonRembourses
+                BilanNet           = bilanNet,
+                NombrePaiements          = nombrePaiements,
+                NombreCommandesLivrees   = nombreCommandesLivrees,
+                ResteAEncaisser          = resteAEncaisser,
+                MateriauxNonRembourses   = repartition.MateriauxNonRembourses
             };
         }
 
