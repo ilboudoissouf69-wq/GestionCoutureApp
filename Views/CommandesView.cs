@@ -772,22 +772,10 @@ namespace GestionCoutureApp.Views
         // ================================================================
 
         /// <summary>🏷️ Fiche Atelier — réutilise BtnFicheAtelier_Click existant</summary>
-        private void BtnActionFicheAtelier_Click(object sender, RoutedEventArgs e)
+        private async void BtnActionFicheAtelier_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.DataContext is not Commande cmd) return;
-            try
-            {
-                var commandeComplete = _commandeService.ObtenirParId(cmd.IdCommande);
-                if (commandeComplete == null)
-                { MessageBox.Show("Commande introuvable.", "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-                var fiche = FicheAtelierWindow.Creer(commandeComplete);
-                fiche.Owner = Window.GetWindow(this);
-                fiche.ShowDialog();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Erreur fiche atelier : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            await FenetreTicketsCommande.OuvrirAsync(cmd.IdCommande, Window.GetWindow(this));
         }
 
         /// <summary>🖨️ Reçu — dernier paiement de la commande</summary>
@@ -2410,19 +2398,13 @@ namespace GestionCoutureApp.Views
                     }
                 }
 
-                // 7. Proposer fiche atelier
+                // 7. Proposer tickets commande
                 var imprimerFiche = MessageBox.Show(
-                    "Commande créée avec succès !\n\nImprimer la fiche atelier ?",
-                    "Fiche atelier", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    "Commande créée avec succès !\n\nImprimer les tickets commande ?",
+                    "Tickets commande", MessageBoxButton.YesNo, MessageBoxImage.Question);
                 if (imprimerFiche == MessageBoxResult.Yes)
                 {
-                    var commandeComplete2 = _commandeService.ObtenirParId(commande.IdCommande);
-                    if (commandeComplete2 != null)
-                    {
-                        var fiche = FicheAtelierWindow.Creer(commandeComplete2);
-                        fiche.Owner = Window.GetWindow(this);
-                        fiche.ShowDialog();
-                    }
+                    await FenetreTicketsCommande.OuvrirAsync(commande.IdCommande, Window.GetWindow(this));
                 }
             }
             catch (DoublonCommandeException ex)
@@ -2793,7 +2775,12 @@ namespace GestionCoutureApp.Views
         private Commande? ObtenirCommandeSelectionnee()
         {
             if (_commandeSelectionneeId == 0) return null;
-            return _commandeService.ObtenirTous().FirstOrDefault(c => c.IdCommande == _commandeSelectionneeId);
+            // C1 : utilise ObtenirParId au lieu d'ObtenirTous().FirstOrDefault(...)
+            // pour éviter de charger toute la base à chaque clic de bouton.
+            // ObtenirParId ne filtre pas EstSupprimee : on reproduit exactement
+            // l'ancien comportement (null si supprimée) en vérifiant ici.
+            var cmd = _commandeService.ObtenirParId(_commandeSelectionneeId);
+            return (cmd == null || cmd.EstSupprimee) ? null : cmd;
         }
 
         private void BtnWhatsAppCommande_Click(object sender, RoutedEventArgs e)
@@ -2827,18 +2814,10 @@ namespace GestionCoutureApp.Views
             catch (Exception ex) { MessageBox.Show("WhatsApp : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 
-        private void BtnFicheAtelier_Click(object sender, RoutedEventArgs e)
+        private async void BtnFicheAtelier_Click(object sender, RoutedEventArgs e)
         {
             if (_commandeSelectionneeId == 0) return;
-            try
-            {
-                var c = _commandeService.ObtenirParId(_commandeSelectionneeId);
-                if (c == null) return;
-                var f = FicheAtelierWindow.Creer(c);
-                f.Owner = Window.GetWindow(this);
-                f.ShowDialog();
-            }
-            catch (Exception ex) { MessageBox.Show("Erreur : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
+            await FenetreTicketsCommande.OuvrirAsync(_commandeSelectionneeId, Window.GetWindow(this));
         }
 
         // ================================================================

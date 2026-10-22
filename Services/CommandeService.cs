@@ -184,10 +184,12 @@ namespace GestionCoutureApp.Services
                 query = query.Where(c => c.Pieces.Any(p => p.IdCouturier == idCouturier.Value));
 
             // Filtre période — sur DateDebut (date de dépôt)
+            // C5 : on compare DateDebut directement (sans .Date) pour que l'index soit utilisable.
+            // Borne de fin : début du jour suivant (exclusif) pour couvrir toute la journée.
             if (dateDebut.HasValue)
-                query = query.Where(c => c.DateDebut.Date >= dateDebut.Value.Date);
+                query = query.Where(c => c.DateDebut >= dateDebut.Value.Date);
             if (dateFin.HasValue)
-                query = query.Where(c => c.DateDebut.Date <= dateFin.Value.Date);
+                query = query.Where(c => c.DateDebut < dateFin.Value.Date.AddDays(1));
 
             var totalCount = await query.CountAsync();
             var items = await query

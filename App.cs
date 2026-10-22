@@ -80,7 +80,12 @@ namespace GestionCoutureApp
             // La base est stockée dans %LOCALAPPDATA% (voir Helpers/AppPaths.cs)
             // pour garantir les droits d'écriture quelle que soit l'installation.
             services.AddDbContextFactory<ApplicationDbContext>(options =>
-                options.UseSqlite(AppPaths.ChaineConnexionSqlite));
+                options.UseSqlite(AppPaths.ChaineConnexionSqlite,
+                    // C2 : SplitQuery global — évite l'explosion cartésienne sur les Include
+                    // à 4-5 collections (Paiements, MaterielSupplements, Pieces→Mesures,
+                    // Pieces→MaterielSupplements). EF Core émet plusieurs SELECT ciblés au
+                    // lieu d'un produit cartésien. Aucune migration nécessaire.
+                    sqliteOpts => sqliteOpts.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
             // Services
             services.AddSingleton<ILogService, LogService>();  // Service de logging
