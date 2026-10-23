@@ -306,28 +306,11 @@ namespace GestionCoutureApp.Views
             await ForcerStatutCommande(cmd.IdCommande, suivant);
         }
 
-        // ── Fiche atelier ─────────────────────────────────────────────
-        private void BtnFicheAtelier_Click(object sender, RoutedEventArgs e)
+        // ── Fiche atelier → Tickets commande ─────────────────────────
+        private async void BtnFicheAtelier_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.Tag is not Commande cmd) return;
-            try
-            {
-                var commandeComplete = _commandeService.ObtenirParId(cmd.IdCommande);
-                if (commandeComplete == null)
-                {
-                    MessageBox.Show("Commande introuvable.",
-                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                var fiche = FicheAtelierWindow.Creer(commandeComplete);
-                fiche.Owner = Window.GetWindow(this);
-                fiche.ShowDialog();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Erreur fiche atelier : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            await FenetreTicketsCommande.OuvrirAsync(cmd.IdCommande, Window.GetWindow(this));
         }
 
         // ── Menu ⋯ — changer statut commande ─────────────────────────

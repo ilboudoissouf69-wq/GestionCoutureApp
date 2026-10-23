@@ -11,20 +11,30 @@ namespace GestionCoutureApp.Services
         private readonly ILogger<PaiementService> _logger;
         private readonly IClock _clock;
         private readonly IEventAggregator? _eventAggregator;
+        private readonly IAuditService? _auditService;
 
         // Verrou statique pour éviter les numéros de reçu en doublon
         private static readonly object _verrou = new();
+
+        // Liste fermée des modes de paiement acceptés (Phase 1.1g)
+        private static readonly HashSet<string> ModesPaiementValides = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Espèces", "Especes", "Orange Money", "Moov Money", "Coris Money",
+            "Virement", "Chèque", "Cheque", "Autre"
+        };
 
         public PaiementService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
             ILogger<PaiementService> logger,
             IClock? clock = null,
-            IEventAggregator? eventAggregator = null)
+            IEventAggregator? eventAggregator = null,
+            IAuditService? auditService = null)
         {
             _contextFactory = contextFactory;
             _logger = logger;
             _clock = clock ?? new SystemClock();
             _eventAggregator = eventAggregator;
+            _auditService = auditService;
         }
 
         // ----------------------------------------------------------------
@@ -205,12 +215,20 @@ namespace GestionCoutureApp.Services
             if (idOperateur <= 0)
                 throw new InvalidOperationException(
                     "L'identifiant de l'opérateur est obligatoire pour la traçabilité financière.");
-            if (string.IsNullOrWhiteSpace(nomOperateur))
+
+            // Phase 1.1g : valider le mode de paiement contre la liste fermée
+            if (!string.IsNullOrWhiteSpace(paiement.ModePaiement) &&
+                !ModesPaiementValides.Contains(paiement.ModePaiement))
                 throw new InvalidOperationException(
-                    "Le nom de l'opérateur est obligatoire pour la traçabilité financière.");
+                    $"Mode de paiement invalide : '{paiement.ModePaiement}'. " +
+                    "Valeurs acceptées : Espèces, Orange Money, Moov Money, Coris Money, Virement, Chèque, Autre.");
+
+            // Phase 1.1g : arrondir à l'entier (FCFA sans centimes)
+            paiement.MontantPaye = Math.Round(paiement.MontantPaye, 0, MidpointRounding.AwayFromZero);
 
             // Phase 1 : vérifier existence, statut Actif et rôle Boss/Secrétaire.
             // Un Couturier ne peut pas enregistrer un paiement.
+            // Phase 1.1c : RequireRoleByIdEnum charge et renvoie l'opérateur pour relire son nom en base.
             Helpers.AuthorizationHelper.RequireRoleByIdEnum(
                 _contextFactory, idOperateur,
                 RoleEmploye.Boss, RoleEmploye.Secretaire);
@@ -218,6 +236,11 @@ namespace GestionCoutureApp.Services
             lock (_verrou)
             {
                 using var context = _contextFactory.CreateDbContext();
+
+                // Phase 1.1c : relire le nom réel de l'opérateur depuis la base (ne pas faire confiance au paramètre UI)
+                var operateurDb = context.Employes.Find(idOperateur)
+                    ?? throw new InvalidOperationException("Opérateur introuvable en base.");
+                string nomOperateurRelu = operateurDb.Prenom + " " + operateurDb.Nom;
 
                 decimal totalValide = TotalValideParCommande(context, paiement.IdCommande);
 
@@ -267,9 +290,10 @@ namespace GestionCoutureApp.Services
                 paiement.MontantTotalCommande = montantTotalFacture;
                 paiement.ResteAvantPaiement   = resteReel;
                 paiement.IdOperateur = idOperateur;
-                paiement.NomOperateur = nomOperateur;
+                // Phase 1.1c : utiliser le nom relu en base, pas le paramètre UI
+                paiement.NomOperateur = nomOperateurRelu;
                 paiement.DatePaiement = _clock.Now;
-                paiement.RecuNumero = GenererNumeroRecu(context);
+                paiement.RecuNumero = GenererNumeroRecu(context, _clock);
                 paiement.EstAnnule = false;
 
                 context.Paiements.Add(paiement);
