@@ -233,6 +233,13 @@ namespace GestionCoutureApp.Services
                     .FirstOrDefault(c => c.IdCommande == paiement.IdCommande)
                     ?? throw new InvalidOperationException("Commande introuvable.");
 
+                // C7 : refuser tout encaissement sur une commande annulée ou supprimée
+                if (commande.EstSupprimee || commande.EstAnnulee)
+                    throw new InvalidOperationException(
+                        commande.EstAnnulee
+                            ? "Impossible d'encaisser un paiement : cette commande a été annulée."
+                            : "Impossible d'encaisser un paiement : cette commande a été supprimée.");
+
                 if (commande.Pieces == null || commande.Pieces.Count == 0)
                 {
                     throw new InvalidOperationException(

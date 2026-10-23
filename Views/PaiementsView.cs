@@ -297,16 +297,53 @@ namespace GestionCoutureApp.Views
         {
             try
             {
-                // Réutilise exactement la requête existante : ObtenirTous inclut
-                // Client, Paiements, Pieces, MaterielSupplements via CommandeService.
-                var commandes = _commandeService.ObtenirTous()
-                    .Where(c => !c.EstSupprimee && c.ResteAPayer > 0.01m)
+                // C3 : projection légère — on ne charge que les champs nécessaires
+                // pour calculer ResteAPayer et afficher le texte du ComboBox.
+                // Formule ResteAPayer = MontantTotalAvecMateriaux - SommesPaiementsValides
+                //   = SUM(Pieces.MontantCouture) + SUM(MaterielSupplements.Montant) - SUM(Paiements valides)
+                // Les decimal ne se somment pas côté SQL sur SQLite : on fait la somme en mémoire
+                // sur la projection légère, comme l'ancienne version.
+                var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                using var ctx = contextFactory.CreateDbContext();
+
+                // Projection : uniquement les colonnes utiles au calcul + à l'affichage
+                var commandesLight = ctx.Commandes
+                    .AsNoTracking()
+                    .Where(c => !c.EstSupprimee && !c.EstAnnulee)
+                    .Select(c => new
+                    {
+                        c.IdCommande,
+                        ClientPrenom = c.Client != null ? c.Client.Prenom : "",
+                        ClientNom    = c.Client != null ? c.Client.Nom    : "",
+                        MontantCouture    = c.Pieces.Sum(p => (decimal?)p.MontantCouture) ?? 0m,
+                        MontantMateriaux  = c.MaterielSupplements.Sum(m => (decimal?)(m.Quantite * m.PrixUnitaire)) ?? 0m,
+                        PaiementsValides  = c.Paiements
+                            .Where(p => !p.EstAnnule)
+                            .Select(p => p.MontantPaye)
+                            .ToList()
+                    })
                     .ToList();
 
-                _toutesCommandesEncaissables = commandes.Select(c => new CommandeItem(
+                var encaissables = commandesLight
+                    .Select(c =>
+                    {
+                        decimal montantTotal  = c.MontantCouture + c.MontantMateriaux;
+                        decimal dejaEncaisse  = c.PaiementsValides.Sum();
+                        decimal resteAPayer   = montantTotal - dejaEncaisse;
+                        return new
+                        {
+                            c.IdCommande, c.ClientPrenom, c.ClientNom,
+                            MontantTotalAvecMateriaux = montantTotal,
+                            ResteAPayer = resteAPayer
+                        };
+                    })
+                    .Where(c => c.ResteAPayer > 0.01m)
+                    .ToList();
+
+                _toutesCommandesEncaissables = encaissables.Select(c => new CommandeItem(
                     c.IdCommande,
                     $"CMD #{c.IdCommande}  —  "
-                        + (c.Client?.Prenom ?? "") + " " + (c.Client?.Nom ?? "")
+                        + c.ClientPrenom + " " + c.ClientNom
                         + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA"
                         + " · reste : " + c.ResteAPayer.ToString("N0") + " FCFA)"
                 )).ToList();
@@ -314,7 +351,6 @@ namespace GestionCoutureApp.Views
                 CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
                 CmbCommandesNonSoldees.SelectedValuePath = "IdCommande";
 
-                // Réinitialiser la zone de recherche si elle existe
                 if (TxtRechercheCommande != null)
                     TxtRechercheCommande.Text = "";
             }
