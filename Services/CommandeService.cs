@@ -83,6 +83,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
+                .AsNoTracking()   // C4 : lecture seule, pas besoin de suivi
                 .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
@@ -113,6 +114,7 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             
             var query = context.Commandes
+                .AsNoTracking()   // C4 : lecture seule
                 .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
@@ -155,6 +157,7 @@ namespace GestionCoutureApp.Services
             // Étape 2 : les commandes supprimées/annulées ne sont jamais effacées ;
             // le Boss peut les réafficher (filtre « Afficher les supprimées »).
             var query = context.Commandes
+                .AsNoTracking()   // C4 : lecture seule
                 .Where(c => inclureSupprimees || !c.EstSupprimee)
                 .Include(c => c.Client)
                 .Include(c => c.Paiements)
@@ -168,7 +171,8 @@ namespace GestionCoutureApp.Services
                     (c.Client != null && (c.Client.Nom.Contains(motCle) || c.Client.Prenom.Contains(motCle))) ||
                     c.Pieces.Any(p => p.TypeVetement.Contains(motCle)));
 
-            // Filtre statut (logique même qu'ObtenirPageCommandesStatutAsync)
+            // Filtre statut côté SQL — pré-filtre large pour réduire le jeu de données
+            // L'affinage exact (StatutGlobal) est fait EN MÉMOIRE après le chargement mais AVANT Skip/Take
             if (!string.IsNullOrEmpty(statut))
             {
                 if (statut == "Retard")
@@ -176,6 +180,8 @@ namespace GestionCoutureApp.Services
                         c.DateFin < maintenant &&
                         c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
                 else
+                    // Pré-filtre SQL : inclut les commandes qui ont AU MOINS UNE pièce avec ce statut
+                    // (sur-sélection intentionnelle, affinée en mémoire juste après)
                     query = query.Where(c => c.Pieces.Any(p => p.Statut == statut));
             }
 
@@ -183,26 +189,32 @@ namespace GestionCoutureApp.Services
             if (idCouturier.HasValue)
                 query = query.Where(c => c.Pieces.Any(p => p.IdCouturier == idCouturier.Value));
 
-            // Filtre période — sur DateDebut (date de dépôt)
-            // C5 : on compare DateDebut directement (sans .Date) pour que l'index soit utilisable.
-            // Borne de fin : début du jour suivant (exclusif) pour couvrir toute la journée.
+            // Filtre période — C5 : bornes sans .Date pour utiliser l'index
             if (dateDebut.HasValue)
                 query = query.Where(c => c.DateDebut >= dateDebut.Value.Date);
             if (dateFin.HasValue)
                 query = query.Where(c => c.DateDebut < dateFin.Value.Date.AddDays(1));
 
-            var totalCount = await query.CountAsync();
-            var items = await query
+            // C6 : charger d'abord le jeu filtré SQL, trier, puis affiner en mémoire
+            // AVANT Skip/Take pour que TotalCount et les pages soient cohérents.
+            var tousItems = await query
                 .OrderByDescending(c => c.DateDebut)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
                 .ToListAsync();
 
-            // Affinage statut en mémoire si filtre exact
+            // Affinage en mémoire sur StatutGlobal (calculé, non mappé en SQL)
             if (!string.IsNullOrEmpty(statut) && statut != "Retard")
-                items = items.Where(c =>
+            {
+                tousItems = tousItems.Where(c =>
                     c.StatutGlobal == statut ||
                     c.StatutGlobal.Replace(" partiellement", "") == statut).ToList();
+            }
+
+            // C6 : TotalCount calculé sur le jeu APRÈS affinage mémoire
+            int totalCount = tousItems.Count;
+            var items = tousItems
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
 
             return new PagedResult<Commande>
             {
