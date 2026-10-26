@@ -21,7 +21,8 @@
 #define MyAppExeRel         "publish\GestionCoutureApp.exe"
 
 [Setup]
-AppId={{8F2B6C90-1A2E-4D3F-B7C9-GESTIONCOUTURE}}
+AppId={{00FB1F64-CA05-412C-874C-CAF1A6576494}}
+
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
