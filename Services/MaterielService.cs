@@ -68,15 +68,38 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
             var existant = context.MaterielsSupplements
+                .Include(m => m.Commande)
+                    .ThenInclude(c => c!.Paiements)
                 .FirstOrDefault(m => m.IdMateriel == materiel.IdMateriel);
 
             if (existant == null) return;
 
-            existant.Designation = materiel.Designation;
+            // Phase 1.5 : même garde que Supprimer — refus si paiements non annulés
+            bool aPaiements = existant.Commande?.Paiements.Any(p => !p.EstAnnule) ?? false;
+            if (aPaiements)
+                throw new InvalidOperationException(
+                    "Impossible de modifier cette ligne de matériel : des paiements ont déjà " +
+                    "été encaissés sur cette commande. Le total facturé au client ne doit pas " +
+                    "changer après encaissement.");
+
+            // Phase 1.5 : valider quantité > 0 et prix >= 0
+            if (materiel.Quantite <= 0)
+                throw new InvalidOperationException("La quantité doit être supérieure à zéro.");
+            if (materiel.PrixUnitaire < 0)
+                throw new InvalidOperationException("Le prix unitaire ne peut pas être négatif.");
+            if (string.IsNullOrWhiteSpace(materiel.Designation))
+                throw new InvalidOperationException("La désignation est obligatoire.");
+
+            // Phase 1.5 : vérifier que la commande n'est pas supprimée
+            if (existant.Commande?.EstSupprimee == true)
+                throw new InvalidOperationException(
+                    "Impossible de modifier un matériel d'une commande supprimée.");
+
+            existant.Designation = materiel.Designation.Trim();
             existant.Quantite = materiel.Quantite;
             existant.PrixUnitaire = materiel.PrixUnitaire;
-            if (materiel.IdPieceCommande.HasValue)
-                existant.IdPieceCommande = materiel.IdPieceCommande;
+            // Phase 1.5 : permettre de remettre IdPieceCommande à null (dissocier d'une pièce)
+            existant.IdPieceCommande = materiel.IdPieceCommande;
 
             context.SaveChanges();
             _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Materiel });

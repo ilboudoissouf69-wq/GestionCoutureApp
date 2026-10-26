@@ -20,7 +20,7 @@ namespace GestionCoutureApp.Services
         private static readonly HashSet<string> ModesPaiementValides = new(StringComparer.OrdinalIgnoreCase)
         {
             "Espèces", "Especes", "Orange Money", "Moov Money", "Coris Money",
-            "Virement", "Chèque", "Cheque", "Autre"
+            "Mobile Money", "Virement", "Chèque", "Cheque", "Autre"
         };
 
         public PaiementService(
@@ -308,7 +308,7 @@ namespace GestionCoutureApp.Services
                     ex.InnerException?.Message?.Contains("IX_Paiements_RecuNumero") == true)
                 {
                     // Collision détectée : régénérer un nouveau numéro et réessayer
-                    paiement.RecuNumero = GenererNumeroRecu(context);
+                    paiement.RecuNumero = GenererNumeroRecu(context, _clock);
                     context.SaveChanges();
                     
                     _logger.LogWarning(
@@ -318,7 +318,20 @@ namespace GestionCoutureApp.Services
 
                 _logger.LogInformation(
                     "Paiement {Recu} enregistré — commande {IdCommande} — {Montant:N0} FCFA — opérateur {Op}",
-                    paiement.RecuNumero, paiement.IdCommande, paiement.MontantPaye, nomOperateur);
+                    paiement.RecuNumero, paiement.IdCommande, paiement.MontantPaye, nomOperateurRelu);
+
+                // Phase 1.1b : audit de la création du paiement
+                _ = _auditService?.EnregistrerActionAsync(
+                    idOperateur, nomOperateurRelu, operateurDb.Role,
+                    "PAIEMENT_CREE", "Paiement", paiement.IdPaiement,
+                    valeursApres: new
+                    {
+                        paiement.RecuNumero,
+                        paiement.IdCommande,
+                        paiement.MontantPaye,
+                        paiement.ModePaiement,
+                        paiement.DatePaiement
+                    });
 
                 _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Paiement });
             }
@@ -335,6 +348,11 @@ namespace GestionCoutureApp.Services
             // Seul le Boss peut annuler un paiement. RequireRoleByIdEnum est plus robuste
             // qu'une recherche par nom (résistant aux homonymes et aux renommages).
             Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idAnnulateur, RoleEmploye.Boss);
+
+            // Phase 1.1c : relire le nom réel de l'annulateur depuis la base
+            var annulateurDb = context.Employes.Find(idAnnulateur)
+                ?? throw new InvalidOperationException("Annulateur introuvable en base.");
+            string nomAnnulateurRelu = annulateurDb.Prenom + " " + annulateurDb.Nom;
 
             var paiement = context.Paiements.Find(idPaiement)
                 ?? throw new InvalidOperationException("Paiement introuvable.");
@@ -378,13 +396,28 @@ namespace GestionCoutureApp.Services
             paiement.EstAnnule = true;
             paiement.MotifsAnnulation = motif.Trim();
             paiement.DateAnnulation = _clock.Now;
-            paiement.NomAnnulateur = nomAnnulateur;
+            // Phase 1.1c : utiliser le nom relu en base
+            paiement.NomAnnulateur = nomAnnulateurRelu;
 
             context.SaveChanges();
 
             _logger.LogWarning(
                 "Paiement {Recu} ANNULÉ par {Annulateur} (ID {IdAnnulateur}) — motif : {Motif}",
-                paiement.RecuNumero, nomAnnulateur, idAnnulateur, motif);
+                paiement.RecuNumero, nomAnnulateurRelu, idAnnulateur, motif);
+
+            // Phase 1.1b : audit de l'annulation du paiement
+            _ = _auditService?.EnregistrerActionAsync(
+                idAnnulateur, nomAnnulateurRelu, annulateurDb.Role,
+                "PAIEMENT_ANNULE", "Paiement", idPaiement,
+                valeursAvant: new
+                {
+                    paiement.RecuNumero,
+                    paiement.MontantPaye,
+                    paiement.ModePaiement,
+                    paiement.IdCommande
+                },
+                motif: motif.Trim(),
+                envoyerNotification: true);
 
             _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Paiement });
         }
@@ -396,21 +429,50 @@ namespace GestionCoutureApp.Services
         public string GenererNumeroRecu()
         {
             using var context = _contextFactory.CreateDbContext();
-            return GenererNumeroRecu(context);
+            return GenererNumeroRecu(context, _clock);
         }
 
-        private static string GenererNumeroRecu(ApplicationDbContext context)
+        /// <summary>
+        /// Génère un numéro de reçu unique au format REC-yyyyMMdd-NNNN.
+        /// Utilise IClock (pas DateTime.Now) et MAX du suffixe (pas COUNT + .Date)
+        /// pour que les index soient utilisables. Boucle bornée (max 20 tentatives)
+        /// en cas de collision concurrente.
+        /// </summary>
+        private static string GenererNumeroRecu(ApplicationDbContext context, IClock clock)
         {
-            string dateStr = DateTime.Now.ToString("yyyyMMdd");
-            int nombreDuJour = context.Paiements
-                .Count(p => p.DatePaiement.Date == DateTime.Today);
+            DateTime maintenant = clock.Now;
+            string dateStr = maintenant.ToString("yyyyMMdd");
+            string prefixe = $"REC-{dateStr}-";
 
-            string numero = $"REC-{dateStr}-{(nombreDuJour + 1):D4}";
-            int tentative = 1;
+            // MAX sur le suffixe : évite COUNT()+.Date qui force un full-scan
+            // (EF Core ne peut pas translater .Date en prédicat sur SQLite sans index).
+            // On filtre par le préfixe texte exact → l'index IX_Paiements_RecuNumero sert.
+            string? dernierNumero = context.Paiements
+                .Where(p => p.RecuNumero.StartsWith(prefixe))
+                .OrderByDescending(p => p.RecuNumero)
+                .Select(p => p.RecuNumero)
+                .FirstOrDefault();
+
+            int prochain = 1;
+            if (dernierNumero != null)
+            {
+                // Extraire le suffixe numérique (ex. "REC-20261023-0007" → 7)
+                string suffixe = dernierNumero[prefixe.Length..];
+                if (int.TryParse(suffixe, out int n))
+                    prochain = n + 1;
+            }
+
+            const int maxTentatives = 20;
+            string numero = $"{prefixe}{prochain:D4}";
+            int tentative = 0;
             while (context.Paiements.Any(p => p.RecuNumero == numero))
             {
                 tentative++;
-                numero = $"REC-{dateStr}-{(nombreDuJour + tentative):D4}";
+                if (tentative >= maxTentatives)
+                    throw new InvalidOperationException(
+                        $"Impossible de générer un numéro de reçu unique après {maxTentatives} tentatives.");
+                prochain++;
+                numero = $"{prefixe}{prochain:D4}";
             }
             return numero;
         }

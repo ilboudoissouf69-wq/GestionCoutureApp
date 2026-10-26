@@ -9,8 +9,10 @@ namespace GestionCoutureApp.Services
                               string? categorie = null,
                               string? statutValidation = null);
         void Ajouter(Depense depense);
-        void Valider(int idDepense, string nomBoss);
-        void Annuler(int idDepense, string motif, string nomAnnulateur);
+        /// <summary>Valider une dépense. idBoss doit être l'ID d'un employé Boss actif.</summary>
+        void Valider(int idDepense, int idBoss);
+        /// <summary>Annuler une dépense. idAnnulateur doit être l'ID d'un employé Boss actif.</summary>
+        void Annuler(int idDepense, string motif, int idAnnulateur);
 
         decimal TotalParPeriode(DateTime debut, DateTime fin);
 

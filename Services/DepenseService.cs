@@ -66,14 +66,18 @@ namespace GestionCoutureApp.Services
             _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Depense });
         }
 
-        public void Valider(int idDepense, string nomBoss)
+        public void Valider(int idDepense, int idBoss)
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // Seul le Boss peut valider une dépense.
-            var validateur = context.Employes.FirstOrDefault(e => 
-                (e.Prenom + " " + e.Nom) == nomBoss);
-            Helpers.AuthorizationHelper.RequireRole(validateur, "Boss");
+            // Phase 1.4 : identification par ID (pas par nom, résistant aux homonymes)
+            // RequireRoleByIdEnum charge l'employé et vérifie Actif + rôle Boss.
+            Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idBoss, RoleEmploye.Boss);
+
+            // Relire le nom réel en base pour l'audit (ne pas faire confiance au paramètre)
+            var boss = context.Employes.Find(idBoss)
+                ?? throw new InvalidOperationException("Boss introuvable en base.");
+            string nomBossRelu = boss.Prenom + " " + boss.Nom;
 
             var dep = context.Depenses.Find(idDepense)
                 ?? throw new InvalidOperationException("Dépense introuvable.");
@@ -84,17 +88,20 @@ namespace GestionCoutureApp.Services
             _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Depense });
         }
 
-        public void Annuler(int idDepense, string motif, string nomAnnulateur)
+        public void Annuler(int idDepense, string motif, int idAnnulateur)
         {
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif d'annulation est obligatoire.");
 
             using var context = _contextFactory.CreateDbContext();
 
-            // Seul le Boss peut annuler une dépense.
-            var annulateur = context.Employes.FirstOrDefault(e => 
-                (e.Prenom + " " + e.Nom) == nomAnnulateur);
-            Helpers.AuthorizationHelper.RequireRole(annulateur, "Boss");
+            // Phase 1.4 : identification par ID (pas par nom, résistant aux homonymes)
+            Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idAnnulateur, RoleEmploye.Boss);
+
+            // Relire le nom réel en base
+            var annulateur = context.Employes.Find(idAnnulateur)
+                ?? throw new InvalidOperationException("Annulateur introuvable en base.");
+            string nomAnnulateurRelu = annulateur.Prenom + " " + annulateur.Nom;
 
             var depense = context.Depenses.Find(idDepense)
                 ?? throw new InvalidOperationException("Dépense introuvable.");
@@ -104,7 +111,7 @@ namespace GestionCoutureApp.Services
             depense.EstAnnulee = true;
             depense.MotifAnnulation = motif.Trim();
             depense.DateAnnulation = DateTime.Now;
-            depense.NomAnnulateur = nomAnnulateur;
+            depense.NomAnnulateur = nomAnnulateurRelu;
             context.SaveChanges();
             _eventAggregator?.Publish(new DomainChangedEvent { Type = DomainChangedType.Depense });
         }

@@ -287,11 +287,12 @@ namespace GestionCoutureApp.Views
                   MessageBoxButton.OK, MessageBoxImage.Information); return; }
 
             var op = _authService.UtilisateurConnecte;
-            string nomBoss = op != null ? $"{op.Prenom} {op.Nom}" : "Boss";
+            // Phase 1.4 : passer l'ID de l'opérateur, pas son nom
+            int idBoss = op?.IdEmploye ?? 0;
 
             try
             {
-                _depenseService.Valider(dep.IdDepense, nomBoss);
+                _depenseService.Valider(dep.IdDepense, idBoss);
                 TxtMessage.Text       = "✅  Dépense validée.";
                 TxtMessage.Foreground = Brushes.Green;
                 ChargerTout();
@@ -326,8 +327,9 @@ namespace GestionCoutureApp.Views
             try
             {
                 var op = _authService.UtilisateurConnecte;
-                string nom = op != null ? $"{op.Prenom} {op.Nom}" : "";
-                _depenseService.Annuler(depense.IdDepense, motif, nom);
+                // Phase 1.4 : passer l'ID de l'annulateur, pas son nom
+                int idAnnulateur = op?.IdEmploye ?? 0;
+                _depenseService.Annuler(depense.IdDepense, motif, idAnnulateur);
                 TxtMessage.Text       = "Dépense annulée.";
                 TxtMessage.Foreground = Brushes.Green;
                 ChargerTout();

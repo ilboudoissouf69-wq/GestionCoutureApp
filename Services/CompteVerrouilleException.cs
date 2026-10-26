@@ -47,5 +47,16 @@ namespace GestionCoutureApp.Services
         /// Réservé à la configuration initiale et à la réinitialisation par le Boss.
         /// </summary>
         void DefinirMotDePasseInitial(int idEmploye, string nouveauMotDePasse);
+
+        /// <summary>
+        /// Vérifie qu'un mot de passe correspond à un compte Boss actif,
+        /// avec le même compteur d'échecs et verrouillage progressif que Authentifier().
+        /// Utilisé dans les modales de confirmation d'action sensible (annulation paiement, etc.)
+        /// sans exiger l'identifiant — toute correspondance sur un Boss actif suffit.
+        /// </summary>
+        /// <returns>L'employé Boss dont le mot de passe correspond.</returns>
+        /// <exception cref="UnauthorizedAccessException">Mot de passe Boss incorrect ou aucun Boss actif.</exception>
+        /// <exception cref="CompteVerrouilleException">Un ou plusieurs Boss sont verrouillés (si tous le sont).</exception>
+        Employe VerifierMotDePasseBoss(string motDePasse);
     }
 }

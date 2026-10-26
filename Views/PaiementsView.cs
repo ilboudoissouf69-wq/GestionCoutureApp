@@ -763,7 +763,9 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // ── Validation mot de passe Boss ──────────────────────────
+            // ── Validation mot de passe Boss via AuthService (Phase 1.1e) ──────
+            // AuthService.VerifierMotDePasseBoss applique le même compteur d'échecs
+            // et verrouillage progressif que la connexion normale.
             string mdpSaisi = PwdBossAnnulation.Password.Trim();
             if (string.IsNullOrEmpty(mdpSaisi))
             {
@@ -772,16 +774,18 @@ namespace GestionCoutureApp.Views
                 return;
             }
 
-            // Vérification avec hashage sécurisé (même logique que DemanderMotifAnnulation)
-            var boss = _context.Employes
-                .Where(emp => emp.Role == "Boss" && emp.Statut == "Actif")
-                .AsEnumerable()
-                .FirstOrDefault(emp =>
-                    PasswordHasher.EstAncienFormatSha256(emp.MotDePasse)
-                        ? emp.MotDePasse == PasswordHasher.HasherAncienSha256(mdpSaisi)
-                        : PasswordHasher.Verifier(mdpSaisi, emp.MotDePasse));
-
-            if (boss == null)
+            try
+            {
+                _authService.VerifierMotDePasseBoss(mdpSaisi);
+            }
+            catch (CompteVerrouilleException ex)
+            {
+                TxtErreurMdp.Text = $"Compte Boss verrouillé. Réessayez dans {Math.Ceiling(ex.TempsRestant.TotalSeconds)} s.";
+                PwdBossAnnulation.Clear();
+                PwdBossAnnulation.Focus();
+                return;
+            }
+            catch (UnauthorizedAccessException)
             {
                 TxtErreurMdp.Text = "Mot de passe Boss incorrect.";
                 PwdBossAnnulation.Clear();
@@ -807,6 +811,10 @@ namespace GestionCoutureApp.Views
 
             try
             {
+                // Capturer le montant AVANT de mettre _paiementAnnulationEnCours à null
+                // (Phase 1.1d : évite que le MessageBox de succès affiche "" car la variable est null)
+                string montantAnnule = _paiementAnnulationEnCours.MontantPaye.ToString("N0");
+
                 _paiementService.Annuler(
                     _paiementAnnulationEnCours.IdPaiement,
                     motif,
@@ -819,7 +827,7 @@ namespace GestionCoutureApp.Views
 
                 MessageBox.Show(
                     $"Paiement annulé.\n" +
-                    $"Le montant de {_paiementAnnulationEnCours?.MontantPaye.ToString("N0") ?? ""} FCFA est désormais\n" +
+                    $"Le montant de {montantAnnule} FCFA est désormais\n" +
                     $"réintégré dans le solde de la commande.",
                     "Annulation effectuée",
                     MessageBoxButton.OK,

@@ -247,7 +247,7 @@ namespace GestionCoutureApp.Tests
             int recu = 0;
             _ea.Subscribe(DomainChangedType.Depense, _ => recu++);
 
-            svc.Valider(dep.IdDepense, "Boss Test");
+            svc.Valider(dep.IdDepense, boss.IdEmploye);
 
             Assert.That(recu, Is.EqualTo(1), "DepenseService.Valider doit publier DomainChangedType.Depense");
         }
@@ -277,7 +277,7 @@ namespace GestionCoutureApp.Tests
             int recu = 0;
             _ea.Subscribe(DomainChangedType.Depense, _ => recu++);
 
-            svc.Annuler(dep.IdDepense, "Raison test", "Boss Test");
+            svc.Annuler(dep.IdDepense, "Raison test", boss.IdEmploye);
 
             Assert.That(recu, Is.EqualTo(1), "DepenseService.Annuler doit publier DomainChangedType.Depense");
         }

@@ -258,5 +258,100 @@ namespace GestionCoutureApp.Services
                 throw new InvalidOperationException(msg);
             }
         }
+
+        /// <summary>
+        /// Vérifie qu'un mot de passe correspond à un compte Boss actif.
+        /// Applique le même compteur d'échecs + verrouillage progressif que Authentifier().
+        /// Utilisé dans les modales de confirmation d'action sensible.
+        ///
+        /// Algorithme :
+        ///   Pour chaque Boss actif, on tente de vérifier le hash.
+        ///   Si le hash correspond → succès, compteur remis à zéro.
+        ///   Sinon, on incrémente le compteur de TOUS les Boss actifs (le Boss
+        ///   n'a pas précisé son identifiant — on pénalise tous les comptes Boss
+        ///   pour éviter l'oracle "quel identifiant est Boss").
+        ///   Si un Boss est verrouillé, on lève CompteVerrouilleException.
+        /// </summary>
+        public Employe VerifierMotDePasseBoss(string motDePasse)
+        {
+            if (string.IsNullOrEmpty(motDePasse))
+                throw new UnauthorizedAccessException("Le mot de passe Boss est obligatoire.");
+
+            using var context = _contextFactory.CreateDbContext();
+            var bossActifs = context.Employes
+                .Where(e => e.Role == "Boss" && e.Statut == "Actif")
+                .ToList();
+
+            if (bossActifs.Count == 0)
+                throw new UnauthorizedAccessException("Aucun compte Boss actif trouvé.");
+
+            // Vérifier si tous les Boss sont verrouillés
+            var maintenant = DateTime.UtcNow;
+            var verrouillage = bossActifs
+                .Where(b => b.DateVerrouJusqua.HasValue && b.DateVerrouJusqua.Value > maintenant)
+                .OrderByDescending(b => b.DateVerrouJusqua)
+                .FirstOrDefault();
+
+            if (verrouillage != null && bossActifs.All(b =>
+                    b.DateVerrouJusqua.HasValue && b.DateVerrouJusqua.Value > maintenant))
+            {
+                var restant = verrouillage.DateVerrouJusqua!.Value - maintenant;
+                throw new CompteVerrouilleException(restant);
+            }
+
+            // Chercher un Boss dont le mot de passe correspond
+            Employe? bossValide = null;
+            foreach (var boss in bossActifs)
+            {
+                // Ignorer les Boss encore verrouillés
+                if (boss.DateVerrouJusqua.HasValue && boss.DateVerrouJusqua.Value > maintenant)
+                    continue;
+                // Effacer un verrou expiré
+                if (boss.DateVerrouJusqua.HasValue)
+                    boss.DateVerrouJusqua = null;
+
+                bool valide = PasswordHasher.EstAncienFormatSha256(boss.MotDePasse)
+                    ? boss.MotDePasse == PasswordHasher.HasherAncienSha256(motDePasse)
+                    : PasswordHasher.Verifier(motDePasse, boss.MotDePasse);
+
+                if (valide)
+                {
+                    // Connexion réussie — migration transparente SHA-256→PBKDF2 si nécessaire
+                    if (PasswordHasher.EstAncienFormatSha256(boss.MotDePasse))
+                        boss.MotDePasse = PasswordHasher.Hasher(motDePasse);
+
+                    boss.NbEchecConnexion = 0;
+                    boss.DateVerrouJusqua = null;
+                    bossValide = boss;
+                    break;
+                }
+            }
+
+            if (bossValide != null)
+            {
+                context.SaveChanges();
+                _logger.LogInformation("VerifierMotDePasseBoss : succès (Boss {Id})", bossValide.Identifiant);
+                return bossValide;
+            }
+
+            // Échec : incrémenter le compteur de tous les Boss non verrouillés
+            foreach (var boss in bossActifs.Where(b =>
+                         !b.DateVerrouJusqua.HasValue || b.DateVerrouJusqua.Value <= maintenant))
+            {
+                boss.NbEchecConnexion++;
+                TimeSpan? prochainVerrou = null;
+                foreach (var (seuil, duree) in Paliers)
+                {
+                    if (boss.NbEchecConnexion >= seuil)
+                        prochainVerrou = duree;
+                }
+                if (prochainVerrou.HasValue)
+                    boss.DateVerrouJusqua = maintenant + prochainVerrou.Value;
+            }
+            context.SaveChanges();
+
+            _logger.LogWarning("VerifierMotDePasseBoss : mot de passe incorrect");
+            throw new UnauthorizedAccessException("Mot de passe Boss incorrect.");
+        }
     }
 }

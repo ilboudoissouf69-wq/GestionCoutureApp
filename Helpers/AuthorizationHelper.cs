@@ -74,10 +74,15 @@ namespace GestionCoutureApp.Helpers
         {
             using var context = contextFactory.CreateDbContext();
             var operateur = context.Employes.Find(idOperateur);
-            // Phase 1 : vérifier aussi que l'opérateur est Actif
-            if (operateur != null && operateur.Statut != "Actif")
+            // Employé introuvable : message explicite avec les rôles requis
+            if (operateur == null)
                 throw new UnauthorizedAccessException(
-                    $"Accès refusé. Le compte de cet opérateur est inactif.");
+                    $"Opérateur introuvable (ID={idOperateur}). " +
+                    $"Rôle(s) requis : {string.Join(" ou ", rolesAutorises)} — accès refusé.");
+            // Phase 1 : vérifier aussi que l'opérateur est Actif
+            if (operateur.Statut != "Actif")
+                throw new UnauthorizedAccessException(
+                    $"Accès refusé. Le compte de cet opérateur ({operateur.Identifiant}) est inactif.");
             RequireRoleEnum(operateur, rolesAutorises);
         }
     }

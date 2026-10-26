@@ -342,16 +342,25 @@ namespace GestionCoutureApp.Services
         /// Retour arrière de statut — Boss uniquement, motif obligatoire.
         /// Si le statut était "Termine" (ou "Pret"), les compteurs sont décrémentés.
         /// Transitions autorisées : Rendu→Termine, Termine→En reprise, En reprise→Signale.
+        /// Phase 1.6 : le rôle est relu en base via l'identifiant — le paramètre roleOperateur
+        /// est conservé pour compatibilité de signature mais ignoré au profit de la valeur DB.
         /// </summary>
         public void ReculerStatut(int idRetour, string motif, int idOperateur, string nomOperateur, string roleOperateur)
         {
-            if (roleOperateur != "Boss")
-                throw new UnauthorizedAccessException("Seul le Boss peut effectuer un retour arrière de statut.");
-
             if (string.IsNullOrWhiteSpace(motif))
                 throw new InvalidOperationException("Le motif du retour arrière est obligatoire.");
 
+            // Phase 1.6 : vérification du rôle en base, pas sur le paramètre string
+            Helpers.AuthorizationHelper.RequireRoleByIdEnum(_contextFactory, idOperateur, RoleEmploye.Boss);
+
             using var ctx = _contextFactory.CreateDbContext();
+
+            // Relire le nom réel en base pour l'audit
+            var operateur = ctx.Employes.Find(idOperateur);
+            string nomOperateurRelu = operateur != null
+                ? operateur.Prenom + " " + operateur.Nom
+                : nomOperateur;
+
             var retour = ctx.Retours.Find(idRetour)
                 ?? throw new InvalidOperationException("Retour introuvable.");
 
@@ -374,7 +383,7 @@ namespace GestionCoutureApp.Services
             retour.Statut                    = statutApres;
             retour.MotifRetourStatut         = motif.Trim();
             retour.DateRetourStatut          = DateTime.Now;
-            retour.NomOperateurRetourStatut  = nomOperateur;
+            retour.NomOperateurRetourStatut  = nomOperateurRelu;
 
             // Effacer DateResolution si on recule depuis Termine
             if (etaitTermine)
@@ -387,7 +396,7 @@ namespace GestionCoutureApp.Services
             ctx.SaveChanges();
 
             _ = _auditService.EnregistrerActionAsync(
-                idOperateur, nomOperateur, roleOperateur,
+                idOperateur, nomOperateurRelu, "Boss",
                 "RETOUR_STATUT_RECULE", "Retour", idRetour,
                 new { StatutAvant = statutAvant },
                 new { StatutApres = statutApres, Motif = motif });

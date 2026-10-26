@@ -145,17 +145,20 @@ namespace GestionCoutureApp.Services
                 dateDebut, dateFin, pourcentage, resultat.Count);
 
             // Phase 2 : calcul de la prime qualité dans le service (plus dans la vue).
-            // Les paramètres sont lus de façon synchrone via GetAwaiter().GetResult()
-            // car CalculerApercu() est synchrone (SQLite local, pas de réseau).
-            // Ce pattern est acceptable ici car le contexte d'exécution est un thread
-            // de pool sans SynchronizationContext (pas de deadlock possible).
             int seuilPieces    = _parametresService.ObtenirSeuilPrimeNbCommandes().ConfigureAwait(false).GetAwaiter().GetResult();
             decimal montantPrime = _parametresService.ObtenirMontantPrimeQualite().ConfigureAwait(false).GetAwaiter().GetResult();
 
-            // Charger les retours non résolus par couturier pour le calcul de prime
+            // Phase 1.2b : compter uniquement les retours sur la période ET pour les pièces
+            // de la période (DateSignalement dans la fenêtre et IdPieceCommande appartenant
+            // à une pièce de cette période). Avant : on comptait TOUS les retours de toujours.
+            var idsPiecesPeriode = pieces.Select(p => p.IdPieceCommande).ToHashSet();
+
             var retoursParCouturier = context.Retours
                 .AsNoTracking()
-                .Where(r => !r.EstAnnule)
+                .Where(r => !r.EstAnnule &&
+                            r.DateSignalement.Date >= dateDebut.Date &&
+                            r.DateSignalement.Date <= dateFin.Date &&
+                            idsPiecesPeriode.Contains(r.IdPieceCommande))
                 .GroupBy(r => r.IdCouturier)
                 .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
                 .ToDictionary(x => x.IdCouturier, x => x.NbRetours);
@@ -392,8 +395,24 @@ namespace GestionCoutureApp.Services
                     commission.MontantCommission =
                         Math.Round(commission.BaseMontant * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero);
 
-                    // Prime qualité zéro défaut (calculée dans l'aperçu et transmise ici)
-                    commission.PrimeQualite = ligne.PrimeQualite;
+                    // Phase 1.2a : Recalculer PrimeQualite côté serveur (ne pas reprendre de l'aperçu).
+                    // L'aperçu est un instantané qui peut être devenu obsolète entre le calcul et l'enregistrement.
+                    // On relit les paramètres de seuil/montant depuis la base pour garantir la fraîcheur.
+                    int seuilPrimeSrv = _parametresService.ObtenirSeuilPrimeNbCommandes().ConfigureAwait(false).GetAwaiter().GetResult();
+                    decimal montantPrimeSrv = _parametresService.ObtenirMontantPrimeQualite().ConfigureAwait(false).GetAwaiter().GetResult();
+
+                    // Phase 1.2b : compter les retours uniquement sur la période ET pour les pièces de la période
+                    var idsPiecesLigne = pieces.Select(p => p.IdPieceCommande).ToHashSet();
+                    int nbRetoursSrv = context.Retours
+                        .Where(r => !r.EstAnnule &&
+                                    r.DateSignalement.Date >= dateDebut.Date &&
+                                    r.DateSignalement.Date <= dateFin.Date &&
+                                    idsPiecesLigne.Contains(r.IdPieceCommande) &&
+                                    r.IdCouturier == ligne.IdEmploye)
+                        .Count();
+                    commission.PrimeQualite = (commission.NbCommandes >= seuilPrimeSrv && nbRetoursSrv == 0)
+                        ? montantPrimeSrv
+                        : 0m;
 
                     context.Commissions.Add(commission);
                     context.SaveChanges();

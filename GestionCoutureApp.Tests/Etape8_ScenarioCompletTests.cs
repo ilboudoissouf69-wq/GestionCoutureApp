@@ -514,9 +514,9 @@ namespace GestionCoutureApp.Tests
                 DateDepense = _clock.Now, Categorie = "Charges",
                 StatutValidation = "En attente", IdOperateur = IdBoss, NomOperateur = "Boss DIALLO"
             });
-            // Validation des dépenses par le Boss
-            _depenseService.Valider(1, "Boss DIALLO");
-            _depenseService.Valider(2, "Boss DIALLO");
+            // Validation des dépenses par le Boss (Phase 1.4 : par ID)
+            _depenseService.Valider(1, IdBoss);
+            _depenseService.Valider(2, IdBoss);
 
             // ─────────────────────────────────────────────────────────────────────
             // VÉRIFICATIONS
