@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,7 @@ namespace GestionCoutureApp.Views
         // ── Constantes visuelles (identiques à FenetreRecuRetour) ────────
         private const string SEP  = "================================";
         private const string SEP2 = "--------------------------------";
+        private const string SEP_APERCU = "✂ - - - - -";
 
         private static readonly Brush Noir   = Brushes.Black;
         private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
@@ -44,6 +46,7 @@ namespace GestionCoutureApp.Views
         private readonly int _idOperateur;
         private readonly string _nomOperateur;
         private readonly string _roleOperateur;
+        private readonly ILogService? _logService;
 
         // ── Panels de contenu (un par onglet, un par pièce pour l'étiquette) ─
         // Étiquette : soit un seul panel (toutes pièces) soit N panels (une par pièce)
@@ -126,13 +129,18 @@ namespace GestionCoutureApp.Views
             _commande        = commande        ?? throw new ArgumentNullException(nameof(commande));
             _commandeService = commandeService ?? throw new ArgumentNullException(nameof(commandeService));
             _auditService    = auditService    ?? throw new ArgumentNullException(nameof(auditService));
-            _receiptInfo     = receiptInfo     ?? new ReceiptInfo { NomAtelier = "ATELIER", Telephone = "" };
+            _receiptInfo     = receiptInfo     ?? new ReceiptInfo();
             _idOperateur     = idOperateur;
             _nomOperateur    = nomOperateur;
             _roleOperateur   = roleOperateur;
+            _logService      = App.Services.GetService<ILogService>();
+
+            var visibilite = TicketsCommandeLogique.VisibiliteSelonRole(roleOperateur);
 
             // Mode par défaut
-            _mode = TicketsCommandeLogique.ModeParDefaut(commande.MontantEncaisse);
+            _mode = visibilite.OngletBonClientVisible
+                ? TicketsCommandeLogique.ModeParDefaut(commande.MontantEncaisse)
+                : ModeImpression.EtiquetteSeule;
 
             Title                   = $"Tickets Commande — CMD #{commande.IdCommande}";
             Width                   = 820;
@@ -164,6 +172,7 @@ namespace GestionCoutureApp.Views
 
             var btnTabEtiquette = CréerOnglet("📦  Étiquette colis", true);
             var btnTabBon       = CréerOnglet("🧾  Bon client",       false);
+            btnTabBon.Visibility = visibilite.OngletBonClientVisible ? Visibility.Visible : Visibility.Collapsed;
 
             tabPanel.Children.Add(btnTabEtiquette);
             tabPanel.Children.Add(btnTabBon);
@@ -264,6 +273,9 @@ namespace GestionCoutureApp.Views
             _rbEtiquetteBon = CréerRadio("Étiquette + Bon client", _mode == ModeImpression.EtiquetteEtBonClient);
             _rbEtiquette    = CréerRadio("Étiquette seule",         _mode == ModeImpression.EtiquetteSeule);
             _rbBon          = CréerRadio("Bon client seul",         _mode == ModeImpression.BonClientSeul);
+            var visibilite = TicketsCommandeLogique.VisibiliteSelonRole(_roleOperateur);
+            _rbBon.Visibility = visibilite.ModeBonClientSeulVisible ? Visibility.Visible : Visibility.Collapsed;
+            _rbEtiquetteBon.Visibility = visibilite.ModeEtiquetteEtBonVisible ? Visibility.Visible : Visibility.Collapsed;
 
             _rbEtiquetteBon.Checked += (_, _) => ModeChange(ModeImpression.EtiquetteEtBonClient);
             _rbEtiquette.Checked    += (_, _) => ModeChange(ModeImpression.EtiquetteSeule);
@@ -327,13 +339,8 @@ namespace GestionCoutureApp.Views
                     foreach (var p in _panelsEtiquette)
                     {
                         wrapper.Children.Add(p);
-                        // Ligne de découpe visuelle entre étiquettes
-                        wrapper.Children.Add(new Border
-                        {
-                            Height     = 2,
-                            Background = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00)),
-                            Margin     = new Thickness(0, 4, 0, 4)
-                        });
+                        if (p != _panelsEtiquette.Last())
+                            Ligne(wrapper, SEP_APERCU, 10, TextAlignment.Center, Gris, FontWeights.Bold);
                     }
                     _scrollViewer.Content = wrapper;
                 }
@@ -414,6 +421,9 @@ namespace GestionCoutureApp.Views
             // ── Numéro commande (très grand) ──────────────────────────────
             Ligne(p, $"CMD #{_commande.IdCommande}",
                 22, TextAlignment.Center, Noir, FontWeights.Black);
+            Ligne(p, TicketsCommandeLogique.ResumePieces(_commande.Pieces),
+                10, TextAlignment.Center, Gris, FontWeights.Bold);
+            Ligne(p, TexteRetrait("RETRAIT"), 15, TextAlignment.Center, Noir, FontWeights.Bold);
             Espace(p, 4);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 8);
@@ -493,6 +503,9 @@ namespace GestionCoutureApp.Views
             Espace(p, 4);
             Ligne(p, "Document interne — ne pas remettre au client",
                 8, TextAlignment.Center, Rouge);
+            var soldeCommande = TicketsCommandeLogique.LibelleSolde(_commande.ResteAPayer);
+            Ligne(p, soldeCommande.Texte, 10, TextAlignment.Center,
+                soldeCommande.EstSolde ? Vert : Rouge, FontWeights.Bold);
             Ligne(p, "Imprimé le " + DateTime.Now.ToString("dd/MM/yyyy à HH:mm"),
                 8, TextAlignment.Center, Gris);
             Espace(p, 14);
@@ -505,7 +518,7 @@ namespace GestionCoutureApp.Views
         private void ConstruireBonClient()
         {
             var p         = _panelBonClient;
-            string nomAt  = _receiptInfo.NomAtelier.Length > 0 ? _receiptInfo.NomAtelier : "ATELIER";
+            string nomAt  = _receiptInfo.NomAtelier;
             string tel    = _receiptInfo.Telephone;
             string adresse = _receiptInfo.Adresse;
             string pied   = _receiptInfo.PiedRecu;
@@ -534,7 +547,8 @@ namespace GestionCoutureApp.Views
             catch { /* logo absent → on continue */ }
 
             // ── En-tête atelier ───────────────────────────────────────────
-            Ligne(p, nomAt,   13, TextAlignment.Center, Marque, FontWeights.Bold);
+            if (!string.IsNullOrWhiteSpace(nomAt))
+                Ligne(p, nomAt, 13, TextAlignment.Center, Marque, FontWeights.Bold);
             if (!string.IsNullOrWhiteSpace(tel))
                 Ligne(p, tel, 9, TextAlignment.Center, Gris);
             if (!string.IsNullOrWhiteSpace(adresse))
@@ -548,6 +562,8 @@ namespace GestionCoutureApp.Views
             Espace(p, 4);
             Ligne(p, $"CMD #{_commande.IdCommande}",
                 20, TextAlignment.Center, Bleu, FontWeights.Bold);
+            Ligne(p, TicketsCommandeLogique.ResumePieces(_commande.Pieces),
+                10, TextAlignment.Center, Gris);
             Espace(p, 6);
             Ligne(p, SEP2, 8, TextAlignment.Center, Gris);
             Espace(p, 6);
@@ -561,6 +577,8 @@ namespace GestionCoutureApp.Views
             if (_commande.HeureFin.HasValue)
                 LignePad(p, "Heure RDV",
                     _commande.HeureFin.Value.ToString(@"hh\:mm"));
+            Espace(p, 5);
+            Ligne(p, TexteRetrait("RETRAIT PRÉVU"), 14, TextAlignment.Center, Noir, FontWeights.Bold);
             Espace(p, 6);
 
             // ── Pièces (sans prix ni mesures) ─────────────────────────────
@@ -575,6 +593,12 @@ namespace GestionCoutureApp.Views
                         : piece.TypeVetement + " — " + piece.DescriptionPrecision;
                     Ligne(p, "  • " + desc, 10, TextAlignment.Left, Noir);
                 }
+                Ligne(p, $"Total : {_commande.Pieces.Count} pièces", 10, TextAlignment.Left, Noir, FontWeights.Bold);
+                Espace(p, 6);
+            }
+            else
+            {
+                Ligne(p, "Total : 0 pièce", 10, TextAlignment.Left, Noir, FontWeights.Bold);
                 Espace(p, 6);
             }
 
@@ -589,25 +613,11 @@ namespace GestionCoutureApp.Views
             Espace(p, 4);
 
             // Solde (orange si reste à payer, vert si soldé)
-            bool solde_ = solde <= 0m;
-            if (solde_)
-            {
-                LigneMontant(p, "✓ SOLDÉ", Fcfa(0m), Vert, FontWeights.Bold, taille: 12);
-            }
-            else
-            {
-                LigneMontant(p, "Solde à régler", Fcfa(solde), Orange, FontWeights.Bold, taille: 12);
-            }
+            LigneMontant(p, "RESTE À PAYER", Fcfa(Math.Max(0m, solde)),
+                solde <= 0m ? Vert : Orange, FontWeights.Bold, taille: 12);
 
             Espace(p, 6);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
-            Espace(p, 6);
-
-            // ── Message final ─────────────────────────────────────────────
-            Ligne(p, "Présentez ce bon pour récupérer",
-                10, TextAlignment.Center, Noir, FontWeights.Bold);
-            Ligne(p, "votre commande.",
-                10, TextAlignment.Center, Noir, FontWeights.Bold);
             Espace(p, 6);
 
             if (!string.IsNullOrWhiteSpace(pied))
@@ -616,8 +626,11 @@ namespace GestionCoutureApp.Views
                 Espace(p, 4);
             }
 
+            // ── Mentions finales ─────────────────────────────────────────
             Ligne(p, SEP, 8, TextAlignment.Center, Gris);
-            Ligne(p, "Merci pour votre confiance !", 9, TextAlignment.Center, Noir, FontWeights.Bold);
+            Ligne(p, "Signature du client : ______________", 10, TextAlignment.Left, Noir);
+            Espace(p, 6);
+            Ligne(p, "Présentez ce bon au retrait.", 10, TextAlignment.Center, Noir, FontWeights.Bold);
             Ligne(p, SEP, 8, TextAlignment.Center, Gris);
             Espace(p, 10);
         }
@@ -628,10 +641,22 @@ namespace GestionCoutureApp.Views
 
         private void BtnImprimer_Click(object sender, RoutedEventArgs e)
         {
+            var visibilite = TicketsCommandeLogique.VisibiliteSelonRole(_roleOperateur);
+            bool roleAutoriseBon = visibilite.OngletBonClientVisible;
+            if (!roleAutoriseBon && _mode != ModeImpression.EtiquetteSeule)
+            {
+                _mode = ModeImpression.EtiquetteSeule;
+                _btnImprimer.Content = $"🖨️  Imprimer : {TicketsCommandeLogique.LibelleMode(_mode)}";
+            }
             bool imprimerEtiquettes = _mode == ModeImpression.EtiquetteSeule
                                    || _mode == ModeImpression.EtiquetteEtBonClient;
             bool imprimerBon        = _mode == ModeImpression.BonClientSeul
                                    || _mode == ModeImpression.EtiquetteEtBonClient;
+            if (!roleAutoriseBon)
+            {
+                imprimerBon = false;
+                imprimerEtiquettes = true;
+            }
 
             try
             {
@@ -641,10 +666,14 @@ namespace GestionCoutureApp.Views
                 // ── Étiquette(s) ──────────────────────────────────────────
                 if (imprimerEtiquettes)
                 {
-                    foreach (var panel in _panelsEtiquette)
+                    for (int i = 0; i < _panelsEtiquette.Count; i++)
                     {
-                        ImprimerPanel(pd, panel,
-                            $"CMD #{_commande.IdCommande} — Étiquette colis");
+                        string typeTicket = _panelsEtiquette.Count == 1
+                            ? "Étiquette colis"
+                            : $"Étiquette {i + 1}/{_panelsEtiquette.Count}";
+                        ImprimerPanel(pd, _panelsEtiquette[i],
+                            $"Commande CMD #{_commande.IdCommande} — {typeTicket}");
+                        AuditerImpressionSansAttendre(typeTicket);
                     }
                 }
 
@@ -652,27 +681,17 @@ namespace GestionCoutureApp.Views
                 if (imprimerBon)
                 {
                     ImprimerPanel(pd, _panelBonClient,
-                        $"CMD #{_commande.IdCommande} — Bon client");
+                        $"Commande CMD #{_commande.IdCommande} — Bon client");
+                    AuditerImpressionSansAttendre("Bon client");
                 }
 
                 // ── Marquer première impression ───────────────────────────
                 _commandeService.MarquerRecuImprime(_commande.IdCommande);
 
-                // ── Audit ─────────────────────────────────────────────────
-                string typeTicket = TicketsCommandeLogique.LibelleMode(_mode);
-                _ = _auditService.EnregistrerActionAsync(
-                    _idOperateur, _nomOperateur, _roleOperateur,
-                    "COMMANDE_IMPRESSION", "Commande", _commande.IdCommande,
-                    valeursAvant: null,
-                    valeursApres: new
-                    {
-                        TypeTicket = typeTicket,
-                        UneParPiece = _cbUneParPiece.IsChecked == true,
-                        Date = DateTime.Now.ToString("dd/MM/yyyy HH:mm")
-                    });
-
+                string libelleMode = TicketsCommandeLogique.LibelleMode(_mode);
+                BasculerApercu();
                 MessageBox.Show(
-                    $"Impression réussie ({typeTicket}).",
+                    $"Impression réussie ({libelleMode}).",
                     "Impression", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -684,9 +703,79 @@ namespace GestionCoutureApp.Views
 
         private static void ImprimerPanel(PrintDialog pd, StackPanel panel, string description)
         {
-            panel.Measure(new Size(290, double.PositiveInfinity));
-            panel.Arrange(new Rect(new Point(0, 0), panel.DesiredSize));
-            pd.PrintVisual(panel, description);
+            // Imprimer une copie visuelle afin de ne pas modifier la mise en page de l'aperçu.
+            var copie = CopierPanel(panel);
+            copie.Measure(new Size(290, double.PositiveInfinity));
+            copie.Arrange(new Rect(new Point(0, 0), copie.DesiredSize));
+            pd.PrintVisual(copie, description);
+        }
+
+        private void AuditerImpressionSansAttendre(string typeTicket)
+        {
+            // La tâche observe et journalise ses erreurs, sans retarder l'impression.
+            _ = AuditerImpressionAsync(typeTicket);
+        }
+
+        private async Task AuditerImpressionAsync(string typeTicket)
+        {
+            try
+            {
+                await _auditService.EnregistrerActionAsync(
+                    _idOperateur, _nomOperateur, _roleOperateur,
+                    "COMMANDE_IMPRESSION", "Commande", _commande.IdCommande,
+                    null,
+                    new
+                    {
+                        TypeTicket = typeTicket,
+                        Mode = TicketsCommandeLogique.LibelleMode(_mode),
+                        UneEtiquetteParPiece = _cbUneParPiece.IsChecked == true,
+                        Date = DateTime.Now
+                    });
+            }
+            catch (Exception ex)
+            {
+                try { _logService?.LogError($"Échec de l'audit du ticket '{typeTicket}' pour la commande {_commande.IdCommande}.", ex, _nomOperateur); }
+                catch { /* Une panne du journal ne doit pas interrompre l'impression. */ }
+            }
+        }
+
+        private static StackPanel CopierPanel(StackPanel source)
+        {
+            var copie = new StackPanel { Width = source.Width, Margin = source.Margin };
+            foreach (UIElement enfant in source.Children)
+            {
+                switch (enfant)
+                {
+                    case TextBlock texte:
+                        copie.Children.Add(new TextBlock
+                        {
+                            Text = texte.Text, FontFamily = texte.FontFamily, FontSize = texte.FontSize,
+                            FontWeight = texte.FontWeight, TextAlignment = texte.TextAlignment,
+                            Foreground = texte.Foreground, TextWrapping = texte.TextWrapping,
+                            Margin = texte.Margin, Padding = texte.Padding
+                        });
+                        break;
+                    case Border bordure:
+                        copie.Children.Add(new Border
+                        {
+                            Height = bordure.Height, Width = bordure.Width, Margin = bordure.Margin,
+                            Background = bordure.Background, BorderBrush = bordure.BorderBrush,
+                            BorderThickness = bordure.BorderThickness
+                        });
+                        break;
+                    case System.Windows.Controls.Image image:
+                        copie.Children.Add(new System.Windows.Controls.Image
+                        {
+                            Source = image.Source, Width = image.Width, Height = image.Height,
+                            Stretch = image.Stretch, Margin = image.Margin,
+                            HorizontalAlignment = image.HorizontalAlignment
+                        });
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Élément d'impression non pris en charge : {enfant.GetType().Name}.");
+                }
+            }
+            return copie;
         }
 
         // ═════════════════════════════════════════════════════════════════
@@ -699,8 +788,15 @@ namespace GestionCoutureApp.Views
                 : "—";
 
         private static string Fcfa(decimal montant)
-            => montant.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)
-               .Replace(",", " ") + " FCFA";
+            => TicketsCommandeLogique.FormaterMontant(montant) + " FCFA";
+
+        private string TexteRetrait(string prefixe)
+        {
+            string date = _commande.DateFin.ToString("dd/MM/yyyy");
+            return _commande.HeureFin.HasValue
+                ? $"{prefixe} : {date} à {_commande.HeureFin.Value:hh\\:mm}"
+                : $"{prefixe} : {date}";
+        }
 
         private void Ligne(StackPanel p, string texte,
             double taille = 10,
