@@ -105,6 +105,64 @@ namespace GestionCoutureApp.Views
         private bool AvecControleStatut(Action<string?> action)
             => AppliquerRegleStatut(action);
 
+        private bool ConfirmerTransitionsStatut(
+            IEnumerable<(string Ancien, string Nouveau)> transitions,
+            string contexte,
+            out string? motif)
+        {
+            motif = null;
+            var changements = transitions
+                .Where(t => !string.IsNullOrWhiteSpace(t.Ancien) && t.Ancien != t.Nouveau)
+                .ToList();
+            if (changements.Count == 0) return true;
+
+            static int Rang(string statut) => statut switch
+            {
+                "A faire" => 0, "En cours" => 1, "Terminee" => 2, "Livree" => 3, _ => -1
+            };
+            static string Afficher(string statut) => statut switch
+            {
+                "A faire" => "À faire", "Terminee" => "Terminée", "Livree" => "Livrée", _ => statut
+            };
+
+            bool retrogradation = changements.Any(t => Rang(t.Nouveau) >= 0 && Rang(t.Ancien) > Rang(t.Nouveau));
+            if (retrogradation && changements.Any(t => t.Ancien == "Livree" && Rang(t.Nouveau) < Rang(t.Ancien)))
+            {
+                MessageBox.Show("Une pièce déjà livrée ne peut pas être rétrogradée ici. Utilisez le module Retours.",
+                    "Rétrogradation impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            if (retrogradation && _roleUtilisateur != "Boss")
+            {
+                MessageBox.Show("Seul le Boss peut rétrograder un statut. Contactez le Boss pour cette opération.",
+                    "Accès réservé au Boss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            string details = string.Join(" ; ", changements
+                .Select(t => $"{Afficher(t.Ancien)} → {Afficher(t.Nouveau)}")
+                .Distinct());
+            string message = $"Vous allez modifier le statut de {contexte} :\n{details}.\n\n";
+            if (retrogradation)
+                message += "Cette rétrogradation sera enregistrée dans le journal d'audit et nécessite un motif.\n\n";
+            else
+                message += "Cette transition est définitive pour la Secrétaire. Seul le Boss peut revenir à un statut précédent, avec un motif.\n\n";
+            if (changements.Any(t => t.Nouveau == "Terminee"))
+                message += "Le passage à « Terminée » déclenche le calcul des commissions à la clôture de période.\n\n";
+            message += "Confirmer le changement de statut ?";
+
+            if (MessageBox.Show(message, "Confirmation du changement de statut",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return false;
+
+            if (retrogradation)
+            {
+                motif = DemanderMotif("Motif de la rétrogradation (obligatoire)");
+                if (string.IsNullOrWhiteSpace(motif)) return false;
+            }
+            return true;
+        }
+
         /// <summary>
         /// Point d'entrée unique pour tout changement de statut.
         /// Gère les trois cas : livraison non soldée, rétrogradation avec motif, autres erreurs.
@@ -147,11 +205,13 @@ namespace GestionCoutureApp.Views
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return false;
             }
-            catch (InvalidOperationException ex) when (
-                ex.Message.Contains("motif est obligatoire") ||
-                ex.Message.Contains("rétrograder") ||
-                ex.Message.Contains("rétrograder"))
+            catch (InvalidOperationException ex) when (ex.Message.Contains("motif est obligatoire"))
             {
+                if (_roleUtilisateur != "Boss")
+                {
+                    MessageBox.Show(ex.Message, "Opération impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
                 string? motif = DemanderMotif("Motif de la rétrogradation (obligatoire)");
                 if (string.IsNullOrWhiteSpace(motif)) return false;
                 action(motif);
@@ -2448,6 +2508,18 @@ namespace GestionCoutureApp.Views
             // 2. Récapitulatif complet avant sauvegarde
             if (!AfficherRecapitulatif(pieces.Select(p => p.piece).ToList(), mode: "edition")) return;
 
+            var transitionsStatut = pieces
+                .Where(p => p.carte.IdPieceCommande.HasValue)
+                .Select(p =>
+                {
+                    var actuelle = _commandeEnEdition.Pieces.FirstOrDefault(x =>
+                        x.IdPieceCommande == p.carte.IdPieceCommande.Value);
+                    return (Ancien: actuelle?.Statut ?? "", Nouveau: p.piece.Statut);
+                });
+            if (!ConfirmerTransitionsStatut(transitionsStatut,
+                    $"les pièces de la commande #{_commandeEnEdition.IdCommande}", out string? motifStatut))
+                return;
+
             BtnValiderNouvelleCommande.IsEnabled = false;
             try
             {
@@ -2460,22 +2532,8 @@ namespace GestionCoutureApp.Views
                     {
                         pieceObj.IdPieceCommande = carte.IdPieceCommande.Value;
 
-                        // Confirmation obligatoire avant passage En cours → Terminée
-                        // (déclenche le calcul de commission — irréversible sauf Boss)
                         var pieceActuelle = _commandeEnEdition.Pieces
                             .FirstOrDefault(p => p.IdPieceCommande == carte.IdPieceCommande.Value);
-                        if (pieceActuelle?.Statut == "En cours" && pieceObj.Statut == "Terminee")
-                        {
-                            var rep = MessageBox.Show(
-                                $"⚠️ Passage en « Terminée » — {pieceObj.TypeVetement}\n\n" +
-                                "Cette action déclenchera le calcul de la commission du couturier " +
-                                "lors de la prochaine clôture de période.\n\n" +
-                                "Cette opération est irréversible (seul le Boss peut revenir en arrière " +
-                                "avec motif obligatoire).\n\nConfirmer ?",
-                                "Confirmation — Pièce Terminée",
-                                MessageBoxButton.YesNo, MessageBoxImage.Question);
-                            if (rep != MessageBoxResult.Yes) return;
-                        }
 
                         // Étape 2 : changement de prix par la Secrétaire → motif obligatoire (audité)
                         string? motifPrix = null;
@@ -2487,7 +2545,8 @@ namespace GestionCoutureApp.Views
                             return;
 
                         if (!AvecControleStatut(motif =>
-                                _commandeService.ModifierPiece(pieceObj, mesures, idOp, nomOp, motif, motifPrix)))
+                                _commandeService.ModifierPiece(pieceObj, mesures, idOp, nomOp,
+                                    motifStatut ?? motif, motifPrix)))
                             return;
                     }
                     else
@@ -2584,24 +2643,19 @@ namespace GestionCoutureApp.Views
             btnOk.Click += (s, ev) =>
             {
                 string statut = cmb.SelectedItem?.ToString() ?? "";
-                // Confirmation avant forçage vers Terminée
-                if (statut == "Terminee")
-                {
-                    var rep = MessageBox.Show(
-                        "⚠️ Vous allez passer TOUTES les pièces en « Terminée ».\n\n" +
-                        "Cette action déclenchera le calcul des commissions couturiers " +
-                        "lors de la prochaine clôture de période.\n\n" +
-                        "Cette opération est irréversible (seul le Boss peut revenir en arrière " +
-                        "avec motif obligatoire).\n\nConfirmer ?",
-                        "Confirmation — Forcer Terminée",
-                        MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    if (rep != MessageBoxResult.Yes) return;
-                }
+                var statutsActuels = _commandeEnEdition?.Pieces
+                    .Select(p => p.Statut).ToList()
+                    ?? _commandeService.ObtenirPiecesCommande(idCmd).Select(p => p.Statut).ToList();
+                if (!ConfirmerTransitionsStatut(
+                        statutsActuels.Select(ancien => (Ancien: ancien, Nouveau: statut)),
+                        $"toutes les pièces de la commande #{idCmd}", out string? motifStatut))
+                    return;
                 try
                 {
                     var (opId, opNom) = OperateurConnecte();
                     if (!AvecControleStatut(motif =>
-                            _commandeService.ForcerStatutToutesPieces(idCmd, statut, opId, opNom, motif)))
+                            _commandeService.ForcerStatutToutesPieces(idCmd, statut, opId, opNom,
+                                motifStatut ?? motif)))
                         return;
                     dialog.DialogResult = true;
                     dialog.Close();
@@ -3663,7 +3717,17 @@ namespace GestionCoutureApp.Views
                 {
                     piece.IdPieceCommande = _pieceSelectionneeId.Value;
                     var (idOpM, nomOpM) = OperateurConnecte();
-                    if (!AvecControleLivraison(motif => _commandeService.ModifierPiece(piece, mesures, idOpM, nomOpM, motif))) return;
+                    var pieceActuelle = _piecesCommande.FirstOrDefault(p =>
+                        p.IdPieceCommande == _pieceSelectionneeId.Value);
+                    if (pieceActuelle == null)
+                        pieceActuelle = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId)
+                            .FirstOrDefault(p => p.IdPieceCommande == _pieceSelectionneeId.Value);
+                    if (!ConfirmerTransitionsStatut(
+                            new[] { (Ancien: pieceActuelle?.Statut ?? "", Nouveau: piece.Statut) },
+                            $"la pièce « {piece.TypeVetement} »", out string? motifStatut))
+                        return;
+                    if (!AvecControleLivraison(motif => _commandeService.ModifierPiece(
+                            piece, mesures, idOpM, nomOpM, motifStatut ?? motif))) return;
                     var commandeAct = _commandeService.ObtenirParId(_commandeSelectionneeId);
                     if (commandeAct != null) RafraichirEnTeteCommande(commandeAct);
                     var pieceFr = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId).FirstOrDefault(p => p.IdPieceCommande == _pieceSelectionneeId.Value);
@@ -3739,7 +3803,17 @@ namespace GestionCoutureApp.Views
                 if (pieceModifiee != null)
                 {
                     // Pièce sélectionnée : modifier la pièce, puis les infos commande séparément
-                    if (!AvecControleLivraison(motif => _commandeService.ModifierPiece(pieceModifiee, CollecterMesures(), idOpM, nomOpM, motif))) return;
+                    var pieceActuelle = _piecesCommande.FirstOrDefault(p =>
+                        p.IdPieceCommande == pieceModifiee.IdPieceCommande);
+                    if (pieceActuelle == null)
+                        pieceActuelle = _commandeService.ObtenirPiecesCommande(_commandeSelectionneeId)
+                            .FirstOrDefault(p => p.IdPieceCommande == pieceModifiee.IdPieceCommande);
+                    if (!ConfirmerTransitionsStatut(
+                            new[] { (Ancien: pieceActuelle?.Statut ?? "", Nouveau: pieceModifiee.Statut) },
+                            $"la pièce « {pieceModifiee.TypeVetement} »", out string? motifStatut))
+                        return;
+                    if (!AvecControleLivraison(motif => _commandeService.ModifierPiece(
+                            pieceModifiee, CollecterMesures(), idOpM, nomOpM, motifStatut ?? motif))) return;
                 }
                 // Mettre à jour les infos commande (client, date, heures) sans toucher aux pièces
                 _commandeService.ModifierInfosCommande(

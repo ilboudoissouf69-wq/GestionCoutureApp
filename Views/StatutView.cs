@@ -14,9 +14,8 @@ namespace GestionCoutureApp.Views
     /// la scrollbar de cette Page soit la seule visible.
     /// Boss/Secrétaire : lecture + modification. Couturier : lecture seule.
     ///
-    /// ANOMALIE CONNUE (non corrigée) : rétrogradation Boss sans motif
-    /// silencieuse — AvecControleLivraison n'intercepte que
-    /// LivraisonNonSoldeeException, pas InvalidOperationException du flux.
+    /// Les changements de statut sont confirmés dans la vue avant leur envoi
+    /// au service ; les rétrogradations Boss demandent un motif.
     /// </summary>
     public partial class StatutView : Page
     {
@@ -288,22 +287,8 @@ namespace GestionCoutureApp.Views
                 _                        => null
             };
             if (suivant == null) return;
-
-            // Confirmation obligatoire avant En cours → Terminée
-            if (suivant == "Terminee")
-            {
-                var rep = MessageBox.Show(
-                    $"⚠️ Passage en « Terminée » — CMD #{cmd.IdCommande}\n\n" +
-                    "Cette action déclenchera le calcul de la commission du couturier " +
-                    "lors de la prochaine clôture de période.\n\n" +
-                    "Cette opération est irréversible (seul le Boss peut revenir en arrière " +
-                    "avec motif obligatoire).\n\nConfirmer ?",
-                    "Confirmation — Pièce Terminée",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (rep != MessageBoxResult.Yes) return;
-            }
-
-            await ForcerStatutCommande(cmd.IdCommande, suivant);
+            if (!ConfirmerTransitionsStatut(cmd, suivant, out string? motif)) return;
+            await ForcerStatutCommande(cmd.IdCommande, suivant, motif);
         }
 
         // ── Fiche atelier → Tickets commande ─────────────────────────
@@ -333,18 +318,8 @@ namespace GestionCoutureApp.Views
                 var it = new MenuItem { Header = lbl };
                 it.Click += async (x, y) =>
                 {
-                    // Confirmation avant Terminée
-                    if (s == "Terminee")
-                    {
-                        var rep = MessageBox.Show(
-                            $"⚠️ Passage en « Terminée » — CMD #{cmd.IdCommande}\n\n" +
-                            "Cette action déclenchera le calcul des commissions.\n" +
-                            "Irréversible sauf Boss avec motif.\n\nConfirmer ?",
-                            "Confirmation — Terminée",
-                            MessageBoxButton.YesNo, MessageBoxImage.Question);
-                        if (rep != MessageBoxResult.Yes) return;
-                    }
-                    await ForcerStatutCommande(cmd.IdCommande, s);
+                    if (!ConfirmerTransitionsStatut(cmd, s, out string? motif)) return;
+                    await ForcerStatutCommande(cmd.IdCommande, s, motif);
                 };
                 menu.Items.Add(it);
             }
@@ -358,7 +333,61 @@ namespace GestionCoutureApp.Views
             menu.IsOpen = true;
         }
 
-        private async Task ForcerStatutCommande(int idCommande, string statut)
+        private bool ConfirmerTransitionsStatut(Commande cmd, string nouveauStatut, out string? motif)
+        {
+            motif = null;
+            var changements = cmd.Pieces
+                .Where(p => p.Statut != nouveauStatut)
+                .ToList();
+            if (changements.Count == 0) return true;
+
+            static int Rang(string statut) => statut switch
+            {
+                "A faire" => 0, "En cours" => 1, "Terminee" => 2, "Livree" => 3, _ => -1
+            };
+            static string Afficher(string statut) => statut switch
+            {
+                "A faire" => "À faire", "Terminee" => "Terminée", "Livree" => "Livrée", _ => statut
+            };
+
+            bool retrogradation = changements.Any(p => Rang(nouveauStatut) >= 0 && Rang(p.Statut) > Rang(nouveauStatut));
+            if (retrogradation && changements.Any(p => p.Statut == "Livree" && Rang(nouveauStatut) < Rang(p.Statut)))
+            {
+                MessageBox.Show("Une pièce déjà livrée ne peut pas être rétrogradée ici. Utilisez le module Retours.",
+                    "Rétrogradation impossible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            if (retrogradation && _role != "Boss")
+            {
+                MessageBox.Show("Seul le Boss peut rétrograder un statut. Contactez le Boss pour cette opération.",
+                    "Accès réservé au Boss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            string statutsAvant = string.Join(", ", changements.Select(p => Afficher(p.Statut)).Distinct());
+            string message = $"Commande #{cmd.IdCommande} — {changements.Count} pièce(s) concernée(s)\n\n" +
+                $"Statut(s) actuel(s) : {statutsAvant}\nNouveau statut : {Afficher(nouveauStatut)}\n\n";
+            if (retrogradation)
+                message += "Cette rétrogradation sera inscrite dans le journal d'audit et nécessite un motif.\n\n";
+            else
+                message += "Cette transition est définitive pour la Secrétaire. Seul le Boss peut revenir à un statut précédent, avec un motif.\n\n";
+            if (nouveauStatut == "Terminee")
+                message += "Le passage à « Terminée » déclenche le calcul des commissions à la clôture de période.\n\n";
+            message += "Confirmer ce changement de statut ?";
+
+            if (MessageBox.Show(message, "Confirmation du changement de statut",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return false;
+
+            if (retrogradation)
+            {
+                motif = DemanderMotif("Motif de la rétrogradation (obligatoire)");
+                if (string.IsNullOrWhiteSpace(motif)) return false;
+            }
+            return true;
+        }
+
+        private async Task ForcerStatutCommande(int idCommande, string statut, string? motifTransition = null)
         {
             if (_role == "Couturier")
             {
@@ -369,7 +398,8 @@ namespace GestionCoutureApp.Views
             var (idOp, nomOp) = OperateurConnecte();
             bool ok = await AvecControleLivraison(async motif =>
             {
-                await Task.Run(() => _commandeService.ForcerStatutToutesPieces(idCommande, statut, idOp, nomOp, motif));
+                await Task.Run(() => _commandeService.ForcerStatutToutesPieces(
+                    idCommande, statut, idOp, nomOp, motifTransition ?? motif));
             });
             if (ok) await ChargerCommandes();
         }
