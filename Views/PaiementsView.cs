@@ -297,58 +297,13 @@ namespace GestionCoutureApp.Views
         {
             try
             {
-                // C3 : projection légère — on ne charge que les champs nécessaires
-                // pour calculer ResteAPayer et afficher le texte du ComboBox.
-                // Formule ResteAPayer = somme couture + somme des lignes matériel - paiements valides.
-                // Les montants bruts sont chargés par SQL, puis les agrégats decimal sont calculés en mémoire
-                // après ToList(), car SQLite ne prend pas en charge SUM(decimal).
-                var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-                using var ctx = contextFactory.CreateDbContext();
-
-                // Projection : uniquement les colonnes utiles au calcul + à l'affichage
-                var commandesLight = ctx.Commandes
-                    .AsNoTracking()
-                    .Where(c => !c.EstSupprimee && !c.EstAnnulee)
-                    .Select(c => new
-                    {
-                        c.IdCommande,
-                        ClientPrenom = c.Client != null ? c.Client.Prenom : "",
-                        ClientNom    = c.Client != null ? c.Client.Nom    : "",
-                        MontantsCouture = c.Pieces
-                            .Select(p => p.MontantCouture)
-                            .ToList(),
-                        LignesMateriaux = c.MaterielSupplements
-                            .Select(m => new { m.Quantite, m.PrixUnitaire })
-                            .ToList(),
-                        PaiementsValides  = c.Paiements
-                            .Where(p => !p.EstAnnule)
-                            .Select(p => p.MontantPaye)
-                            .ToList()
-                    })
-                    .ToList();
-
-                var encaissables = commandesLight
-                    .Select(c =>
-                    {
-                        decimal montantCouture   = c.MontantsCouture.Sum();
-                        decimal montantMateriaux = c.LignesMateriaux.Sum(m => m.Quantite * m.PrixUnitaire);
-                        decimal montantTotal     = montantCouture + montantMateriaux;
-                        decimal dejaEncaisse  = c.PaiementsValides.Sum();
-                        decimal resteAPayer   = montantTotal - dejaEncaisse;
-                        return new
-                        {
-                            c.IdCommande, c.ClientPrenom, c.ClientNom,
-                            MontantTotalAvecMateriaux = montantTotal,
-                            ResteAPayer = resteAPayer
-                        };
-                    })
-                    .Where(c => c.ResteAPayer > 0.01m)
-                    .ToList();
+                var encaissables = App.Services
+                    .GetRequiredService<CommandesEncaissablesService>()
+                    .ObtenirCommandesEncaissables();
 
                 _toutesCommandesEncaissables = encaissables.Select(c => new CommandeItem(
                     c.IdCommande,
-                    $"CMD #{c.IdCommande}  —  "
-                        + c.ClientPrenom + " " + c.ClientNom
+                    $"CMD #{c.IdCommande}  —  " + c.NomClient
                         + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA"
                         + " · reste : " + c.ResteAPayer.ToString("N0") + " FCFA)"
                 )).ToList();
