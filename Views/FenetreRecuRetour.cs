@@ -257,14 +257,18 @@ namespace GestionCoutureApp.Views
             // ── Logo (en premier, toujours en haut) ──────────────────────
             try
             {
+                var src = new System.Windows.Media.Imaging.BitmapImage(
+                    new Uri("pack://application:,,,/Resources/logo_retouche_choco.png"));
+                var gris = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+                    src, System.Windows.Media.PixelFormats.Gray8, null, 0);
                 var logo = new System.Windows.Controls.Image
                 {
-                    Source = new System.Windows.Media.Imaging.BitmapImage(
-                        new Uri("pack://application:,,,/Resources/logo_retouche_choco.png")),
-                    Width  = 100, Height = 100,
+                    Source              = gris,
+                    Width               = 100,
+                    Height              = 100,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Stretch = System.Windows.Media.Stretch.Uniform,
-                    Margin  = new Thickness(0, 0, 0, 6)
+                    Stretch             = System.Windows.Media.Stretch.Uniform,
+                    Margin              = new Thickness(0, 0, 0, 6)
                 };
                 System.Windows.Media.RenderOptions.SetBitmapScalingMode(
                     logo, System.Windows.Media.BitmapScalingMode.HighQuality);
@@ -380,13 +384,15 @@ namespace GestionCoutureApp.Views
         {
             p.Children.Add(new TextBlock
             {
-                Text          = texte,
-                FontFamily    = new FontFamily("Consolas"),
-                FontSize      = taille,
-                FontWeight    = poids ?? FontWeights.Normal,
-                TextAlignment = align,
-                Foreground    = couleur ?? Noir,
-                TextWrapping  = TextWrapping.Wrap
+                Text                = texte,
+                FontFamily          = new FontFamily("Consolas"),
+                FontSize            = taille,
+                FontWeight          = poids ?? FontWeights.Normal,
+                TextAlignment       = align,
+                Foreground          = couleur ?? Noir,
+                TextWrapping        = TextWrapping.Wrap,
+                Width               = 290,
+                HorizontalAlignment = HorizontalAlignment.Center
             });
         }
 

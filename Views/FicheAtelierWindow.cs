@@ -320,13 +320,15 @@ namespace GestionCoutureApp.Views
         {
             p.Children.Add(new TextBlock
             {
-                Text         = texte,
-                FontFamily   = new FontFamily("Consolas"),
-                FontSize     = taille,
-                FontWeight   = poids ?? FontWeights.Normal,
-                TextAlignment = align,
-                Foreground   = couleur ?? Noir,
-                TextWrapping = TextWrapping.Wrap
+                Text                = texte,
+                FontFamily          = new FontFamily("Consolas"),
+                FontSize            = taille,
+                FontWeight          = poids ?? FontWeights.Normal,
+                TextAlignment       = align,
+                Foreground          = couleur ?? Noir,
+                TextWrapping        = TextWrapping.Wrap,
+                Width               = 290,
+                HorizontalAlignment = HorizontalAlignment.Center
             });
         }
 
