@@ -15,15 +15,15 @@ namespace GestionCoutureApp.Views
     public class FenetreRecu : Window
     {
         // ----------------------------------------------------------------
-        // Constantes visuelles
+        // Constantes visuelles — impression noir/blanc (économie d'encre)
         // ----------------------------------------------------------------
         private const string SEP = "================================";
-        private static readonly Brush Noir = Brushes.Black;
-        private static readonly Brush Gris = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
-        private static readonly Brush Rouge = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
-        private static readonly Brush Vert = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
-        private static readonly Brush Orange = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06));
-        private static readonly Brush Marque = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+        private static readonly Brush Noir   = Brushes.Black;
+        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Rouge  = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Vert   = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Orange = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Marque = Brushes.Black;   // → noir à l'impression
 
         // ----------------------------------------------------------------
         // Champs
@@ -55,12 +55,12 @@ namespace GestionCoutureApp.Views
 
             // ---- Proprietes de la fenetre ----
             Title = "Recu N° " + paiement.RecuNumero;
-            Width = 360;
-            Height = 780;
+            Width = 380;
+            Height = 820;
             MinWidth = 340;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             ResizeMode = ResizeMode.CanResize;
-            Background = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
+            Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
             UseLayoutRounding = true;
             SnapsToDevicePixels = true;
 
@@ -126,29 +126,14 @@ namespace GestionCoutureApp.Views
         {
             var p = _receiptPanel;
             
-            // ✅ CORRECTIF AUDIT #15 : Charger les infos de reçus dynamiques
+            // Charger les infos de reçus dynamiques
             var settings = _receiptService.GetReceiptInfoAsync().Result;
             string nomAtelier = settings?.NomAtelier ?? "RETOUCHE CHOCO";
             string telAtelier = settings?.Telephone ?? "+226 62 11 45 11";
             string adresseAtelier = settings?.Adresse ?? "Zogona, derriere l'alimentation la shopette";
             string piedRecu = settings?.PiedRecu ?? "Merci pour votre confiance !";
 
-            // ===== BANNIERE ANNULATION =====
-            if (_paiement.EstAnnule)
-            {
-                Ligne(p, SEP, 9, TextAlignment.Center, Rouge);
-                Ligne(p, "*** PAIEMENT ANNULE ***", 13, TextAlignment.Center, Rouge, FontWeights.Bold);
-                Ligne(p, "Motif : " + (_paiement.MotifsAnnulation ?? "-"),
-                                                                 10, TextAlignment.Center, Rouge);
-                Ligne(p, "Annule par : " + (_paiement.NomAnnulateur ?? "-"),
-                                                                 10, TextAlignment.Center, Rouge);
-                Ligne(p, "Date : " + _paiement.DateAnnulation?.ToString("dd/MM/yyyy HH:mm"),
-                                                                 10, TextAlignment.Center, Rouge);
-                Ligne(p, SEP, 9, TextAlignment.Center, Rouge);
-                Espace(p, 8);
-            }
-
-            // ===== LOGO =====
+            // ===== LOGO (toujours en premier) =====
             Espace(p, 8);
             try
             {
@@ -168,23 +153,34 @@ namespace GestionCoutureApp.Views
             }
             catch { /* si le logo est absent, on continue sans planter */ }
 
+            // ===== BANNIERE ANNULATION (après le logo) =====
+            if (_paiement.EstAnnule)
+            {
+                Espace(p, 6);
+                Ligne(p, SEP, 9, TextAlignment.Center, Gris);
+                Ligne(p, "*** PAIEMENT ANNULE ***", 13, TextAlignment.Center, Noir, FontWeights.Bold);
+                Ligne(p, "Motif : " + (_paiement.MotifsAnnulation ?? "-"),
+                                                                 10, TextAlignment.Center, Gris);
+                Ligne(p, "Annule par : " + (_paiement.NomAnnulateur ?? "-"),
+                                                                 10, TextAlignment.Center, Gris);
+                Ligne(p, "Date : " + _paiement.DateAnnulation?.ToString("dd/MM/yyyy HH:mm"),
+                                                                 10, TextAlignment.Center, Gris);
+                Ligne(p, SEP, 9, TextAlignment.Center, Gris);
+                Espace(p, 8);
+            }
+
             // ===== EN-TETE BOUTIQUE =====
-            Espace(p, 8);
-            
-            Ligne(p, nomAtelier, 14, TextAlignment.Center, Marque, FontWeights.Bold);
-            Ligne(p, "ILASSA DESIGN", 13, TextAlignment.Center, Noir, FontWeights.Bold);
-            Ligne(p, "Les specialistes en slim", 10, TextAlignment.Center, Marque);
-            Espace(p, 6);
-            Ligne(p, adresseAtelier, 9, TextAlignment.Center, Gris);
-            Ligne(p, "Ouagadougou, Burkina Faso",
-                       9, TextAlignment.Center, Gris);
-            Ligne(p, "Tel: " + telAtelier,
-                       8, TextAlignment.Center, Gris);
-            Ligne(p, "Email: ilassailassa11@gmail.com",
-                       8, TextAlignment.Center, Gris);
             Espace(p, 4);
-            Ligne(p, "Specialiste: VESTES - Pantalons - CHEMISES",
-                       8, TextAlignment.Center, Gris);
+            Ligne(p, nomAtelier, 14, TextAlignment.Center, Noir, FontWeights.Bold);
+            Ligne(p, "ILASSA DESIGN", 13, TextAlignment.Center, Noir, FontWeights.Bold);
+            Ligne(p, "Les specialistes en slim", 9, TextAlignment.Center, Gris);
+            Espace(p, 4);
+            Ligne(p, adresseAtelier, 9, TextAlignment.Center, Gris);
+            Ligne(p, "Ouagadougou, Burkina Faso", 9, TextAlignment.Center, Gris);
+            Ligne(p, "Tel: " + telAtelier, 8, TextAlignment.Center, Gris);
+            Ligne(p, "Email: ilassailassa11@gmail.com", 8, TextAlignment.Center, Gris);
+            Espace(p, 3);
+            Ligne(p, "Specialiste: VESTES - Pantalons - CHEMISES", 8, TextAlignment.Center, Gris);
             Ligne(p, "TENUES DAMES", 8, TextAlignment.Center, Gris);
             Espace(p, 6);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
@@ -320,10 +316,11 @@ namespace GestionCoutureApp.Views
             Espace(p, 4);
 
             // ===== RESTE A PAYER APRÈS CE PAIEMENT =====
-            Brush cReste = resteApres <= 0 ? Vert : Rouge;
             string tReste = resteApres <= 0 ? "  SOLDE !" : Fcfa(resteApres);
-            Ligne(p, Pad("RESTE A PAYER", 17) + " : " + tReste.Trim(),
-                       13, TextAlignment.Left, cReste, FontWeights.Bold);
+            string prefixReste = resteApres <= 0 ? "*** " : "";
+            string suffixReste = resteApres <= 0 ? " ***" : "";
+            Ligne(p, Pad("RESTE A PAYER", 17) + " : " + prefixReste + tReste.Trim() + suffixReste,
+                       13, TextAlignment.Left, Noir, FontWeights.Bold);
             Espace(p, 4);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
             Espace(p, 10);
@@ -338,12 +335,12 @@ namespace GestionCoutureApp.Views
                 Ligne(p, "Presentez ce recu pour le retrait", 9, TextAlignment.Center, Gris);
                 Ligne(p, "de votre commande.", 9, TextAlignment.Center, Gris);
                 Espace(p, 4);
-                Ligne(p, "Aucun vetement ne sera livre", 9, TextAlignment.Center, Rouge);
-                Ligne(p, "sans le paiement integral.", 9, TextAlignment.Center, Rouge);
+                Ligne(p, "Aucun vetement ne sera livre", 9, TextAlignment.Center, Noir, FontWeights.Bold);
+                Ligne(p, "sans le paiement integral.", 9, TextAlignment.Center, Noir, FontWeights.Bold);
             }
             else
             {
-                Ligne(p, "Commande integralement payee.", 9, TextAlignment.Center, Vert);
+                Ligne(p, "*** Commande integralement payee. ***", 9, TextAlignment.Center, Noir, FontWeights.Bold);
                 Ligne(p, "Votre commande peut etre retiree", 9, TextAlignment.Center, Gris);
                 Ligne(p, "sur presentation de ce recu.", 9, TextAlignment.Center, Gris);
             }

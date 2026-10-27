@@ -549,7 +549,7 @@ namespace GestionCoutureApp.Views
 
                 // ── Mode de paiement ──────────────────────────────────
                 string modeChoisi = CmbModePaiement.SelectedItem is ComboBoxItem item
-                    ? item.Content?.ToString() ?? "Espèces"
+                    ? item.Tag?.ToString() ?? item.Content?.ToString() ?? "Espèces"
                     : CmbModePaiement.SelectedItem?.ToString() ?? "Espèces";
 
                 // ── Confirmation ──────────────────────────────────────

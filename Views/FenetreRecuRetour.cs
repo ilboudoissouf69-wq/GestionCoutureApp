@@ -18,15 +18,15 @@ namespace GestionCoutureApp.Views
     /// </summary>
     public class FenetreRecuRetour : Window
     {
-        // ── Constantes visuelles (identiques à FenetreRecu) ──────────────
+        // ── Constantes visuelles (identiques à FenetreRecu) — impression noir/blanc ──
         private const string SEP  = "================================";
         private const string SEP2 = "--------------------------------";
         private static readonly Brush Noir   = Brushes.Black;
-        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
-        private static readonly Brush Rouge  = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
-        private static readonly Brush Vert   = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
-        private static readonly Brush Orange = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06));
-        private static readonly Brush Marque = new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Rouge  = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Vert   = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Orange = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Marque = Brushes.Black;   // → noir à l'impression
 
         // ── Données ───────────────────────────────────────────────────────
         private readonly Retour _retour;
@@ -60,12 +60,12 @@ namespace GestionCoutureApp.Views
             _roleOperateur   = roleOperateur;
 
             Title                       = $"Tickets Retour — {retour.NumeroRetour}";
-            Width                       = 780;
-            Height                      = 720;
-            MinWidth                    = 700;
+            Width                       = 820;
+            Height                      = 760;
+            MinWidth                    = 720;
             WindowStartupLocation       = WindowStartupLocation.CenterOwner;
             ResizeMode                  = ResizeMode.CanResize;
-            Background                  = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
+            Background                  = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
             UseLayoutRounding           = true;
             SnapsToDevicePixels         = true;
 
@@ -254,23 +254,25 @@ namespace GestionCoutureApp.Views
 
             Espace(p, 8);
 
-            // ── Logo (même logique que FenetreRecu) ───────────────────────
+            // ── Logo (en premier, toujours en haut) ──────────────────────
             try
             {
                 var logo = new System.Windows.Controls.Image
                 {
                     Source = new System.Windows.Media.Imaging.BitmapImage(
                         new Uri("pack://application:,,,/Resources/logo_retouche_choco.png")),
-                    Width  = 80, Height = 80,
+                    Width  = 100, Height = 100,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Stretch = System.Windows.Media.Stretch.Uniform,
-                    Margin  = new Thickness(0, 0, 0, 4)
+                    Margin  = new Thickness(0, 0, 0, 6)
                 };
+                System.Windows.Media.RenderOptions.SetBitmapScalingMode(
+                    logo, System.Windows.Media.BitmapScalingMode.HighQuality);
                 p.Children.Add(logo);
             }
             catch { /* logo absent → on continue */ }
 
-            Ligne(p, nomAtelier,        13, TextAlignment.Center, Marque, FontWeights.Bold);
+            Ligne(p, nomAtelier,        14, TextAlignment.Center, Noir, FontWeights.Bold);
             Ligne(p, telAtelier,         9, TextAlignment.Center, Gris);
             Espace(p, 6);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);

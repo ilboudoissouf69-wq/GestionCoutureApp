@@ -937,10 +937,10 @@
                                       Style="{StaticResource ModernComboBox}"
                                       Margin="0,0,0,4"
                                       SelectedIndex="0">
-                                <ComboBoxItem Content="💵  Espèces"/>
-                                <ComboBoxItem Content="📱  Mobile Money (Orange/Moov/Wave)"/>
-                                <ComboBoxItem Content="🏦  Virement"/>
-                                <ComboBoxItem Content="📄  Chèque"/>
+                                <ComboBoxItem Content="💵  Espèces" Tag="Espèces"/>
+                                <ComboBoxItem Content="📱  Mobile Money (Orange/Moov/Wave)" Tag="Mobile Money"/>
+                                <ComboBoxItem Content="🏦  Virement" Tag="Virement"/>
+                                <ComboBoxItem Content="📄  Chèque" Tag="Chèque"/>
                             </ComboBox>
 
                         </StackPanel>

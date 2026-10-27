@@ -20,16 +20,16 @@ namespace GestionCoutureApp.Views
     public class FicheAtelierWindow : Window
     {
         // ----------------------------------------------------------------
-        // Constantes visuelles — identiques à FenetreRecu pour cohérence
+        // Constantes visuelles — impression noir/blanc (économie d'encre)
         // ----------------------------------------------------------------
         private const string SEP  = "================================";
         private const string SEP2 = "--------------------------------";
 
         private static readonly Brush Noir   = Brushes.Black;
-        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
-        private static readonly Brush Rouge  = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
-        private static readonly Brush Marron = new SolidColorBrush(Color.FromRgb(0x8B, 0x73, 0x55));
-        private static readonly Brush Bleu   = new SolidColorBrush(Color.FromRgb(0x1D, 0x4E, 0x89));
+        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Rouge  = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Marron = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Bleu   = Brushes.Black;   // → noir à l'impression
 
         // ----------------------------------------------------------------
         // Champs
@@ -58,11 +58,11 @@ namespace GestionCoutureApp.Views
             // ── Propriétés fenêtre ──
             Title                   = $"Fiche Atelier — Commande #{commande.IdCommande}";
             Width                   = 380;
-            Height                  = 820;
+            Height                  = 840;
             MinWidth                = 340;
             WindowStartupLocation   = WindowStartupLocation.CenterOwner;
             ResizeMode              = ResizeMode.CanResize;
-            Background              = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
+            Background              = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
             UseLayoutRounding       = true;
             SnapsToDevicePixels     = true;
 

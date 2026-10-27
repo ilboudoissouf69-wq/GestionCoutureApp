@@ -25,18 +25,18 @@ namespace GestionCoutureApp.Views
     /// </summary>
     public class FenetreTicketsCommande : Window
     {
-        // ── Constantes visuelles (identiques à FenetreRecuRetour) ────────
+        // ── Constantes visuelles — impression noir/blanc (économie d'encre) ────
         private const string SEP  = "================================";
         private const string SEP2 = "--------------------------------";
         private const string SEP_APERCU = "✂ - - - - -";
 
         private static readonly Brush Noir   = Brushes.Black;
-        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
-        private static readonly Brush Rouge  = new SolidColorBrush(Color.FromRgb(0xCC, 0x00, 0x00));
-        private static readonly Brush Vert   = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69));
-        private static readonly Brush Orange = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06));
-        private static readonly Brush Bleu   = new SolidColorBrush(Color.FromRgb(0x1D, 0x4E, 0x89));
-        private static readonly Brush Marque = new SolidColorBrush(Color.FromRgb(0x8B, 0x73, 0x55));
+        private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Rouge  = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Vert   = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Orange = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+        private static readonly Brush Bleu   = Brushes.Black;   // → noir à l'impression
+        private static readonly Brush Marque = Brushes.Black;   // → noir à l'impression
 
         // ── Données injectées ────────────────────────────────────────────
         private readonly Commande _commande;
@@ -143,12 +143,12 @@ namespace GestionCoutureApp.Views
                 : ModeImpression.EtiquetteSeule;
 
             Title                   = $"Tickets Commande — CMD #{commande.IdCommande}";
-            Width                   = 820;
-            Height                  = 760;
-            MinWidth                = 720;
+            Width                   = 860;
+            Height                  = 780;
+            MinWidth                = 740;
             WindowStartupLocation   = WindowStartupLocation.CenterOwner;
             ResizeMode              = ResizeMode.CanResize;
-            Background              = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
+            Background              = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
             UseLayoutRounding       = true;
             SnapsToDevicePixels     = true;
 
@@ -528,26 +528,28 @@ namespace GestionCoutureApp.Views
 
             Espace(p, 8);
 
-            // ── Logo ──────────────────────────────────────────────────────
+            // ── Logo (en premier, toujours en haut) ───────────────────────
             try
             {
                 var logo = new System.Windows.Controls.Image
                 {
                     Source = new System.Windows.Media.Imaging.BitmapImage(
                         new Uri("pack://application:,,,/Resources/logo_retouche_choco.png")),
-                    Width               = 80,
-                    Height              = 80,
+                    Width               = 100,
+                    Height              = 100,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Stretch             = System.Windows.Media.Stretch.Uniform,
-                    Margin              = new Thickness(0, 0, 0, 4)
+                    Margin              = new Thickness(0, 0, 0, 6)
                 };
+                System.Windows.Media.RenderOptions.SetBitmapScalingMode(
+                    logo, System.Windows.Media.BitmapScalingMode.HighQuality);
                 p.Children.Add(logo);
             }
             catch { /* logo absent → on continue */ }
 
             // ── En-tête atelier ───────────────────────────────────────────
             if (!string.IsNullOrWhiteSpace(nomAt))
-                Ligne(p, nomAt, 13, TextAlignment.Center, Marque, FontWeights.Bold);
+                Ligne(p, nomAt, 14, TextAlignment.Center, Noir, FontWeights.Bold);
             if (!string.IsNullOrWhiteSpace(tel))
                 Ligne(p, tel, 9, TextAlignment.Center, Gris);
             if (!string.IsNullOrWhiteSpace(adresse))
