@@ -140,7 +140,7 @@ namespace GestionCoutureApp
             Helpers.PerfLogger.Configure(perfLoggerFactory.CreateLogger("PerfLogger"));
             logService.LogInfo("═══════════════════════════════════════════════════");
             logService.LogInfo("Application Gestion Couture démarrée");
-            logService.LogInfo($"Version: 2.0 - Retouche Choco");
+            logService.LogInfo($"Version: {VersionApplication.Courante} - Retouche Choco");
             logService.LogInfo($"Date de démarrage: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
             logService.LogInfo("═══════════════════════════════════════════════════");
 

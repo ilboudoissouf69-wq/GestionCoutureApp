@@ -264,6 +264,7 @@ namespace GestionCoutureApp.Views
             _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
 
             InitializeComponent();
+            TxtVersionApp.Text = $"v{VersionApplication.Courante} — Retouche Choco";
 
             // Aperçu reçu en temps réel
             TxtNomAtelier.TextChanged     += (s, e) => { if (_initialise) MajApercuRecu(); };

@@ -1,4 +1,5 @@
 using System.Windows;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +14,7 @@ namespace GestionCoutureApp.Views
         public LoginWindow()
         {
             InitializeComponent();
+            TxtVersionApplication.Text = $"Version {VersionApplication.Courante}";
             _authService = App.Services.GetRequiredService<IAuthService>();
             _logService = App.Services.GetRequiredService<ILogService>();
         }
