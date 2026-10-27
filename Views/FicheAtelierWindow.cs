@@ -270,13 +270,25 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                string description = $"Fiche atelier CMD#{_commande.IdCommande}";
+
+                // ── 1. Aperçu avant impression ────────────────────────────
+                var apercu = ApercuImprimerieWindow.PourUnPanel(
+                    _fichePanel, description,
+                    $"Aperçu — {description}");
+                apercu.Owner = this;
+                apercu.ShowDialog();
+
+                if (!apercu.LancerImpression) return;
+
+                // ── 2. Dialogue d'impression Windows ─────────────────────
                 var pd = new System.Windows.Controls.PrintDialog();
                 if (pd.ShowDialog() == true)
                 {
                     _fichePanel.Measure(new Size(290, double.PositiveInfinity));
                     _fichePanel.Arrange(
                         new Rect(new Point(0, 0), _fichePanel.DesiredSize));
-                    pd.PrintVisual(_fichePanel, $"Fiche atelier CMD#{_commande.IdCommande}");
+                    pd.PrintVisual(_fichePanel, description);
 
                     // ── Étape 2-ter : marquer le reçu comme imprimé ───────────
                     // La fiche atelier compte comme une impression du reçu (même

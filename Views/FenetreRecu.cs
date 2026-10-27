@@ -381,13 +381,25 @@ namespace GestionCoutureApp.Views
         {
             try
             {
+                string description = "Recu " + _paiement.RecuNumero;
+
+                // ── 1. Aperçu avant impression ────────────────────────────
+                var apercu = ApercuImprimerieWindow.PourUnPanel(
+                    _receiptPanel, description,
+                    $"Aperçu — {description}");
+                apercu.Owner = this;
+                apercu.ShowDialog();
+
+                if (!apercu.LancerImpression) return;
+
+                // ── 2. Dialogue d'impression Windows ─────────────────────
                 var pd = new System.Windows.Controls.PrintDialog();
                 if (pd.ShowDialog() == true)
                 {
                     _receiptPanel.Measure(new Size(290, double.PositiveInfinity));
                     _receiptPanel.Arrange(
                         new Rect(new Point(0, 0), _receiptPanel.DesiredSize));
-                    pd.PrintVisual(_receiptPanel, "Recu " + _paiement.RecuNumero);
+                    pd.PrintVisual(_receiptPanel, description);
 
                     // ── Étape 2-ter : marquer le reçu comme imprimé ───────────
                     // Seulement si l'impression est RÉELLEMENT lancée (pas l'aperçu).

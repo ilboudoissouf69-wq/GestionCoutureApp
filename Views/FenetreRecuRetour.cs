@@ -328,15 +328,26 @@ namespace GestionCoutureApp.Views
         {
             bool estEtiquette = ReferenceEquals(_panelActif, _panelEtiquette);
             string typeTicket = estEtiquette ? "Étiquette colis" : "Reçu client";
+            string description = $"Retour {_retour.NumeroRetour} — {typeTicket}";
 
             try
             {
+                // ── 1. Aperçu avant impression ────────────────────────────
+                var apercu = ApercuImprimerieWindow.PourUnPanel(
+                    _panelActif, description,
+                    $"Aperçu — {description}");
+                apercu.Owner = this;
+                apercu.ShowDialog();
+
+                if (!apercu.LancerImpression) return;
+
+                // ── 2. Dialogue d'impression Windows ─────────────────────
                 var pd = new PrintDialog();
                 if (pd.ShowDialog() == true)
                 {
                     _panelActif.Measure(new Size(290, double.PositiveInfinity));
                     _panelActif.Arrange(new Rect(new Point(0, 0), _panelActif.DesiredSize));
-                    pd.PrintVisual(_panelActif, $"Retour {_retour.NumeroRetour} — {typeTicket}");
+                    pd.PrintVisual(_panelActif, description);
 
                     // Audit réimpression
                     _ = _retourService.EnregistrerImpressionAsync(

@@ -659,6 +659,39 @@ namespace GestionCoutureApp.Views
 
             try
             {
+                // ── 1. Construire la liste des pages pour l'aperçu ────────
+                var pages = new List<(StackPanel Panel, string Description)>();
+
+                if (imprimerEtiquettes)
+                {
+                    for (int i = 0; i < _panelsEtiquette.Count; i++)
+                    {
+                        string typeTicket = _panelsEtiquette.Count == 1
+                            ? "Étiquette colis"
+                            : $"Étiquette {i + 1}/{_panelsEtiquette.Count}";
+                        pages.Add((_panelsEtiquette[i],
+                            $"Commande CMD #{_commande.IdCommande} — {typeTicket}"));
+                    }
+                }
+
+                if (imprimerBon)
+                {
+                    pages.Add((_panelBonClient,
+                        $"Commande CMD #{_commande.IdCommande} — Bon client"));
+                }
+
+                if (pages.Count == 0) return;
+
+                // ── 2. Afficher l'aperçu avant impression ─────────────────
+                string libelleMode = TicketsCommandeLogique.LibelleMode(_mode);
+                var apercu = new ApercuImprimerieWindow(pages,
+                    $"Aperçu — Commande CMD #{_commande.IdCommande} ({libelleMode})");
+                apercu.Owner = this;
+                apercu.ShowDialog();
+
+                if (!apercu.LancerImpression) return;
+
+                // ── 3. Dialogue d'impression Windows ──────────────────────
                 var pd = new PrintDialog();
                 if (pd.ShowDialog() != true) return;
 
@@ -687,7 +720,6 @@ namespace GestionCoutureApp.Views
                 // ── Marquer première impression ───────────────────────────
                 _commandeService.MarquerRecuImprime(_commande.IdCommande);
 
-                string libelleMode = TicketsCommandeLogique.LibelleMode(_mode);
                 BasculerApercu();
                 MessageBox.Show(
                     $"Impression réussie ({libelleMode}).",
