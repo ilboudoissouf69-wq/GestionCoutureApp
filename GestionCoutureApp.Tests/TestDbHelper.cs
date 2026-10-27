@@ -3,6 +3,7 @@ using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Data.Sqlite;
 
 namespace GestionCoutureApp.Tests
 {
@@ -23,6 +24,23 @@ namespace GestionCoutureApp.Tests
                 .UseInMemoryDatabase($"{prefix}_{Guid.NewGuid()}")
                 .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
                 .Options;
+
+        /// <summary>
+        /// Crée un vrai contexte SQLite en mémoire. La connexion est retournée ouverte :
+        /// l'appelant doit la garder vivante jusqu'à la fin du test.
+        /// </summary>
+        public static (ApplicationDbContext Context, SqliteConnection Connection) CreerContexteSqliteEnMemoire()
+        {
+            var connection = new SqliteConnection("Data Source=:memory:");
+            connection.Open();
+
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            var context = new ApplicationDbContext(options);
+            context.Database.EnsureCreated();
+            return (context, connection);
+        }
 
         /// <summary>
         /// Étape 10 — IAuditService no-op partagé pour les tests qui n'ont pas besoin

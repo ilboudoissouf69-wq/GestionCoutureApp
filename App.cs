@@ -98,6 +98,7 @@ namespace GestionCoutureApp
             services.AddSingleton<IAuditService, AuditService>();
             services.AddSingleton<ICommandeService, CommandeService>();
             services.AddSingleton<IPaiementService, PaiementService>();
+            services.AddSingleton<CommandesEncaissablesService>();
             services.AddSingleton<ICommissionService, CommissionService>();
             services.AddSingleton<ITypeVetementService, TypeVetementService>();
             // RetourService dépend de IAuditService — déclaré après ce dernier
