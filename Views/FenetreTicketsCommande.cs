@@ -402,10 +402,7 @@ namespace GestionCoutureApp.Views
             // ── Mention interne ───────────────────────────────────────────
             Espace(p, 8);
             Ligne(p, SEP, 9, TextAlignment.Center, Rouge);
-            string titreEtiq = indexPiece.HasValue
-                ? $"PIÈCE {indexPiece}/{totalPieces} — À AGRAFER SUR LE COLIS"
-                : "À AGRAFER SUR LE COLIS";
-            Ligne(p, titreEtiq, 10, TextAlignment.Center, Rouge, FontWeights.Bold);
+            Ligne(p, "À AGRAFER SUR LE COLIS", 10, TextAlignment.Center, Rouge, FontWeights.Bold);
             Ligne(p, "Document interne — ne pas remettre au client", 8, TextAlignment.Center, Rouge);
             Ligne(p, SEP, 9, TextAlignment.Center, Rouge);
             Espace(p, 8);
@@ -423,6 +420,8 @@ namespace GestionCoutureApp.Views
                 22, TextAlignment.Center, Noir, FontWeights.Black);
             Ligne(p, TicketsCommandeLogique.ResumePieces(_commande.Pieces),
                 10, TextAlignment.Center, Gris, FontWeights.Bold);
+            if (indexPiece.HasValue)
+                Ligne(p, $"PIÈCE {indexPiece}/{totalPieces}", 11, TextAlignment.Center, Bleu, FontWeights.Bold);
             Ligne(p, TexteRetrait("RETRAIT"), 15, TextAlignment.Center, Noir, FontWeights.Bold);
             Espace(p, 4);
             Ligne(p, SEP, 9, TextAlignment.Center, Gris);
