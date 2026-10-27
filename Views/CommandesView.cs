@@ -2398,14 +2398,9 @@ namespace GestionCoutureApp.Views
                     }
                 }
 
-                // 7. Proposer tickets commande
-                var imprimerFiche = MessageBox.Show(
-                    "Commande créée avec succès !\n\nImprimer les tickets commande ?",
-                    "Tickets commande", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (imprimerFiche == MessageBoxResult.Yes)
-                {
-                    await FenetreTicketsCommande.OuvrirAsync(commande.IdCommande, Window.GetWindow(this));
-                }
+                // 7. Ouvrir directement les tickets : le mode par défaut choisit le bon client
+                // si aucun acompte n'a été encaissé, et chaque colis reçoit son étiquette.
+                await FenetreTicketsCommande.OuvrirAsync(commande.IdCommande, Window.GetWindow(this));
             }
             catch (DoublonCommandeException ex)
             {
