@@ -299,10 +299,9 @@ namespace GestionCoutureApp.Views
             {
                 // C3 : projection légère — on ne charge que les champs nécessaires
                 // pour calculer ResteAPayer et afficher le texte du ComboBox.
-                // Formule ResteAPayer = MontantTotalAvecMateriaux - SommesPaiementsValides
-                //   = SUM(Pieces.MontantCouture) + SUM(MaterielSupplements.Montant) - SUM(Paiements valides)
-                // Les decimal ne se somment pas côté SQL sur SQLite : on fait la somme en mémoire
-                // sur la projection légère, comme l'ancienne version.
+                // Formule ResteAPayer = somme couture + somme des lignes matériel - paiements valides.
+                // Les montants bruts sont chargés par SQL, puis les agrégats decimal sont calculés en mémoire
+                // après ToList(), car SQLite ne prend pas en charge SUM(decimal).
                 var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
                 using var ctx = contextFactory.CreateDbContext();
 
@@ -315,8 +314,12 @@ namespace GestionCoutureApp.Views
                         c.IdCommande,
                         ClientPrenom = c.Client != null ? c.Client.Prenom : "",
                         ClientNom    = c.Client != null ? c.Client.Nom    : "",
-                        MontantCouture    = c.Pieces.Sum(p => (decimal?)p.MontantCouture) ?? 0m,
-                        MontantMateriaux  = c.MaterielSupplements.Sum(m => (decimal?)(m.Quantite * m.PrixUnitaire)) ?? 0m,
+                        MontantsCouture = c.Pieces
+                            .Select(p => p.MontantCouture)
+                            .ToList(),
+                        LignesMateriaux = c.MaterielSupplements
+                            .Select(m => new { m.Quantite, m.PrixUnitaire })
+                            .ToList(),
                         PaiementsValides  = c.Paiements
                             .Where(p => !p.EstAnnule)
                             .Select(p => p.MontantPaye)
@@ -327,7 +330,9 @@ namespace GestionCoutureApp.Views
                 var encaissables = commandesLight
                     .Select(c =>
                     {
-                        decimal montantTotal  = c.MontantCouture + c.MontantMateriaux;
+                        decimal montantCouture   = c.MontantsCouture.Sum();
+                        decimal montantMateriaux = c.LignesMateriaux.Sum(m => m.Quantite * m.PrixUnitaire);
+                        decimal montantTotal     = montantCouture + montantMateriaux;
                         decimal dejaEncaisse  = c.PaiementsValides.Sum();
                         decimal resteAPayer   = montantTotal - dejaEncaisse;
                         return new
