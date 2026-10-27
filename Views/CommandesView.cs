@@ -260,6 +260,9 @@ namespace GestionCoutureApp.Views
                     Role        = e.Role, Statut = e.Statut,
                     Identifiant = e.Identifiant, MotDePasse = e.MotDePasse
                 }).ToList();
+            // Entrée « Aucun couturier » en tête pour permettre de retirer un couturier
+            _couturiers.Insert(0, new Employe { IdEmploye = 0, Prenom = "— Aucun couturier —",
+                                                Nom = "", Identifiant = "", MotDePasse = "" });
             CmbCouturier.ItemsSource = _couturiers;
 
             // ── CmbFiltreCouturier (avec entrée "Tous") ──
@@ -270,7 +273,7 @@ namespace GestionCoutureApp.Views
                     new Employe { IdEmploye = 0, Prenom = "Tous", Nom = "les couturiers",
                                   Identifiant = "", MotDePasse = "" }
                 };
-                filtreCouturiers.AddRange(_couturiers);
+                filtreCouturiers.AddRange(_couturiers.Where(e => e.IdEmploye > 0));
                 CmbFiltreCouturier.ItemsSource  = filtreCouturiers;
                 CmbFiltreCouturier.SelectedIndex = 0;
             }
@@ -1253,7 +1256,8 @@ namespace GestionCoutureApp.Views
             spDesc.Children.Add(new TextBlock { Text = "Description",
                 FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
                 Margin = new Thickness(0, 0, 0, 4) });
-            var cmbDesc = new ComboBox { Height = 36, FontSize = 12, IsEditable = true };
+            var cmbDesc = new ComboBox { Height = 36, FontSize = 12, IsEditable = true,
+                DisplayMemberPath = "Texte" };
             carte.CmbDesc = cmbDesc;
             spDesc.Children.Add(cmbDesc);
             grille2.Children.Add(spDesc);
@@ -1607,6 +1611,8 @@ namespace GestionCoutureApp.Views
                 txtPrix.Text = pieceExistante.MontantCouture.ToString();
                 if (pieceExistante.IdCouturier.HasValue)
                     cmbCout.SelectedValue = pieceExistante.IdCouturier.Value;
+                else
+                    cmbCout.SelectedIndex = 0; // "— Aucun couturier —"
 
                 // Description
                 if (typeMatch?.Descriptions != null)
@@ -2096,7 +2102,7 @@ namespace GestionCoutureApp.Views
                 IdPieceCommande      = carte.IdPieceCommande ?? 0,
                 TypeVetement         = typeObj.Nom,
                 DescriptionPrecision = description,
-                IdCouturier          = carte.CmbCouturier.SelectedValue as int?,
+                IdCouturier          = carte.CmbCouturier.SelectedValue is int idC && idC > 0 ? idC : (int?)null,
                 MontantCouture       = prix,
                 Statut               = statut,
                 CheminPhoto          = carte.CheminPhoto
@@ -3154,7 +3160,7 @@ namespace GestionCoutureApp.Views
             _piecesCommande         = new List<PieceCommande>();
             _materiauxTemporaires.Clear();
             CmbClient.SelectedIndex      = -1;
-            CmbCouturier.SelectedIndex   = -1;
+            CmbCouturier.SelectedIndex   = 0; // "— Aucun couturier —"
             CmbTypeVetement.SelectedIndex = -1;
             CmbDescription.Text          = "";
             CmbAjustement.SelectedIndex  = 0;
@@ -3298,7 +3304,7 @@ namespace GestionCoutureApp.Views
             try
             {
                 if (pieceFraiche.IdCouturier.HasValue) CmbCouturier.SelectedValue = pieceFraiche.IdCouturier.Value;
-                else CmbCouturier.SelectedIndex = -1;
+                else CmbCouturier.SelectedIndex = 0; // "— Aucun couturier —"
                 bool trouve = false;
                 for (int i = 0; i < CmbStatut.Items.Count; i++)
                 {
@@ -3328,7 +3334,7 @@ namespace GestionCoutureApp.Views
                 if (typeMatch != null) CmbTypeVetement.SelectedValue = typeMatch.IdTypeVetement;
                 TxtMontant.Text = piece.MontantCouture.ToString();
                 if (piece.IdCouturier.HasValue) CmbCouturier.SelectedValue = piece.IdCouturier.Value;
-                else CmbCouturier.SelectedIndex = -1;
+                else CmbCouturier.SelectedIndex = 0; // "— Aucun couturier —"
                 if (CmbDescription.ItemsSource != null)
                 {
                     var descMatch = CmbDescription.Items.Cast<DescriptionCourante>().FirstOrDefault(d => d.Texte == piece.DescriptionPrecision);
@@ -3498,7 +3504,7 @@ namespace GestionCoutureApp.Views
             {
                 TypeVetement = typeVetement.Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc ? dc.Texte : CmbDescription.Text,
-                IdCouturier = CmbCouturier.SelectedValue as int?,
+                IdCouturier = CmbCouturier.SelectedValue is int idCL && idCL > 0 ? idCL : (int?)null,
                 MontantCouture = montant,
                 Statut = (CmbStatut.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? CmbStatut.Text?.Trim() ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
@@ -3644,7 +3650,7 @@ namespace GestionCoutureApp.Views
             {
                 TypeVetement = typeVetement.Nom,
                 DescriptionPrecision = CmbDescription.SelectedItem is DescriptionCourante dc ? dc.Texte : CmbDescription.Text,
-                IdCouturier = CmbCouturier.SelectedValue as int?,
+                IdCouturier = CmbCouturier.SelectedValue is int idCL && idCL > 0 ? idCL : (int?)null,
                 MontantCouture = montant,
                 Statut = (CmbStatut.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? CmbStatut.Text?.Trim() ?? "A faire",
                 CheminPhoto = _cheminPhotoTemporaire
@@ -3696,7 +3702,7 @@ namespace GestionCoutureApp.Views
                 else { MessageBox.Show("Impossible d'ajouter une pièce : un acompte a déjà été encaissé.\nSeul le Boss peut ajouter dans ce cas.", "Ajout impossible", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             }
             _pieceSelectionneeId = null; _materiauxTemporaires.Clear();
-            CmbTypeVetement.SelectedIndex = -1; CmbCouturier.SelectedIndex = -1;
+            CmbTypeVetement.SelectedIndex = -1; CmbCouturier.SelectedIndex = 0; // "— Aucun couturier —"
             CmbDescription.Text = ""; CmbAjustement.SelectedIndex = 0;
             TxtPrixBase.Text = "Prix de base : -"; TxtPrixTotal.Text = "Prix total : -";
             TxtMontant.Text = ""; CmbStatut.SelectedIndex = 0; _prixBaseActuel = 0;
