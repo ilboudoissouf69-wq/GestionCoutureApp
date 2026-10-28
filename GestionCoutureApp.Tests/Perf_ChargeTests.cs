@@ -6,10 +6,10 @@
 //   dotnet test --filter TestCategory=Perf
 //
 // Volumes :
-//   5 000 clients
-//  20 000 commandes
-//  40 000 pièces (2 par commande en moyenne)
-//  30 000 paiements
+// 120 000 clients
+// 120 000 commandes
+// 180 000 pièces (1,5 par commande en moyenne)
+//  90 000 paiements (75 % des commandes, dont 10 % annulés)
 // 100 000 lignes d'audit
 //
 // Pour chaque vue / service, on mesure le temps d'exécution et on
@@ -20,6 +20,7 @@
 using System.Diagnostics;
 using System.IO;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.EntityFrameworkCore;
@@ -33,10 +34,10 @@ namespace GestionCoutureApp.Tests
     public class Perf_ChargeTests
     {
         // ── Configuration ────────────────────────────────────────────────
-        private const int NB_CLIENTS    =  5_000;
-        private const int NB_COMMANDES  = 20_000;
-        private const int NB_PIECES     = 40_000;  // 2 par commande
-        private const int NB_PAIEMENTS  = 30_000;
+        private const int NB_CLIENTS    = 120_000;
+        private const int NB_COMMANDES  = 120_000;
+        private const int NB_PIECES     = 180_000; // moitié des commandes à 2 pièces
+        private const int NB_PAIEMENTS  =  90_000; // 75 % des commandes
         private const int NB_AUDIT      = 100_000;
         private const long SEUIL_MS     =  2_000;  // alerte si > 2 s
 
@@ -48,6 +49,8 @@ namespace GestionCoutureApp.Tests
         private AuditService       _auditService       = null!;
         private PaiementService    _paiementService    = null!;
         private CommandeService    _commandeService    = null!;
+        private ClientService      _clientService      = null!;
+        private CommandesEncaissablesService _encaissablesService = null!;
 
         // Résultats cumulés pour le tableau final
         private readonly List<(string Label, long Ms)> _mesures = new();
@@ -70,7 +73,24 @@ namespace GestionCoutureApp.Tests
         {
             // Base SQLite sur disque (InMemory ne tient pas 100k lignes
             // dans les contraintes de RAM acceptables pour le CI).
-            var dbPath = Path.Combine(Path.GetTempPath(), $"perf_test_{Guid.NewGuid():N}.db");
+            string? dossierDonnees = Environment.GetEnvironmentVariable("GESTIONCOUTUREAPP_DATA_DIR");
+            if (!string.IsNullOrWhiteSpace(dossierDonnees))
+                Directory.CreateDirectory(dossierDonnees);
+            var dbPath = string.IsNullOrWhiteSpace(dossierDonnees)
+                ? Path.Combine(Path.GetTempPath(), $"perf_test_{Guid.NewGuid():N}.db")
+                : Path.Combine(dossierDonnees, "gestion_couture.db");
+            if (!string.IsNullOrWhiteSpace(dossierDonnees))
+            {
+                // Chaque exécution du profil de stress repart d'une base neuve.
+                // Seuls le fichier DB et ses journaux SQLite de ce dossier dédié
+                // sont supprimés ; le profil normal de l'utilisateur n'est jamais ciblé.
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                foreach (string suffixe in new[] { "", "-wal", "-shm" })
+                {
+                    string fichier = dbPath + suffixe;
+                    if (File.Exists(fichier)) File.Delete(fichier);
+                }
+            }
             var opts = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseSqlite($"Data Source={dbPath}")
                 .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
@@ -80,6 +100,18 @@ namespace GestionCoutureApp.Tests
 
             using var ctx = _factory.CreateDbContext();
             ctx.Database.EnsureCreated();
+            if (!string.IsNullOrWhiteSpace(dossierDonnees))
+            {
+                // EnsureCreated produit le schéma courant dans le profil isolé.
+                // On le marque à jour pour que l'application de test ne rejoue
+                // aucune migration historique sur ces tables déjà créées.
+                ctx.Database.ExecuteSqlRaw(
+                    "CREATE TABLE IF NOT EXISTS __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL);");
+                const string productVersion = "8.0.11";
+                foreach (string migrationId in ctx.Database.GetMigrations())
+                    ctx.Database.ExecuteSqlInterpolated(
+                        $"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({migrationId}, {productVersion});");
+            }
 
             var swSeed = Stopwatch.StartNew();
             GenererDonnees(ctx);
@@ -97,6 +129,8 @@ namespace GestionCoutureApp.Tests
             _paiementService   = new PaiementService(_factory, new Microsoft.Extensions.Logging.Logger<PaiementService>(log));
             _commandeService   = new CommandeService(_factory, new Microsoft.Extensions.Logging.Logger<CommandeService>(log),
                 TestDbHelper.NoOpAudit);
+            _clientService     = new ClientService(_factory, NullLogger<ClientService>.Instance);
+            _encaissablesService = new CommandesEncaissablesService(_factory);
         }
 
         [OneTimeTearDown]
@@ -315,6 +349,83 @@ namespace GestionCoutureApp.Tests
             _mesures.Add(("Dashboard.StatsCouturiers (N+1 avant fix)", ms));
         }
 
+        [Test, Order(20)]
+        public async Task P20_ClientService_ObtenirPage_CompteLes120000Clients()
+        {
+            var sw = Stopwatch.StartNew();
+            var resultat = await _clientService.ObtenirPageAsync(1, 50);
+            sw.Stop();
+
+            Assert.That(resultat.TotalCount, Is.EqualTo(NB_CLIENTS));
+            Assert.That(resultat.Items, Has.Count.EqualTo(50));
+            _mesures.Add(("ClientService.ObtenirPageAsync(p.1, 50)", sw.ElapsedMilliseconds));
+        }
+
+        [Test, Order(21)]
+        public void P21_CalculsFinanciers_CommandeAvecPaiementAnnule()
+        {
+            using var ctx = _factory.CreateDbContext();
+            // La commande 10 a 2 pièces, un matériel et un paiement
+            // explicitement annulé pour couvrir le calcul de solde.
+            var commande = ctx.Commandes.AsNoTracking()
+                .Include(c => c.Pieces)
+                .Include(c => c.Paiements)
+                .Include(c => c.MaterielSupplements)
+                .Single(c => c.IdCommande == 10);
+
+            Assert.That(commande.Pieces, Has.Count.EqualTo(2));
+            Assert.That(commande.MaterielSupplements, Has.Count.EqualTo(1));
+            Assert.That(commande.Paiements.Any(p => p.EstAnnule), Is.True);
+            Assert.That(commande.Paiements.Any(p => !p.EstAnnule), Is.True);
+
+            decimal factureAttendue = commande.Pieces.Sum(p => p.MontantCouture)
+                + commande.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+            decimal encaisseAttendu = commande.Paiements
+                .Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+
+            Assert.That(commande.MontantTotalAvecMateriaux, Is.EqualTo(factureAttendue));
+            Assert.That(commande.MontantEncaisse, Is.EqualTo(encaisseAttendu));
+            Assert.That(commande.ResteAPayer, Is.EqualTo(factureAttendue - encaisseAttendu));
+        }
+
+        [Test, Order(22)]
+        public void P22_CommandesEncaissables_GrandVolume_RetourneLesSoldesCorrects()
+        {
+            var attendues = new Dictionary<int, (decimal Facture, decimal Reste)>();
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var commandes = ctx.Commandes.AsNoTracking()
+                    .Where(c => !c.EstSupprimee && !c.EstAnnulee)
+                    .Include(c => c.Pieces)
+                    .Include(c => c.MaterielSupplements)
+                    .Include(c => c.Paiements)
+                    .AsEnumerable();
+                foreach (var commande in commandes)
+                {
+                    decimal facture = commande.Pieces.Sum(p => p.MontantCouture)
+                        + commande.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
+                    decimal reste = facture - commande.Paiements
+                        .Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                    if (reste > 0.01m)
+                        attendues.Add(commande.IdCommande, (facture, reste));
+                }
+            }
+
+            var chronometre = Stopwatch.StartNew();
+            var obtenues = _encaissablesService.ObtenirCommandesEncaissables();
+            chronometre.Stop();
+
+            Assert.That(obtenues.Count, Is.EqualTo(attendues.Count));
+            foreach (var resultat in obtenues)
+            {
+                var attendu = attendues[resultat.IdCommande];
+                Assert.That(resultat.MontantTotalAvecMateriaux, Is.EqualTo(attendu.Facture));
+                Assert.That(resultat.ResteAPayer, Is.EqualTo(attendu.Reste));
+            }
+
+            _mesures.Add(("CommandesEncaissablesService (120k commandes)", chronometre.ElapsedMilliseconds));
+        }
+
         // ================================================================
         // HELPERS
         // ================================================================
@@ -344,7 +455,8 @@ namespace GestionCoutureApp.Tests
             ctx.Employes.Add(new Employe
             {
                 IdEmploye = 1, Nom = "DIALLO", Prenom = "Boss",
-                Identifiant = "boss", MotDePasse = "x", Role = "Boss", Statut = "Actif"
+                Identifiant = "boss_stress", MotDePasse = PasswordHasher.Hasher("StressCouture2026!"),
+                Role = "Boss", Statut = "Actif"
             });
 
             // ── Couturiers ────────────────────────────────────────────────
@@ -361,6 +473,7 @@ namespace GestionCoutureApp.Tests
                     Statut      = "Actif"
                 });
             ctx.SaveChanges();
+            ctx.ChangeTracker.Clear();
 
             // ── Clients par lots de 500 ───────────────────────────────────
             for (int lot = 0; lot < NB_CLIENTS / 500; lot++)
@@ -379,11 +492,12 @@ namespace GestionCoutureApp.Tests
                 }
                 ctx.Clients.AddRange(batch);
                 ctx.SaveChanges();
+                ctx.ChangeTracker.Clear();
             }
 
             // ── Commandes + Pièces par lots de 500 ───────────────────────
             // NB_COMMANDES commandes, NB_PIECES pièces au total
-            // = 2 pièces pour les 40 % premières commandes, 1 pièce pour le reste
+            // = 2 pièces pour la moitié des commandes, 1 pièce pour le reste
             int pieceId = 0;
             int paiementId = 0;
             int paiementsRestants = NB_PAIEMENTS;
@@ -393,6 +507,7 @@ namespace GestionCoutureApp.Tests
                 var commandes = new List<Commande>(500);
                 var pieces    = new List<PieceCommande>();
                 var paiements = new List<Paiement>();
+                var materiaux = new List<MaterielSupplement>();
 
                 for (int i = 0; i < 500; i++)
                 {
@@ -412,7 +527,7 @@ namespace GestionCoutureApp.Tests
                         DateFin             = dateFin,
                         Statut              = statut,
                         TypeVetement        = Types[idCmd % Types.Length],
-                        MontantTotal        = 5000m + (idCmd % 20) * 500m,
+                        MontantTotal        = 0m,
                         EstSupprimee        = false,
                         EstAnnulee          = false,
                         IdOperateurCreation = 1,
@@ -423,21 +538,44 @@ namespace GestionCoutureApp.Tests
 
                     // 2 pièces pour la moitié des commandes
                     int nbPieces = (idCmd % 2 == 0) ? 2 : 1;
+                    decimal montantCouture = 0m;
                     for (int p = 0; p < nbPieces; p++)
                     {
                         pieceId++;
                         var pieceStatut = (p == 1 && statut == "A faire") ? "A faire" : statut;
+                        decimal montantPiece = 2500m + (pieceId % 10) * 250m;
+                        montantCouture += montantPiece;
                         pieces.Add(new PieceCommande
                         {
                             IdPieceCommande = pieceId,
                             IdCommande      = idCmd,
                             TypeVetement    = Types[(pieceId) % Types.Length],
-                            MontantCouture  = 2500m + (pieceId % 10) * 250m,
+                            MontantCouture  = montantPiece,
                             Statut          = pieceStatut,
                             IdCouturier     = idCout,
                             DateTerminee    = (pieceStatut == "Terminee" || pieceStatut == "Livree")
                                              ? dateDebut.AddDays(2) : (DateTime?)null
                         });
+                    }
+                    commande.MontantTotal = montantCouture;
+
+                    // Matériel sur une commande sur dix : le total facturé comprend
+                    // la couture et les fournitures réellement associées.
+                    if (idCmd % 10 == 0)
+                    {
+                        int quantite = 1 + idCmd % 3;
+                        decimal prixUnitaire = 750m + idCmd % 5 * 250m;
+                        materiaux.Add(new MaterielSupplement
+                        {
+                            IdMateriel = idCmd / 10,
+                            IdCommande = idCmd,
+                            Designation = "Tissu de confection",
+                            Quantite = quantite,
+                            PrixUnitaire = prixUnitaire,
+                            IdOperateur = 1,
+                            NomOperateur = "Boss DIALLO"
+                        });
+                        commande.MontantTotal += quantite * prixUnitaire;
                     }
 
                     // Paiements (distribués sur 75 % des commandes)
@@ -453,21 +591,49 @@ namespace GestionCoutureApp.Tests
                             MontantPaye   = montant,
                             DatePaiement  = dateDebut.AddDays(1),
                             ModePaiement  = Modes[idCmd % Modes.Length],
-                            EstAnnule     = false,
+                            EstAnnule     = idCmd == 10 ? false : paiementId % 10 == 0,
                             IdOperateur   = 1,
                             NomOperateur  = "Boss"
                         });
+
+                        // La commande témoin combine un encaissement valide et
+                        // un encaissement annulé pour tester le solde réellement dû.
+                        if (idCmd == 10 && paiementsRestants > 0)
+                        {
+                            paiementId++;
+                            paiementsRestants--;
+                            paiements.Add(new Paiement
+                            {
+                                IdPaiement    = paiementId,
+                                IdCommande    = idCmd,
+                                MontantPaye   = 500m,
+                                DatePaiement  = dateDebut.AddDays(2),
+                                ModePaiement  = "Especes",
+                                EstAnnule     = true,
+                                IdOperateur   = 1,
+                                NomOperateur  = "Boss"
+                            });
+                        }
                     }
                 }
 
                 ctx.Commandes.AddRange(commandes);
                 ctx.SaveChanges();
+                ctx.ChangeTracker.Clear();
                 ctx.PiecesCommande.AddRange(pieces);
                 ctx.SaveChanges();
+                ctx.ChangeTracker.Clear();
+                if (materiaux.Count > 0)
+                {
+                    ctx.MaterielsSupplements.AddRange(materiaux);
+                    ctx.SaveChanges();
+                    ctx.ChangeTracker.Clear();
+                }
                 if (paiements.Count > 0)
                 {
                     ctx.Paiements.AddRange(paiements);
                     ctx.SaveChanges();
+                    ctx.ChangeTracker.Clear();
                 }
             }
 
@@ -500,7 +666,65 @@ namespace GestionCoutureApp.Tests
                 }
                 ctx.JournalAudit.AddRange(batch);
                 ctx.SaveChanges();
+                ctx.ChangeTracker.Clear();
             }
+
+            // Charges validées, en attente et annulées pour les vues Trésorerie.
+            int idDepense = 0;
+            for (int lot = 0; lot < 10; lot++)
+            {
+                var depenses = new List<Depense>(1000);
+                for (int i = 0; i < 1000; i++)
+                {
+                    idDepense++;
+                    depenses.Add(new Depense
+                    {
+                        IdDepense = idDepense,
+                        Categorie = idDepense % 2 == 0 ? "Matériel & Entretien" : "Charges fixes",
+                        TypeDepense = idDepense % 2 == 0 ? "Achat fournitures" : "Électricité",
+                        Montant = 5000m + idDepense % 40 * 500m,
+                        DateDepense = DateTime.Today.AddDays(-(idDepense % 730)),
+                        Description = $"Dépense de test {idDepense}",
+                        IdOperateur = 1,
+                        NomOperateur = "Boss DIALLO",
+                        StatutValidation = idDepense % 20 == 0 ? "En attente" : "Validee",
+                        EstAnnulee = idDepense % 50 == 0
+                    });
+                }
+                ctx.Depenses.AddRange(depenses);
+                ctx.SaveChanges();
+                ctx.ChangeTracker.Clear();
+            }
+
+            // Historique de commissions sur 24 périodes pour tous les couturiers.
+            var commissions = new List<Commission>(nbCouturiers * 24);
+            for (int mois = 0; mois < 24; mois++)
+            {
+                var debutPeriode = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-mois);
+                foreach (int idCouturier in Enumerable.Range(2, nbCouturiers))
+                {
+                    commissions.Add(new Commission
+                    {
+                        IdEmploye = idCouturier,
+                        NomEmployeSnapshot = $"Prenom{idCouturier} Couturier{idCouturier}",
+                        DateDebutPeriode = debutPeriode,
+                        DateFinPeriode = debutPeriode.AddMonths(1).AddDays(-1),
+                        DateCalcul = debutPeriode.AddMonths(1).AddDays(-1),
+                        BaseCalcul = "Encaisse",
+                        Pourcentage = 10m,
+                        BaseMontant = 100000m + (idCouturier % 100) * 1000m,
+                        MontantCommission = 10000m + (idCouturier % 100) * 100m,
+                        PrimeQualite = idCouturier % 5 == 0 ? 2500m : 0m,
+                        NbCommandes = 10 + idCouturier % 50,
+                        IdOperateur = 1,
+                        NomOperateur = "Boss DIALLO",
+                        EstAnnulee = mois == 0 && idCouturier % 20 == 0
+                    });
+                }
+            }
+            ctx.Commissions.AddRange(commissions);
+            ctx.SaveChanges();
+            ctx.ChangeTracker.Clear();
 
             TestContext.WriteLine($"[PERF] Base générée : {NB_CLIENTS} clients, {NB_COMMANDES} commandes, {pieceId} pièces, {paiementId} paiements, {NB_AUDIT} lignes audit");
         }

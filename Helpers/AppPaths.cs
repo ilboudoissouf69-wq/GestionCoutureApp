@@ -29,10 +29,22 @@ namespace GestionCoutureApp.Helpers
     public static class AppPaths
     {
         /// <summary>
-        /// Dossier racine de l'application dans %LOCALAPPDATA%.
-        /// Ex: C:\Users\Fatou\AppData\Local\GestionCoutureApp
+        /// Dossier racine de l'application dans %LOCALAPPDATA%, sauf si
+        /// GESTIONCOUTUREAPP_DATA_DIR définit un profil isolé (tests/diagnostic).
         /// </summary>
         public static string DossierApplication { get; } = InitialiserDossierApplication();
+
+        /// <summary>Répertoire de jetons Drive, configurable pour un profil isolé.</summary>
+        public static string DossierJetonsDrive
+        {
+            get
+            {
+                string? overridePath = Environment.GetEnvironmentVariable("GESTIONCOUTUREAPP_DRIVE_TOKEN_DIR");
+                return string.IsNullOrWhiteSpace(overridePath)
+                    ? Path.Combine(DossierApplication, "DriveToken")
+                    : Path.GetFullPath(overridePath);
+            }
+        }
 
         public static string CheminBaseDeDonnees => Path.Combine(DossierApplication, "gestion_couture.db");
 
@@ -70,6 +82,10 @@ namespace GestionCoutureApp.Helpers
 
         private static string InitialiserDossierApplication()
         {
+            string? dossierConfigure = Environment.GetEnvironmentVariable("GESTIONCOUTUREAPP_DATA_DIR");
+            if (!string.IsNullOrWhiteSpace(dossierConfigure))
+                return CreerEtRetourner(Path.GetFullPath(dossierConfigure));
+
             string racine = System.Environment.GetFolderPath(
                 System.Environment.SpecialFolder.LocalApplicationData);
             string dossier = Path.Combine(racine, "GestionCoutureApp");

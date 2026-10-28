@@ -26,7 +26,9 @@ namespace GestionCoutureApp.Services
     public class GoogleDriveBackupService
     {
         private const int MaxBackupsDrive = 10;
-        private const string NomDossierDrive = "Retouche Choco Backups";
+        private static string NomDossierDrive =>
+            Environment.GetEnvironmentVariable("GESTIONCOUTUREAPP_DRIVE_BACKUP_FOLDER")
+            ?? "Retouche Choco Backups";
         private const string MimeZip = "application/zip";
         private const string MimeDossier = "application/vnd.google-apps.folder";
 
@@ -163,7 +165,9 @@ namespace GestionCoutureApp.Services
             // %LOCALAPPDATA%\GestionCoutureApp\client_secret.json
             // Le fichier est déjà ignoré par .gitignore.
             
+            string? secretConfigure = Environment.GetEnvironmentVariable("GESTIONCOUTUREAPP_DRIVE_CLIENT_SECRET");
             string[] candidats = {
+                secretConfigure ?? string.Empty,
                 Path.Combine(AppPaths.DossierApplication, "client_secret.json"), // Priorité : %LOCALAPPDATA%
                 Path.Combine(AppContext.BaseDirectory, "client_secret.json"),    // Fallback : dossier exécutable
                 "client_secret.json"                                            // Dernier recours : dossier courant
@@ -179,7 +183,7 @@ namespace GestionCoutureApp.Services
                     "3. Relancez l'application\n\n" +
                     "Ce fichier ne doit JAMAIS être commité dans le dépôt Git pour des raisons de sécurité.");
 
-            string dossierToken = Path.Combine(AppPaths.DossierApplication, "DriveToken");
+            string dossierToken = AppPaths.DossierJetonsDrive;
             Directory.CreateDirectory(dossierToken);
 
             UserCredential credential;
