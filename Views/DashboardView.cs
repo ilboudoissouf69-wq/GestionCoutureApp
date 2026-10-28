@@ -321,23 +321,17 @@ namespace GestionCoutureApp.Views
                 .Sum();
 
             // KPI 2 & 3 — Commandes en cours / retards
-            var commandesLight = context.Commandes
+            // Perf-fix : COUNT SQL au lieu de charger toutes les commandes + pièces
+            int enCours = context.Commandes
                 .AsNoTracking()
-                .Where(c => !c.EstSupprimee && !c.EstAnnulee)
-                .Select(c => new
-                {
-                    c.DateFin,
-                    Statuts = c.Pieces.Select(p => p.Statut).ToList()
-                })
-                .ToList();
+                .Count(c => !c.EstSupprimee && !c.EstAnnulee
+                         && c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
 
-            int enCours = commandesLight.Count(c =>
-                c.Statuts.Count == 0 || c.Statuts.Any(s => s != "Livree"));
-
-            int retards = commandesLight.Count(c =>
-                (c.Statuts.Count == 0 || c.Statuts.Any(s => s != "Livree")) &&
-                c.DateFin != default &&
-                c.DateFin.Date < aujourdhui);
+            int retards = context.Commandes
+                .AsNoTracking()
+                .Count(c => !c.EstSupprimee && !c.EstAnnulee
+                         && c.DateFin < aujourdhui
+                         && c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
 
             // KPI 4 — Dépenses du mois (Boss) ou Clients enregistrés (Secrétaire)
             decimal depMois = 0m;

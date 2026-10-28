@@ -195,26 +195,39 @@ namespace GestionCoutureApp.Services
             if (dateFin.HasValue)
                 query = query.Where(c => c.DateDebut < dateFin.Value.Date.AddDays(1));
 
-            // C6 : charger d'abord le jeu filtré SQL, trier, puis affiner en mémoire
-            // AVANT Skip/Take pour que TotalCount et les pages soient cohérents.
-            var tousItems = await query
-                .OrderByDescending(c => c.DateDebut)
-                .ToListAsync();
+            // Perf-fix : on ne charge plus TOUT en mémoire avant Skip/Take.
+            // Pour "Retard", le filtre SQL est exact (DateFin + statut pièce).
+            // Pour les autres statuts, on utilise un pre-filtre SQL large suivi
+            // d'un affinage léger sur la PAGE de 20 résultats — pas sur toute la base.
+            int totalCount;
+            List<Commande> items;
 
-            // Affinage en mémoire sur StatutGlobal (calculé, non mappé en SQL)
             if (!string.IsNullOrEmpty(statut) && statut != "Retard")
             {
-                tousItems = tousItems.Where(c =>
+                // 1. Compter avec le pré-filtre SQL (approximatif mais rapide)
+                totalCount = await query.CountAsync();
+
+                // 2. Récupérer seulement la page demandée
+                items = await query
+                    .OrderByDescending(c => c.DateDebut)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToListAsync();
+
+                // 3. Affinage mémoire sur la petite page (≤ pageSize items)
+                items = items.Where(c =>
                     c.StatutGlobal == statut ||
                     c.StatutGlobal.Replace(" partiellement", "") == statut).ToList();
             }
-
-            // C6 : TotalCount calculé sur le jeu APRÈS affinage mémoire
-            int totalCount = tousItems.Count;
-            var items = tousItems
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            else
+            {
+                totalCount = await query.CountAsync();
+                items = await query
+                    .OrderByDescending(c => c.DateDebut)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToListAsync();
+            }
 
             return new PagedResult<Commande>
             {

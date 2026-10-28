@@ -145,11 +145,11 @@ namespace GestionCoutureApp.Services
                         p.Commande.Client.Prenom.Contains(r))));
             }
 
-            // Filtre période sur DatePaiement
+            // Filtre période sur DatePaiement — bornes sans .Date pour utiliser l'index
             if (dateDebut.HasValue)
-                query = query.Where(p => p.DatePaiement.Date >= dateDebut.Value.Date);
+                query = query.Where(p => p.DatePaiement >= dateDebut.Value);
             if (dateFin.HasValue)
-                query = query.Where(p => p.DatePaiement.Date <= dateFin.Value.Date);
+                query = query.Where(p => p.DatePaiement < dateFin.Value.Date.AddDays(1));
 
             query = query.OrderByDescending(p => p.DatePaiement);
 

@@ -303,7 +303,11 @@ namespace GestionCoutureApp.Views
                 BtnSupprimerPiece.Visibility = Visibility.Visible;
 
             // ── Remplir CmbClient (legacy) et CmbModalClient ──
-            _tousLesClients = _clientService.ObtenirTous();
+            // Perf-fix : on ne charge plus tous les clients au démarrage.
+            // Les ComboBox seront alimentés uniquement quand l'utilisateur tape
+            // (voir TxtRechercheClient_TextChanged et TxtRechercheModalClient_TextChanged).
+            // On initialise avec une liste vide pour que le binding ne plante pas.
+            _tousLesClients = new List<Client>();
             CmbClient.ItemsSource      = _tousLesClients;
             CmbModalClient.ItemsSource = _tousLesClients;
 
@@ -422,51 +426,107 @@ namespace GestionCoutureApp.Views
         // La sélection réelle est toujours portée par CmbModalClient.SelectedValue (IdClient).
         // On ne remet la liste complète que quand l'utilisateur re-saisit dans TxtRechercheClient.
 
+        // Debounce pour la recherche client (300 ms)
+        private System.Windows.Threading.DispatcherTimer? _timerRechercheClient;
+
         private void TxtRechercheClient_TextChanged(object sender, TextChangedEventArgs e)
         {
             string saisie = TxtRechercheClient.Text?.Trim() ?? "";
 
             if (string.IsNullOrEmpty(saisie))
             {
-                CmbModalClient.ItemsSource    = _tousLesClients;
+                _timerRechercheClient?.Stop();
+                CmbModalClient.ItemsSource    = new List<Client>();
                 CmbModalClient.IsDropDownOpen = false;
-                // Si on efface la recherche, effacer aussi la sélection affichée
                 CmbModalClient.SelectedIndex  = -1;
                 MettreAJourAffichageClientSelectionne(null);
                 return;
             }
 
-            List<Client> filtres;
-
-            // "#5" → ID exact uniquement
-            if (saisie.StartsWith("#") && int.TryParse(saisie.Substring(1), out int idExact))
+            // Debounce : attendre 300 ms après la dernière frappe
+            if (_timerRechercheClient == null)
             {
-                filtres = _tousLesClients.Where(c => c.IdClient == idExact).ToList();
+                _timerRechercheClient = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(300)
+                };
+                _timerRechercheClient.Tick += async (s, ev) =>
+                {
+                    _timerRechercheClient.Stop();
+                    await RechercherClientsAsync(TxtRechercheClient.Text?.Trim() ?? "");
+                };
             }
-            else
+            _timerRechercheClient.Stop();
+            _timerRechercheClient.Start();
+        }
+
+        private async Task RechercherClientsAsync(string saisie)
+        {
+            if (string.IsNullOrEmpty(saisie)) return;
+
+            try
             {
-                string recherche     = saisie.ToLowerInvariant();
-                string saisieChiffre = new string(saisie.Where(char.IsDigit).ToArray());
+                List<Client> filtres;
 
-                filtres = _tousLesClients.Where(c =>
-                    (c.Nom    ?? "").ToLowerInvariant().Contains(recherche) ||
-                    (c.Prenom ?? "").ToLowerInvariant().Contains(recherche) ||
-                    (!string.IsNullOrEmpty(saisieChiffre) &&
-                     new string((c.Telephone ?? "").Where(char.IsDigit).ToArray()).Contains(saisieChiffre)) ||
-                    (int.TryParse(saisie, out int idNum) && c.IdClient == idNum)
-                ).ToList();
+                // "#5" → ID exact uniquement — requête rapide par PK
+                if (saisie.StartsWith("#") && int.TryParse(saisie.Substring(1), out int idExact))
+                {
+                    var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                    await using var ctx = await contextFactory.CreateDbContextAsync();
+                    var c = await ctx.Clients.AsNoTracking().FirstOrDefaultAsync(cl => cl.IdClient == idExact);
+                    filtres = c != null ? new List<Client> { c } : new List<Client>();
+                }
+                else
+                {
+                    // Recherche base : top 20 par nom/prénom/téléphone
+                    var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                    await using var ctx = await contextFactory.CreateDbContextAsync();
+
+                    string recherche = saisie.ToLowerInvariant();
+                    filtres = await ctx.Clients
+                        .AsNoTracking()
+                        .Where(c =>
+                            c.Nom.ToLower().Contains(recherche) ||
+                            c.Prenom.ToLower().Contains(recherche) ||
+                            (c.Telephone != null && c.Telephone.Contains(saisie)))
+                        .OrderBy(c => c.Nom).ThenBy(c => c.Prenom)
+                        .Take(20)
+                        .ToListAsync();
+                }
+
+                CmbModalClient.ItemsSource    = filtres;
+                CmbModalClient.IsDropDownOpen = filtres.Count > 0;
+
+                if (filtres.Count == 1)
+                {
+                    CmbModalClient.SelectedIndex  = 0;
+                    CmbModalClient.IsDropDownOpen = false;
+                }
             }
+            catch { /* silencieux : ne pas interrompre la saisie */ }
+        }
 
-            // Mettre à jour la liste du combo SANS changer la sélection courante
-            CmbModalClient.ItemsSource    = filtres;
-            CmbModalClient.IsDropDownOpen = filtres.Count > 0;
-
-            // Résultat unique → sélectionner automatiquement sans ouvrir le dropdown
-            if (filtres.Count == 1)
+        /// <summary>
+        /// Charge le client d'une commande en édition (1 seule ligne par PK)
+        /// et l'affecte au ComboBox pour que SelectedValue fonctionne.
+        /// </summary>
+        private async Task PreRemplirClientEditionAsync(int idClient)
+        {
+            try
             {
-                CmbModalClient.SelectedIndex  = 0;
-                CmbModalClient.IsDropDownOpen = false;
+                var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                await using var ctx = await contextFactory.CreateDbContextAsync();
+                var client = await ctx.Clients.AsNoTracking().FirstOrDefaultAsync(c => c.IdClient == idClient);
+                if (client != null)
+                {
+                    var liste = new List<Client> { client };
+                    CmbModalClient.ItemsSource   = liste;
+                    CmbModalClient.SelectedValue = idClient;
+                    if (CmbModalClient.SelectedItem is Client cliEdit)
+                        MettreAJourAffichageClientSelectionne(cliEdit, verrouille: true);
+                }
             }
+            catch { /* silencieux */ }
         }
 
         private void TxtRechercheClient_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -481,7 +541,7 @@ namespace GestionCoutureApp.Views
         private void BtnEffacerRechercheClient_Click(object sender, RoutedEventArgs e)
         {
             TxtRechercheClient.Text       = "";
-            CmbModalClient.ItemsSource    = _tousLesClients;
+            CmbModalClient.ItemsSource    = new List<Client>();
             CmbModalClient.SelectedIndex  = -1;
             MettreAJourAffichageClientSelectionne(null);
         }
@@ -976,7 +1036,7 @@ namespace GestionCoutureApp.Views
             GridRechercheClient.IsEnabled = true;
             GridRechercheClient.Opacity   = 1.0;
             CmbModalClient.IsEnabled     = true;
-            CmbModalClient.ItemsSource   = _tousLesClients;
+            CmbModalClient.ItemsSource   = new List<Client>();
             CmbModalClient.SelectedIndex = -1;
             MettreAJourAffichageClientSelectionne(null);
         }
@@ -992,7 +1052,7 @@ namespace GestionCoutureApp.Views
             TxtBtnValider.Text     = "Valider la Commande";
 
             // Réinitialiser les champs de la modale
-            CmbModalClient.ItemsSource    = _tousLesClients;
+            CmbModalClient.ItemsSource    = new List<Client>();
             CmbModalClient.SelectedIndex  = -1;
             CmbModalClient.IsEnabled      = true;
             GridRechercheClient.IsEnabled = true;
@@ -1038,8 +1098,8 @@ namespace GestionCoutureApp.Views
             TxtBtnValider.Text     = "Enregistrer les modifications";
 
             // Pré-remplir en-tête
-            // Restaurer la liste complète avant de sélectionner (filtre peut l'avoir réduite)
-            CmbModalClient.ItemsSource   = _tousLesClients;
+            // En mode édition : charger uniquement le client de cette commande (pas toute la liste)
+            _ = PreRemplirClientEditionAsync(_commandeEnEdition.IdClient);
             CmbModalClient.SelectedValue = _commandeEnEdition.IdClient;
 
             // ── Verrouiller la zone client en mode édition ──

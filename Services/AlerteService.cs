@@ -21,6 +21,78 @@ namespace GestionCoutureApp.Services
             _logger            = logger;
         }
 
+        // ── Cache léger : évite de scanner les pièces 3× par rafraîchissement ──
+        // On conserve le résultat du dernier chargement pendant 5 s.
+        // Si AlertesView appelle ObtenirAlertesActuelles, ObtenirRendezVousSemaine
+        // et ObtenirRetards dans la même seconde, EF Core n'interroge la base qu'une fois.
+        private List<PieceCommande>? _cachePieces;
+        private DateTime _cacheExpire = DateTime.MinValue;
+        private static readonly TimeSpan _cacheDuree = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Charge les pièces actives (ni Livrée) depuis la base, ou retourne
+        /// le cache si celui-ci a moins de 5 secondes.
+        /// Appelé par toutes les méthodes publiques d'alerte — une seule requête SQL
+        /// même si les 3 méthodes sont appelées en séquence depuis AlertesView.
+        /// </summary>
+        private async Task<List<PieceCommande>> ObtenirPiecesActivesAsync()
+        {
+            if (_cachePieces != null && DateTime.Now < _cacheExpire)
+                return _cachePieces;
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var pieces = await context.PiecesCommande
+                .Where(p => p.Statut != "Livree"
+                         && p.Commande != null
+                         && p.Commande.EstSupprimee == false)
+                .Select(p => new PieceCommande
+                {
+                    IdPieceCommande     = p.IdPieceCommande,
+                    IdCommande          = p.IdCommande,
+                    TypeVetement        = p.TypeVetement,
+                    Statut              = p.Statut,
+                    MontantCouture      = p.MontantCouture,
+                    IdCouturier         = p.IdCouturier,
+                    RendezVousException = p.RendezVousException,
+                    Commande = p.Commande == null ? null : new Commande
+                    {
+                        IdCommande   = p.Commande.IdCommande,
+                        DateDebut    = p.Commande.DateDebut,
+                        HeureDebut   = p.Commande.HeureDebut,
+                        DateFin      = p.Commande.DateFin,
+                        HeureFin     = p.Commande.HeureFin,
+                        EstSupprimee = p.Commande.EstSupprimee,
+                        Client = p.Commande.Client == null ? null : new Models.Client
+                        {
+                            IdClient  = p.Commande.Client.IdClient,
+                            Prenom    = p.Commande.Client.Prenom,
+                            Nom       = p.Commande.Client.Nom,
+                            Telephone = p.Commande.Client.Telephone
+                        }
+                    },
+                    Couturier = p.Couturier == null ? null : new Employe
+                    {
+                        IdEmploye = p.Couturier.IdEmploye,
+                        Prenom    = p.Couturier.Prenom,
+                        Nom       = p.Couturier.Nom,
+                        Role      = p.Couturier.Role,
+                        Statut    = p.Couturier.Statut,
+                        Identifiant = p.Couturier.Identifiant,
+                        MotDePasse  = p.Couturier.MotDePasse
+                    }
+                })
+                .AsNoTracking()
+                .ToListAsync();
+
+            _cachePieces = pieces;
+            _cacheExpire = DateTime.Now.Add(_cacheDuree);
+            return pieces;
+        }
+
+        /// <summary>Invalide le cache (à appeler après toute modification de pièce).</summary>
+        public void InvaliderCache() => _cachePieces = null;
+
         // Génère les deux types d'alerte par pièce : "rendez-vous proche" et
         // "pas encore prise en charge" (mi-délai entre dépôt et rendez-vous avec statut "À faire").
         public async Task<List<AlerteRendezVous>> ObtenirAlertesActuelles()
@@ -29,18 +101,7 @@ namespace GestionCoutureApp.Services
             var delaiHeures = await _parametresService.ObtenirDelaiAlerteRendezVousHeures();
             var maintenant = DateTime.Now;
 
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            var pieces = await context.PiecesCommande
-                .Include(p => p.Couturier)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree"
-                         && p.Commande != null
-                         && p.Commande.EstSupprimee == false)
-                .AsNoTracking()
-                .ToListAsync();
-
+            var pieces = await ObtenirPiecesActivesAsync();
             var alertes = new List<AlerteRendezVous>();
 
             foreach (var piece in pieces)
@@ -50,10 +111,7 @@ namespace GestionCoutureApp.Services
                 if (dateRdv <= maintenant) continue; // rendez-vous déjà passé : pas une alerte "à venir"
 
                 // Alerte 1 — "pas encore prise en charge" : à la moitié du temps
-                // entre le dépôt et le rendez-vous, si le statut est toujours
-                // "A faire". Disparaît dès que le statut passe à "En cours"
-                // (cette pièce ne rentre alors même plus dans cette boucle
-                // puisque le calcul se refait à chaque appel — rien à stocker).
+                // entre le dépôt et le rendez-vous, si le statut est toujours "A faire".
                 if (piece.Statut == "A faire")
                 {
                     var dateDepot = commande.DateDebut.Date + commande.HeureDebut;
@@ -70,9 +128,7 @@ namespace GestionCoutureApp.Services
                     }
                 }
 
-                // Alerte 2 — "rendez-vous proche" : dans les N heures réglées
-                // par le Boss (Paramètres), tant que le statut n'est pas
-                // encore "Terminee".
+                // Alerte 2 — "rendez-vous proche" : dans les N heures réglées par le Boss.
                 if (piece.Statut != "Terminee" && dateRdv <= maintenant.AddHours(delaiHeures))
                 {
                     alertes.Add(ConstruireAlerte(
@@ -81,27 +137,14 @@ namespace GestionCoutureApp.Services
                 }
             }
 
-            return alertes
-                .OrderBy(a => a.DateRendezVous)
-                .ToList();
+            return alertes.OrderBy(a => a.DateRendezVous).ToList();
         }
 
         public async Task<List<AlerteRendezVous>> ObtenirTousRendezVousAVenir()
         {
             using var t = PerfLogger.Start("AlerteService.ObtenirTousRendezVousAVenir", _logger);
             var maintenant = DateTime.Now;
-
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            var pieces = await context.PiecesCommande
-                .Include(p => p.Couturier)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree"
-                         && p.Commande != null
-                         && p.Commande.EstSupprimee == false)
-                .AsNoTracking()
-                .ToListAsync();
+            var pieces = await ObtenirPiecesActivesAsync();
 
             var resultat = new List<AlerteRendezVous>();
             foreach (var piece in pieces)
@@ -109,17 +152,14 @@ namespace GestionCoutureApp.Services
                 var commande = piece.Commande!;
                 var dateRdv = ObtenirDateRendezVous(piece, commande);
                 if (dateRdv <= maintenant) continue;
-
                 resultat.Add(ConstruireAlerte(piece, commande, dateRdv, maintenant, "RendezVousProche"));
             }
-
             return resultat.OrderBy(a => a.DateRendezVous).ToList();
         }
 
         /// <summary>
         /// Section Retrait : toutes les pièces non livrées dont le RDV est
-        /// dans les 7 prochains jours OU dont la pièce est terminée
-        /// (y compris si le RDV est passé — le client n'est pas encore venu).
+        /// dans les 7 prochains jours OU dont la pièce est terminée.
         /// </summary>
         public async Task<List<AlerteRendezVous>> ObtenirRendezVousSemaine()
         {
@@ -127,46 +167,32 @@ namespace GestionCoutureApp.Services
             var maintenant = DateTime.Now;
             var finSemaine = maintenant.AddDays(7);
 
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            var pieces = await context.PiecesCommande
-                .Include(p => p.Couturier)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree"
-                         && p.Commande != null
-                         && p.Commande.EstSupprimee == false)
-                .AsNoTracking()
-                .ToListAsync();
-
+            var pieces = await ObtenirPiecesActivesAsync();
             var resultat = new List<AlerteRendezVous>();
+
             foreach (var piece in pieces)
             {
                 var commande = piece.Commande!;
                 var dateRdv  = ObtenirDateRendezVous(piece, commande);
 
-                // Inclure : pièce terminée (peu importe le RDV) OU RDV dans la semaine
                 bool pieceTerminee = piece.Statut == "Terminee";
                 bool rdvSemaine    = dateRdv >= maintenant && dateRdv <= finSemaine;
 
                 if (!pieceTerminee && !rdvSemaine) continue;
 
                 var alerte = ConstruireAlerte(piece, commande, dateRdv, maintenant, "RendezVousProche");
-                // ProposerContactWhatsApp : pièce terminée ET (RDV passé ou aujourd'hui)
                 alerte.ProposerContactWhatsApp = pieceTerminee && dateRdv.Date <= maintenant.Date;
                 resultat.Add(alerte);
             }
 
             return resultat
-                .OrderBy(a => a.ProposerContactWhatsApp ? 0 : 1) // Prêts en premier
+                .OrderBy(a => a.ProposerContactWhatsApp ? 0 : 1)
                 .ThenBy(a => a.DateRendezVous)
                 .ToList();
         }
 
         /// <summary>
-        /// Pièces non livrées dont le RDV est déjà dépassé, pour les commandes NON supprimées.
-        /// Inclut les pièces Terminées dont le client n'est pas encore venu récupérer
-        /// (RDV dépassé = urgence retrait, priorité maximale dans les alertes).
+        /// Pièces non livrées dont le RDV est déjà dépassé.
         /// TypeAlerte = "Retard". Tri : RDV le plus ancien en premier.
         /// </summary>
         public async Task<List<AlerteRendezVous>> ObtenirRetards()
@@ -174,35 +200,24 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("AlerteService.ObtenirRetards", _logger);
             var maintenant = DateTime.Now;
 
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            var pieces = await context.PiecesCommande
-                .Include(p => p.Couturier)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.Client)
-                .Where(p => p.Statut != "Livree"          // Livrées exclues : affaire réglée
-                         && p.Statut != "Terminee"        // Terminées exclues : travail fini, client pas encore venu (pas un retard de production)
-                         && p.Commande != null
-                         && p.Commande.EstSupprimee == false)
-                .AsNoTracking()
-                .ToListAsync();
+            // Exclut aussi "Terminee" ici : travail fini, client pas encore venu → pas retard prod
+            var pieces = (await ObtenirPiecesActivesAsync())
+                .Where(p => p.Statut != "Terminee")
+                .ToList();
 
             var resultat = new List<AlerteRendezVous>();
             foreach (var piece in pieces)
             {
                 var commande = piece.Commande!;
                 var dateRdv  = ObtenirDateRendezVous(piece, commande);
-                if (dateRdv >= maintenant) continue; // RDV non encore dépassé
+                if (dateRdv >= maintenant) continue;
 
                 var alerte = ConstruireAlerte(piece, commande, dateRdv, maintenant, "Retard");
-                // WhatsApp proposé si Terminée et RDV dépassé (client pas venu)
                 alerte.ProposerContactWhatsApp = piece.Statut == "Terminee";
                 resultat.Add(alerte);
             }
 
-            return resultat
-                .OrderBy(a => a.DateRendezVous)
-                .ToList();
+            return resultat.OrderBy(a => a.DateRendezVous).ToList();
         }
 
         // Retourne le rendez-vous de la pièce : honore PieceCommande.RendezVousException
