@@ -49,18 +49,16 @@ namespace GestionCoutureApp.Services
         // ==================================================================
         public async Task<bool> SauvegarderAsync(IProgress<string>? progression = null)
         {
+            string? cheminZip = null;
             try
             {
-                progression?.Report("Préparation de l'archive…");
-
-                // 1. Créer l'archive .zip
-                string cheminZip = await CreerArchiveAsync();
-                string nomZip    = Path.GetFileName(cheminZip);
-
                 progression?.Report("Connexion à Google Drive…");
-
-                // 2. Authentifier et obtenir le service Drive
                 var driveService = await ObtenirServiceDriveAsync();
+
+                // Valider l'accès à Drive avant de créer une archive volumineuse.
+                progression?.Report("Préparation de l'archive…");
+                cheminZip = await CreerArchiveAsync();
+                string nomZip = Path.GetFileName(cheminZip);
 
                 progression?.Report("Recherche du dossier Drive…");
 
@@ -76,9 +74,6 @@ namespace GestionCoutureApp.Services
 
                 // 5. Rotation
                 await SupprimerAnciensBackupsAsync(driveService, idDossier);
-
-                // 6. Supprimer le zip temporaire local
-                try { File.Delete(cheminZip); } catch { /* pas critique */ }
 
                 StatutDerniereSync   = "✅ Synchronisé";
                 DateDerniereSync     = DateTime.Now;
@@ -96,6 +91,13 @@ namespace GestionCoutureApp.Services
                 progression?.Report("❌ Erreur : " + ex.Message);
                 return false;
             }
+            finally
+            {
+                if (cheminZip != null)
+                {
+                    try { File.Delete(cheminZip); } catch { /* nettoyage non bloquant */ }
+                }
+            }
         }
 
         // ==================================================================
@@ -109,9 +111,11 @@ namespace GestionCoutureApp.Services
 
             if (File.Exists(cheminZip)) File.Delete(cheminZip);
 
-            await Task.Run(() =>
+            try
             {
-                using var archive = ZipFile.Open(cheminZip, ZipArchiveMode.Create);
+                await Task.Run(() =>
+                {
+                    using var archive = ZipFile.Open(cheminZip, ZipArchiveMode.Create);
 
                 // DB SQLite (VACUUM INTO dans un fichier temp pour cohérence)
                 string dbSource = AppPaths.CheminBaseDeDonnees;
@@ -150,9 +154,15 @@ namespace GestionCoutureApp.Services
                             CompressionLevel.Fastest); // photos déjà compressées
                     }
                 }
-            });
+                });
 
-            return cheminZip;
+                return cheminZip;
+            }
+            catch
+            {
+                try { File.Delete(cheminZip); } catch { }
+                throw;
+            }
         }
 
         // ==================================================================

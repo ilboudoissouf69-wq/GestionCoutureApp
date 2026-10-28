@@ -552,19 +552,38 @@ namespace GestionCoutureApp
             }
             catch { /* Si le logging échoue, on continue la fermeture normale */ }
 
-            // Sauvegarde Google Drive automatique à la fermeture
-            // (en tâche de fond, 2–3 secondes maximum)
+            // Sauvegarde Google Drive automatique à la fermeture. La création
+            // de l'archive inclut un VACUUM SQLite et une compression qui peuvent
+            // dépasser quelques secondes sur une base volumineuse.
             try
             {
                 var driveBackup = Services.GetService<GoogleDriveBackupService>();
                 if (driveBackup != null)
                 {
-                    // Fire-and-wait avec timeout 8 secondes pour ne pas bloquer la fermeture
+                    var logService = Services.GetService<ILogService>();
                     var tache = driveBackup.SauvegarderAsync();
-                    tache.Wait(TimeSpan.FromSeconds(8));
+                    if (!tache.Wait(TimeSpan.FromMinutes(2)))
+                    {
+                        logService?.LogWarning(
+                            "La sauvegarde Google Drive n'est pas terminée après 2 minutes ; " +
+                            "la fermeture de l'application continue.");
+                    }
+                    else if (!tache.Result)
+                    {
+                        logService?.LogWarning(
+                            $"Échec de la sauvegarde Google Drive à la fermeture : {driveBackup.StatutDerniereSync}");
+                    }
                 }
             }
-            catch { /* ne jamais bloquer la fermeture */ }
+            catch (Exception ex)
+            {
+                try
+                {
+                    Services?.GetService<ILogService>()?.LogError(
+                        "Échec de la sauvegarde Google Drive à la fermeture", ex);
+                }
+                catch { /* ne pas empêcher la fermeture sur un problème de journalisation */ }
+            }
 
             base.OnExit(e);
         }
