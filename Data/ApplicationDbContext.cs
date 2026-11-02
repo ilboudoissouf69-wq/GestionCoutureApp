@@ -299,6 +299,32 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<SuiviAlerteRetard>()
                 .HasIndex(s => new { s.TypeCible, s.IdCible })
                 .IsUnique();
+
+            // ══════════════════════════════════════════════════════════════════
+            // ÉTAPE 1 PERF — Colonnes dénormalisées + index composites
+            // ════════════════════════════════════════════════════════════════════
+            // (Statut, DateRdvEffective) : filtre principal des alertes —
+            //   WHERE Statut != 'Livree' AND DateRdvEffective < seuil
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.Statut, p.DateRdvEffective })
+                .HasDatabaseName("IX_PiecesCommande_Statut_DateRdvEffective");
+
+            // (CommandeActive, Statut, DateRdvEffective) : filtre des alertes
+            //   sans jointure sur Commandes
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.CommandeActive, p.Statut, p.DateRdvEffective })
+                .HasDatabaseName("IX_PiecesCommande_CommandeActive_Statut_DateRdv");
+
+            // (IdCouturier, Statut) : stats couturiers Dashboard
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.IdCouturier, p.Statut })
+                .HasDatabaseName("IX_PiecesCommande_IdCouturier_Statut");
+
+            // Commandes(EstSupprimee, EstAnnulee, DateFin) : requêtes d'alertes
+            //   et dashboard sur la table Commandes
+            modelBuilder.Entity<Commande>()
+                .HasIndex(c => new { c.EstSupprimee, c.EstAnnulee, c.DateFin })
+                .HasDatabaseName("IX_Commandes_EstSupprimee_EstAnnulee_DateFin");
         }
     }
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -263,7 +264,9 @@ internal static class Program
                         IdCouturier = idCout,
                         DateTerminee = (pieceStatut == "Terminee" || pieceStatut == "Livree")
                             ? dateDebut.AddDays(2) : null,
-                        RendezVousException = rdvExc
+                        RendezVousException = rdvExc,
+                        DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(rdvExc, dateFin, null),
+                        CommandeActive = true
                     });
                 }
                 commande.MontantTotal = montantCouture;

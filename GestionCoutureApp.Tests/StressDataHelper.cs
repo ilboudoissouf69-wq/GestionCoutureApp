@@ -1,4 +1,5 @@
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -140,7 +141,9 @@ namespace GestionCoutureApp.Tests
                             IdCouturier = idCout,
                             DateTerminee = (pieceStatut == "Terminee" || pieceStatut == "Livree")
                                 ? dateDebut.AddDays(2) : null,
-                            RendezVousException = rdvExc
+                            RendezVousException = rdvExc,
+                            DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(rdvExc, dateFin, null),
+                            CommandeActive = true
                         });
                     }
                     commande.MontantTotal = montantCouture;

@@ -1,4 +1,5 @@
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -336,6 +337,14 @@ namespace GestionCoutureApp.Services
                 pieceSup.Statut = "A faire";
                 commande.Pieces.Add(pieceSup);
                 RattacherMesuresEtMateriaux(commande, pieceSup, mesuresSup, materiauxSup, idOperateur, nomOperateur);
+            }
+
+            // ÉTAPE 1 PERF — colonnes dénormalisées (nouvelle commande = active)
+            foreach (var p in commande.Pieces)
+            {
+                p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                    p.RendezVousException, commande.DateFin, commande.HeureFin);
+                p.CommandeActive = true;
             }
 
             context.Commandes.Add(commande);
@@ -787,6 +796,9 @@ namespace GestionCoutureApp.Services
                 commande.DateSuppression         = _clock.Now;
                 commande.IdOperateurSuppression  = idOperateur;
                 commande.NomOperateurSuppression = nomOperateur;
+                // ÉTAPE 1 PERF — propager la désactivation aux pièces
+                foreach (var p in commande.Pieces)
+                    p.CommandeActive = false;
                 context.SaveChanges();
 
                 await _auditService.EnregistrerActionAsync(
@@ -1023,6 +1035,10 @@ namespace GestionCoutureApp.Services
             {
                 piece.IdCommande = existante.IdCommande;
                 piece.Statut = "A faire";
+                // ÉTAPE 1 PERF — colonnes dénormalisées
+                piece.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                    piece.RendezVousException, existante.DateFin, existante.HeureFin);
+                piece.CommandeActive = true;
                 context.PiecesCommande.Add(piece);
 
                 foreach (var mesure in mesures)
@@ -1036,6 +1052,13 @@ namespace GestionCoutureApp.Services
             existante.DateFin    = commande.DateFin;
             existante.HeureDebut = commande.HeureDebut;
             existante.HeureFin   = commande.HeureFin;
+
+            // ÉTAPE 1 PERF — recalculer DateRdvEffective pour toutes les pièces
+            foreach (var p in existante.Pieces)
+            {
+                p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                    p.RendezVousException, commande.DateFin, commande.HeureFin);
+            }
 
             context.SaveChanges();
 
@@ -1107,6 +1130,13 @@ namespace GestionCoutureApp.Services
             existante.DateFin    = dateFin;
             existante.HeureDebut = heureDebut;
             existante.HeureFin   = heureFin;
+
+            // ÉTAPE 1 PERF — recalculer DateRdvEffective pour toutes les pièces
+            foreach (var p in existante.Pieces)
+            {
+                p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                    p.RendezVousException, dateFin, heureFin);
+            }
 
             context.SaveChanges();
 
@@ -1216,6 +1246,10 @@ namespace GestionCoutureApp.Services
                 commande.DateSuppression = _clock.Now;
                 commande.IdOperateurSuppression = idOperateur;
                 commande.NomOperateurSuppression = nomOperateur;
+
+                // ÉTAPE 1 PERF — propager la désactivation aux pièces
+                foreach (var p in commande.Pieces)
+                    p.CommandeActive = false;
 
                 context.SaveChanges();
 
@@ -1416,6 +1450,10 @@ namespace GestionCoutureApp.Services
 
             // Pièce + mesures + matériaux en un seul SaveChanges (transaction).
             RattacherMesuresEtMateriaux(commande, piece, mesures, materiaux, idOperateur, nomOperateur);
+            // ÉTAPE 1 PERF — colonnes dénormalisées
+            piece.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                piece.RendezVousException, commande.DateFin, commande.HeureFin);
+            piece.CommandeActive = DateRdvHelper.CalculerCommandeActive(commande.EstSupprimee, commande.EstAnnulee);
             context.PiecesCommande.Add(piece);
             context.SaveChanges();
 
@@ -1681,7 +1719,11 @@ namespace GestionCoutureApp.Services
                 CheminPhoto = source.CheminPhoto,
                 IdCouturier = source.IdCouturier,
                 MontantCouture = source.MontantCouture,
-                Statut = "A faire"
+                Statut = "A faire",
+                // ÉTAPE 1 PERF — colonnes dénormalisées
+                DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                    null, commande.DateFin, commande.HeureFin),
+                CommandeActive = DateRdvHelper.CalculerCommandeActive(commande.EstSupprimee, commande.EstAnnulee)
             };
 
             context.PiecesCommande.Add(nouvellePiece);

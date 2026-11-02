@@ -167,7 +167,10 @@ namespace GestionCoutureApp.Data
                     DescriptionPrecision = desc,
                     Statut = statut,
                     MontantCouture = montant,
-                    Mesures = MesuresPour(typeNom)
+                    Mesures = MesuresPour(typeNom),
+                    // ÉTAPE 1 PERF — colonnes dénormalisées
+                    DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(null, dateFin, null),
+                    CommandeActive = true
                 };
 
                 commandes.Add(new Commande

@@ -101,6 +101,21 @@ namespace GestionCoutureApp.Models
             Commande.DateFin < DateTime.Now &&
             (Statut == "A faire" || Statut == "En cours");
 
+        // ════════════════════════════════════════════════════════════════
+        // ÉTAPE 1 PERF — Colonnes dénormalisées pour indexation
+        // ════════════════════════════════════════════════════════════════
+        // DateRdvEffective : date de RDV calculée et persistée, indexable.
+        //   = RendezVousException ?? DateFin.Date + (HeureFin ?? 17:00)
+        // Unifiée avec la règle métier (AlerteService utilisait déjà 17:00 ;
+        // RetardAlerteService utilisait HeureFin ?? HeureDebut → corrigé vers 17:00).
+        // Maintenue par CommandeService / RetardAlerteService à chaque modification.
+        public DateTime DateRdvEffective { get; set; }
+
+        // CommandeActive : true si la commande parente n'est ni supprimée ni annulée.
+        // Permet de filtrer les pièces SANS jointure sur Commandes (gain majeur à 3M).
+        // Maintenue par CommandeService à chaque suppression/annulation.
+        public bool CommandeActive { get; set; } = true;
+
         [NotMapped]
         public string StatutAffiche => Statut switch
         {

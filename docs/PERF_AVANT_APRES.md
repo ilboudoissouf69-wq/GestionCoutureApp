@@ -45,7 +45,12 @@ de milliers d'éléments WPF**.
 
 | Méthode                          | Avant | Après | Statut |
 |----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
+| Colonnes DateRdvEffective + CommandeActive | —     | ajoutées | ✅ |
+| Migration + backfill SQL          | —     | créé  | ✅ |
+| Index (Statut, DateRdvEffective), (IdCouturier, Statut), Commandes(EstSupprimee, EstAnnulee, DateFin) | —     | créés | ✅ |
+| Formule unifiée (HeureFin ?? 17:00) | HeureFin ?? HeureDebut | HeureFin ?? 17:00 | ✅ |
+| Maintien dans Ajouter / ModifierInfosCommande / AjouterPiece / DupliquerPiece / Modifier / SupprimerAsync / AnnulerParSecretaireAsync / ReporterRendezVousAsync | — | ✅ | ✅ |
+| Tests existants (356)             | verts | verts | ✅ |
 
 ### Étape 2 — Alertes RDV
 

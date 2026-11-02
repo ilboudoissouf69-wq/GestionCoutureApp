@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Réutilise les modèles et le DbContext du projet principal -->
-    <UseWPF>true</UseWPF>
+    <!-- PAS de UseWPF : le générateur est une console pure,
+         évite le bug wpftmp qui duplique les attributs d'assembly -->
     <RootNamespace>GestionCoutureApp.StressDataGenerator</RootNamespace>
     <AssemblyName>StressDataGenerator</AssemblyName>
   </PropertyGroup>

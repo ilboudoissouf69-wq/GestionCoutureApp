@@ -36,11 +36,9 @@ namespace GestionCoutureApp.Services
 
         public static DateTime CalculerEcheancePiece(PieceCommande piece, Commande commande)
         {
-            if (piece.RendezVousException.HasValue)
-                return piece.RendezVousException.Value;
-
-            var heure = commande.HeureFin ?? commande.HeureDebut;
-            return commande.DateFin.Date + heure;
+            // ÉTAPE 1 PERF — formule unifiée : HeureFin ?? 17:00 (pas HeureDebut)
+            return DateRdvHelper.CalculerDateRdvEffective(
+                piece.RendezVousException, commande.DateFin, commande.HeureFin);
         }
 
         public static DateTime CalculerEcheanceRetour(Retour ret)
@@ -461,6 +459,8 @@ namespace GestionCoutureApp.Services
                 ancienne = piece.RendezVousException ?? CalculerEcheancePiece(piece, piece.Commande!);
                 nouvelle = ancienne.AddDays(jours);
                 piece.RendezVousException = nouvelle;
+                // ÉTAPE 1 PERF — maintenir DateRdvEffective (RendezVousException = prioritaire)
+                piece.DateRdvEffective = nouvelle;
                 idClient = piece.Commande?.IdClient ?? 0;
                 idEntiteAudit = piece.IdCommande;
                 entiteAudit = "Commande";
@@ -476,9 +476,15 @@ namespace GestionCoutureApp.Services
                     Statuts = cmd.Pieces.Select(p => p.Statut).ToList(),
                     Commissions = cmd.Pieces.Select(p => p.IdCommission).ToList()
                 };
-                ancienne = cmd.DateFin.Date + (cmd.HeureFin ?? cmd.HeureDebut);
+                ancienne = DateRdvHelper.CalculerDateRdvEffective(null, cmd.DateFin, cmd.HeureFin);
                 nouvelle = ancienne.AddDays(jours);
                 cmd.DateFin = cmd.DateFin.Date.AddDays(jours);
+                // ÉTAPE 1 PERF — recalculer DateRdvEffective pour toutes les pièces
+                foreach (var p in cmd.Pieces)
+                {
+                    p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                        p.RendezVousException, cmd.DateFin, cmd.HeureFin);
+                }
                 idClient = cmd.IdClient;
                 idEntiteAudit = cmd.IdCommande;
                 entiteAudit = "Commande";
