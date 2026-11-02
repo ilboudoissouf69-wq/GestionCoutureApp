@@ -35,6 +35,11 @@ namespace GestionCoutureApp.Views
         private readonly Dictionary<int, DateTime> _dernieresNotifications = new();
         private static readonly TimeSpan DelaiRepetitionNotif = TimeSpan.FromMinutes(15);
 
+        // ── Perf : debounce 500 ms sur CommandeChanged + garde contre re-entrée ──
+        private DispatcherTimer? _debounceTimer;
+        private bool _chargementEnCours;
+        private const int MAX_CARTES_PAR_SECTION = 200;
+
         // ══════════════════════════════════════════════════════════════════
         // CONSTRUCTEUR
         // ══════════════════════════════════════════════════════════════════
@@ -51,6 +56,14 @@ namespace GestionCoutureApp.Views
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
             _timer.Tick += async (s, e) => await ChargerDonnees();
 
+            // Debounce 500 ms sur CommandeChanged
+            _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _debounceTimer.Tick += async (s, e) =>
+            {
+                _debounceTimer!.Stop();
+                await ChargerDonnees();
+            };
+
             Loaded += async (s, e) =>
             {
                 await ChargerDonnees();
@@ -61,6 +74,7 @@ namespace GestionCoutureApp.Views
             Unloaded += (s, e) =>
             {
                 _timer.Stop();
+                _debounceTimer?.Stop();
                 _commandeService.CommandeChanged -= OnCommandeChanged;
             };
         }
@@ -70,7 +84,12 @@ namespace GestionCoutureApp.Views
         // ══════════════════════════════════════════════════════════════════
         private async void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
         {
-            await Dispatcher.InvokeAsync(async () => await ChargerDonnees());
+            // Perf-fix : debounce 500 ms, ne recharge pas immédiatement
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _debounceTimer?.Stop();
+                _debounceTimer?.Start();
+            });
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -78,16 +97,24 @@ namespace GestionCoutureApp.Views
         // ══════════════════════════════════════════════════════════════════
         private async Task ChargerDonnees()
         {
+            // Garde : un seul chargement à la fois
+            if (_chargementEnCours) return;
+            // Ne pas recharger si la vue n'est pas visible
+            if (!IsLoaded) return;
+            _chargementEnCours = true;
+
             using var t = GestionCoutureApp.Helpers.PerfLogger.Start("AlertesView.ChargerDonnees");
             try
             {
-                _alertesProduction = await _alerteService.ObtenirAlertesActuelles();
-                _alertesRetrait    = await _alerteService.ObtenirRendezVousSemaine();
-                _alertesRetard     = await _alerteService.ObtenirRetards();
-                // Étape 6 : retours actifs
-                try { _alertesRetours = await _alerteService.ObtenirAlertesRetours(); }
-                catch { _alertesRetours = new(); }
-                // Étape 7 : risque de retard
+                // Perf-fix : UNE requête pour les 3 sections (production, retrait, retards)
+                // + UNE pour les retours (déjà incluse dans ObtenirToutesAlertesAsync)
+                var toutes = await _alerteService.ObtenirToutesAlertesAsync();
+                _alertesProduction = toutes.Production;
+                _alertesRetrait    = toutes.Retrait;
+                _alertesRetard     = toutes.Retards;
+                _alertesRetours    = toutes.Retours;
+
+                // Étape 7 : risque de retard (requête séparée, avec pré-filtre SQL)
                 try { _alertesRisqueRetard = await _retardAlerteService.ObtenirAlertesRisqueRetardAsync(); }
                 catch { _alertesRisqueRetard = new(); }
 
@@ -97,6 +124,10 @@ namespace GestionCoutureApp.Views
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[AlertesView] Erreur chargement : {ex.Message}");
+            }
+            finally
+            {
+                _chargementEnCours = false;
             }
         }
 
@@ -180,13 +211,19 @@ namespace GestionCoutureApp.Views
             var cartesAujourdhui = Grouper(auJourdhui, "💬 Rappel RDV");
             var cartesImminentes = Grouper(imminentes, "");
 
-            // 6. Mise à jour badges KPI
+            // 6. Mise à jour badges KPI (sur le total, pas sur le plafond)
             TxtBadgeNbPrets.Text       = cartesPrets.Count.ToString();
             TxtBadgeNbRetards.Text     = cartesRetards.Count.ToString();
             TxtBadgeNbAujourdhui.Text  = cartesAujourdhui.Count.ToString();
             TxtBadgeNbImminentes.Text  = cartesImminentes.Count.ToString();
 
-            // 7. Alimenter les sections
+            // 7. Plafond 200 cartes par section (aucune donnée supprimée)
+            cartesPrets      = CapSection(cartesPrets);
+            cartesRetards    = CapSection(cartesRetards);
+            cartesAujourdhui = CapSection(cartesAujourdhui);
+            cartesImminentes = CapSection(cartesImminentes);
+
+            // 8. Alimenter les sections
             AppliquerSection(ListePrets,      TxtZeroPrets,      cartesPrets);
             AppliquerSection(ListeRetards,    TxtZeroRetard,     cartesRetards);
             AppliquerSection(ListeAujourdhui, TxtZeroAujourdhui, cartesAujourdhui);
@@ -282,6 +319,16 @@ namespace GestionCoutureApp.Views
                 liste.Visibility   = Visibility.Visible;
                 msgVide.Visibility = Visibility.Collapsed;
             }
+        }
+
+        /// <summary>
+        /// Plafonne une section à MAX_CARTES_PAR_SECTION cartes.
+        /// Aucune donnée n'est supprimée : le badge KPI affiche le total réel.
+        /// </summary>
+        private static List<AlerteCommandeVm> CapSection(List<AlerteCommandeVm> cartes)
+        {
+            if (cartes.Count <= MAX_CARTES_PAR_SECTION) return cartes;
+            return cartes.Take(MAX_CARTES_PAR_SECTION).ToList();
         }
 
         // ══════════════════════════════════════════════════════════════════
