@@ -338,26 +338,39 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
             var types = ActionsAntiFraude.Toutes;
 
-            var entrees = context.JournalAudit
+            // ── GroupBy SQL (IdOperateur, TypeAction) → Count ──
+            // Au lieu de charger toutes les entrées individuelles.
+            var compteurs = context.JournalAudit
                 .Where(j => j.DateHeureUtc >= depuisUtc && types.Contains(j.TypeAction))
-                .Select(j => new { j.IdOperateur, j.NomOperateur, j.RoleOperateur, j.TypeAction, j.DateHeureUtc })
+                .GroupBy(j => new { j.IdOperateur, j.TypeAction })
+                .Select(g => new { g.Key.IdOperateur, g.Key.TypeAction, Count = g.Count() })
                 .ToList();
 
-            return entrees
+            // ── Nom/rôle les plus récents par opérateur (projection légère) ──
+            var operateursInfo = context.JournalAudit
+                .Where(j => j.DateHeureUtc >= depuisUtc && types.Contains(j.TypeAction))
+                .Select(j => new { j.IdOperateur, j.NomOperateur, j.RoleOperateur, j.DateHeureUtc })
+                .ToList()
                 .GroupBy(e => e.IdOperateur)
-                .Select(g =>
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(e => e.DateHeureUtc).First());
+
+            var idsOperateurs = compteurs.Select(c => c.IdOperateur).Distinct().ToList();
+
+            return idsOperateurs
+                .Select(id =>
                 {
-                    // Nom/rôle les plus récents : un employé renommé reste sur une seule ligne.
-                    var dernier = g.OrderByDescending(e => e.DateHeureUtc).First();
+                    var info = operateursInfo.GetValueOrDefault(id);
                     return new IndicateurAntiFraude
                     {
-                        IdOperateur       = g.Key,
-                        NomOperateur      = dernier.NomOperateur,
-                        RoleOperateur     = dernier.RoleOperateur,
-                        Suppressions      = g.Count(e => e.TypeAction == ActionsAntiFraude.Suppression),
-                        Annulations       = g.Count(e => e.TypeAction == ActionsAntiFraude.Annulation),
-                        ModificationsPrix = g.Count(e => ActionsAntiFraude.ModificationsPrix.Contains(e.TypeAction)),
-                        TentativesRefusees = g.Count(e => e.TypeAction == ActionsAntiFraude.TentativeRefusee)
+                        IdOperateur       = id,
+                        NomOperateur      = info?.NomOperateur ?? "",
+                        RoleOperateur     = info?.RoleOperateur ?? "",
+                        Suppressions      = compteurs.Where(c => c.IdOperateur == id && c.TypeAction == ActionsAntiFraude.Suppression).Sum(c => c.Count),
+                        Annulations       = compteurs.Where(c => c.IdOperateur == id && c.TypeAction == ActionsAntiFraude.Annulation).Sum(c => c.Count),
+                        ModificationsPrix  = compteurs.Where(c => c.IdOperateur == id && ActionsAntiFraude.ModificationsPrix.Contains(c.TypeAction)).Sum(c => c.Count),
+                        TentativesRefusees = compteurs.Where(c => c.IdOperateur == id && c.TypeAction == ActionsAntiFraude.TentativeRefusee).Sum(c => c.Count)
                     };
                 })
                 .OrderByDescending(i => i.Total)

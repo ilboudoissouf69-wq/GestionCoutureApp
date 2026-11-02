@@ -115,6 +115,19 @@ namespace GestionCoutureApp.Services
         }
     }
 
+    /// <summary>DTO regroupant les 4 sections d'alertes en une seule requête.</summary>
+    public sealed class ToutesAlertesDto
+    {
+        /// <summary>Production : alertes "pas encore prise en charge" et "RDV proche".</summary>
+        public List<AlerteRendezVous> Production { get; set; } = new();
+        /// <summary>Retrait : pièces terminées ou RDV dans les 7 jours.</summary>
+        public List<AlerteRendezVous> Retrait { get; set; } = new();
+        /// <summary>Retards : RDV déjà dépassé (pièce non terminée).</summary>
+        public List<AlerteRendezVous> Retards { get; set; } = new();
+        /// <summary>Retours actifs avec DateRdvReprise renseignée.</summary>
+        public List<AlerteRendezVous> Retours { get; set; } = new();
+    }
+
     public interface IAlerteService
     {
         Task<List<AlerteRendezVous>> ObtenirAlertesActuelles();
@@ -126,6 +139,15 @@ namespace GestionCoutureApp.Services
         /// (commandes non supprimées uniquement).
         /// </summary>
         Task<List<AlerteRendezVous>> ObtenirRetards();
+
+        /// <summary>
+        /// Toutes les alertes en UNE seule requête (production, retrait, retards, retours).
+        /// Remplace les 4-5 appels séparés d'AlertesView et du Dashboard.
+        /// </summary>
+        Task<ToutesAlertesDto> ObtenirToutesAlertesAsync();
+
+        /// <summary>Invalide le cache interne (à appeler après modification de pièce).</summary>
+        void InvaliderCache();
 
         /// <summary>
         /// Étape 6 : Retours actifs avec DateRdvReprise renseignée

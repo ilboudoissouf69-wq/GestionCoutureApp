@@ -321,23 +321,20 @@ namespace GestionCoutureApp.Views
                 .Sum();
 
             // KPI 2 & 3 — Commandes en cours / retards
-            var commandesLight = context.Commandes
+            // Perf-fix : COUNT SQL au lieu de charger toutes les commandes avec leurs pièces.
+            // Règle d'origine conservée : en cours = commande sans pièce OU avec au moins
+            // une pièce != "Livree". Retards = même condition + DateFin < aujourd'hui.
+            // Pas de .Date dans le filtre pour permettre l'usage de l'index.
+            int enCours = context.Commandes
                 .AsNoTracking()
-                .Where(c => !c.EstSupprimee && !c.EstAnnulee)
-                .Select(c => new
-                {
-                    c.DateFin,
-                    Statuts = c.Pieces.Select(p => p.Statut).ToList()
-                })
-                .ToList();
+                .Count(c => !c.EstSupprimee && !c.EstAnnulee
+                         && (!c.Pieces.Any() || c.Pieces.Any(p => p.Statut != "Livree")));
 
-            int enCours = commandesLight.Count(c =>
-                c.Statuts.Count == 0 || c.Statuts.Any(s => s != "Livree"));
-
-            int retards = commandesLight.Count(c =>
-                (c.Statuts.Count == 0 || c.Statuts.Any(s => s != "Livree")) &&
-                c.DateFin != default &&
-                c.DateFin.Date < aujourdhui);
+            int retards = context.Commandes
+                .AsNoTracking()
+                .Count(c => !c.EstSupprimee && !c.EstAnnulee
+                         && (!c.Pieces.Any() || c.Pieces.Any(p => p.Statut != "Livree"))
+                         && c.DateFin < aujourdhui);
 
             // KPI 4 — Dépenses du mois (Boss) ou Clients enregistrés (Secrétaire)
             decimal depMois = 0m;
@@ -564,55 +561,66 @@ namespace GestionCoutureApp.Views
             var couturiers = context.Employes
                 .AsNoTracking()
                 .Where(e => e.Role == "Couturier")
+                .Select(e => new { e.IdEmploye, e.Prenom, e.Nom })
                 .ToList();
 
-            // D3 : CommandeEstValide = commande non null ET non supprimée ET non annulée
-            var piecesParCouturier = context.PiecesCommande
+            // ── Compteurs par GroupBy SQL (IdCouturier, Statut) ──
+            // Pièces actives = non livrée + commande valide (non supprimée, non annulée)
+            var compteurs = context.PiecesCommande
+                .AsNoTracking()
+                .Where(p => p.IdCouturier.HasValue
+                         && p.Commande != null
+                         && !p.Commande.EstSupprimee
+                         && !p.Commande.EstAnnulee
+                         && p.Statut != "Livree")
+                .GroupBy(p => new { p.IdCouturier, p.Statut })
+                .Select(g => new { g.Key.IdCouturier, g.Key.Statut, Count = g.Count() })
+                .ToList();
+
+            // ── Retards : projeter (IdCouturier, IdCommande) puis DISTINCT en mémoire ──
+            var retardsData = context.PiecesCommande
+                .AsNoTracking()
+                .Where(p => p.IdCouturier.HasValue
+                         && p.Commande != null
+                         && !p.Commande.EstSupprimee
+                         && !p.Commande.EstAnnulee
+                         && p.Statut != "Livree"
+                         && p.Commande.DateFin < aujourdhui)
+                .Select(p => new { p.IdCouturier, p.IdCommande })
+                .Distinct()
+                .ToList();
+
+            var retardsParCouturier = retardsData
+                .GroupBy(p => p.IdCouturier!.Value)
+                .ToDictionary(g => g.Key, g => g.Select(p => p.IdCommande).Distinct().Count());
+
+            // ── CA : projection (IdCouturier, MontantCouture) — somme en mémoire ──
+            var caData = context.PiecesCommande
                 .AsNoTracking()
                 .Where(p => p.IdCouturier.HasValue)
-                .Select(p => new
-                {
-                    p.IdCouturier,
-                    p.IdPieceCommande,
-                    p.IdCommande,
-                    p.Statut,
-                    p.MontantCouture,
-                    CommandeDateFin   = p.Commande != null ? p.Commande.DateFin : (DateTime?)null,
-                    // D3 bugfix : exclure les commandes supprimées ET annulées
-                    CommandeEstValide = p.Commande != null
-                                        && !p.Commande.EstSupprimee
-                                        && !p.Commande.EstAnnulee
-                })
-                .ToList();
-
-            var groupes = piecesParCouturier
+                .Select(p => new { p.IdCouturier, p.MontantCouture })
+                .AsEnumerable()
                 .GroupBy(p => p.IdCouturier!.Value)
+                .ToDictionary(g => g.Key, g => g.Sum(p => p.MontantCouture));
+
+            // ── Assemblage par couturier ──
+            var compteursParCouturier = compteurs
+                .GroupBy(c => c.IdCouturier!.Value)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
             var modeles = new List<ChargeCouturierDtoItem>();
             foreach (var c in couturiers)
             {
-                var pieces = groupes.TryGetValue(c.IdEmploye, out var lst) ? lst : new();
+                var stats = compteursParCouturier.TryGetValue(c.IdEmploye, out var lst) ? lst : new();
+                int terminees = stats.Where(s => s.Statut == "Terminee").Sum(s => s.Count);
+                int enCours   = stats.Where(s => s.Statut == "En cours").Sum(s => s.Count);
+                int aFaire    = stats.Where(s => s.Statut == "A faire").Sum(s => s.Count);
+                int total     = terminees + enCours + aFaire;
 
-                var actives = pieces
-                    .Where(p => p.Statut != "Livree" && p.CommandeEstValide)
-                    .ToList();
+                int nbRetards = retardsParCouturier.TryGetValue(c.IdEmploye, out var r) ? r : 0;
+                decimal caTotal = caData.TryGetValue(c.IdEmploye, out var ca) ? ca : 0m;
 
-                int terminees = actives.Count(p => p.Statut == "Terminee");
-                int enCours   = actives.Count(p => p.Statut == "En cours");
-                int aFaire    = actives.Count(p => p.Statut == "A faire");
-                int total     = actives.Count;
-
-                int nbRetards = pieces
-                    .Where(p => p.Statut != "Livree" &&
-                                p.CommandeEstValide &&
-                                p.CommandeDateFin.HasValue &&
-                                p.CommandeDateFin.Value.Date < aujourdhui)
-                    .Select(p => p.IdCommande)
-                    .Distinct()
-                    .Count();
-
-                decimal caTotal = pieces.Sum(p => p.MontantCouture);
+                string nomComplet = $"{c.Prenom} {c.Nom}";
 
                 GridLength largTerminees, largEnCours, largReste;
                 if (total > 0)
@@ -629,7 +637,7 @@ namespace GestionCoutureApp.Views
                 }
 
                 modeles.Add(new ChargeCouturierDtoItem(
-                    c.NomComplet, total, aFaire, enCours, terminees, nbRetards, caTotal,
+                    nomComplet, total, aFaire, enCours, terminees, nbRetards, caTotal,
                     largTerminees, largEnCours, largReste));
             }
             return modeles;
