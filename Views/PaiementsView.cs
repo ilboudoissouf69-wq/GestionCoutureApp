@@ -295,11 +295,21 @@ namespace GestionCoutureApp.Views
 
         private void ChargerCommandes()
         {
+            // Perf-fix : chargement asynchrone, ne bloque plus le thread UI
+            _ = ChargerCommandesAsync();
+        }
+
+        private async Task ChargerCommandesAsync()
+        {
             try
             {
-                var encaissables = App.Services
-                    .GetRequiredService<CommandesEncaissablesService>()
-                    .ObtenirCommandesEncaissables();
+                if (CmbCommandesNonSoldees != null)
+                    CmbCommandesNonSoldees.IsEnabled = false;
+
+                var encaissables = await Task.Run(() =>
+                    App.Services
+                        .GetRequiredService<CommandesEncaissablesService>()
+                        .ObtenirCommandesEncaissables());
 
                 _toutesCommandesEncaissables = encaissables.Select(c => new CommandeItem(
                     c.IdCommande,
@@ -308,8 +318,12 @@ namespace GestionCoutureApp.Views
                         + " · reste : " + c.ResteAPayer.ToString("N0") + " FCFA)"
                 )).ToList();
 
-                CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
-                CmbCommandesNonSoldees.SelectedValuePath = "IdCommande";
+                if (CmbCommandesNonSoldees != null)
+                {
+                    CmbCommandesNonSoldees.ItemsSource   = _toutesCommandesEncaissables;
+                    CmbCommandesNonSoldees.IsEnabled     = true;
+                    CmbCommandesNonSoldees.SelectedValuePath = "IdCommande";
+                }
 
                 if (TxtRechercheCommande != null)
                     TxtRechercheCommande.Text = "";
@@ -318,6 +332,8 @@ namespace GestionCoutureApp.Views
             {
                 MessageBox.Show("Erreur lors du chargement des commandes : " + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (CmbCommandesNonSoldees != null)
+                    CmbCommandesNonSoldees.IsEnabled = true;
             }
         }
 

@@ -59,20 +59,9 @@ namespace GestionCoutureApp.Views
             _utilisateur = auth.UtilisateurConnecte
                 ?? throw new InvalidOperationException("Aucun utilisateur connecté.");
 
-            try
-            {
-                _commandes = _context.Commandes
-                    .Include(c => c.Client)
-                    .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
-                    .Include(c => c.Paiements)
-                    .Where(c => !c.EstSupprimee)
-                    .OrderByDescending(c => c.DateDebut)
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("RetoursView commandes: " + ex.Message);
-            }
+            // Perf-fix : plus de chargement de toutes les commandes dans le constructeur.
+            // Les commandes éligibles sont chargées à la demande quand la modale s'ouvre.
+            _commandes = new List<Commande>();
 
             ChargerRetours();
             _initialise = true;
@@ -466,6 +455,23 @@ namespace GestionCoutureApp.Views
         public void OuvrirFenetreRetour(Retour? retourExistant)
         {
             bool modeEdition = retourExistant != null;
+
+            // Perf-fix : charger les commandes éligibles à la demande (top 50 les plus récentes
+            // avec au moins une pièce Livree/Terminee), pas toute la base.
+            var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            if (!modeEdition)
+            {
+                using var ctxShort = factory.CreateDbContext();
+                _commandes = ctxShort.Commandes
+                    .AsNoTracking()
+                    .Include(c => c.Client)
+                    .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                    .Where(c => !c.EstSupprimee
+                             && c.Pieces.Any(p => p.Statut == "Livree" || p.Statut == "Terminee"))
+                    .OrderByDescending(c => c.DateDebut)
+                    .Take(50)
+                    .ToList();
+            }
 
             var commandesEligibles = modeEdition
                 ? _commandes
