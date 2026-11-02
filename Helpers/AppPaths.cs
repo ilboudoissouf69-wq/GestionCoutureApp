@@ -78,7 +78,7 @@ namespace GestionCoutureApp.Helpers
         /// avant de lever SQLITE_BUSY (au lieu d'échouer immédiatement).
         /// </summary>
         public static string ChaineConnexionSqlite =>
-            $"Data Source={CheminBaseDeDonnees};Cache=Shared;Default Timeout=30";
+            $"Data Source={CheminBaseDeDonnees};Default Timeout=30";
 
         private static string InitialiserDossierApplication()
         {

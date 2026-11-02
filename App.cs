@@ -172,6 +172,10 @@ namespace GestionCoutureApp
                 // via ADO.NET en vérifiant __EFMigrationsHistory pour l'idempotence.
                 AppliquerMigrationsManquantes(context, logService);
 
+                // Perf : ANALYZE après migration/gros import pour mettre à jour
+                // les statistiques d'index utilisées par l'optimiseur SQLite.
+                context.Database.ExecuteSqlRaw("ANALYZE;");
+
                 // ── LOG DIAGNOSTIC (étape 2) : état APRÈS tout ───────────────
                 LogDiagnosticSchema(logService, context, "APRÈS Migrate() + corrections");
 
@@ -302,6 +306,11 @@ namespace GestionCoutureApp
                 // verrouille ce comportement.
                 context.Database.ExecuteSql($"PRAGMA journal_mode=WAL;");
                 context.Database.ExecuteSql($"PRAGMA foreign_keys=ON;");
+                // Perf : pragmas de performance SQLite
+                context.Database.ExecuteSql($"PRAGMA synchronous=NORMAL;");
+                context.Database.ExecuteSql($"PRAGMA busy_timeout=5000;");
+                context.Database.ExecuteSql($"PRAGMA temp_store=MEMORY;");
+                context.Database.ExecuteSql($"PRAGMA cache_size=-65536;"); // ~64 Mo
 
                 // ── Configuration initiale (Phase 1) ─────────────────────────────
                 // Au premier lancement (base vide), on affiche une fenêtre de configuration
@@ -584,6 +593,18 @@ namespace GestionCoutureApp
                 }
                 catch { /* ne pas empêcher la fermeture sur un problème de journalisation */ }
             }
+
+            // Perf : PRAGMA optimize à la fermeture (SQLite nettoie ses index internes)
+            try
+            {
+                var factory = Services?.GetService<IDbContextFactory<ApplicationDbContext>>();
+                if (factory != null)
+                {
+                    using var ctx = factory.CreateDbContext();
+                    ctx.Database.ExecuteSqlRaw("PRAGMA optimize;");
+                }
+            }
+            catch { /* ne pas empêcher la fermeture */ }
 
             base.OnExit(e);
         }

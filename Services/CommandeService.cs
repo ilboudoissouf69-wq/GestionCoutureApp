@@ -171,17 +171,33 @@ namespace GestionCoutureApp.Services
                     (c.Client != null && (c.Client.Nom.Contains(motCle) || c.Client.Prenom.Contains(motCle))) ||
                     c.Pieces.Any(p => p.TypeVetement.Contains(motCle)));
 
-            // Filtre statut côté SQL — pré-filtre large pour réduire le jeu de données
-            // L'affinage exact (StatutGlobal) est fait EN MÉMOIRE après le chargement mais AVANT Skip/Take
+            // Filtre statut — SQL EXACT équivalent à StatutGlobal (plus de pré-filtre large).
+            // StatutGlobal est [NotMapped], mais sa logique est traduisible en SQL :
+            //   "A faire"   : toutes les pièces sont "A faire"
+            //   "En cours"  : au moins une "En cours" et aucune "Terminee"/"Livree"
+            //   "Terminee"  : au moins une "Terminee" et aucune "Livree"
+            //   "Livree"    : au moins une "Livree"
+            // Le filtre mémoire .Replace(" partiellement","") couvre les variantes.
             if (!string.IsNullOrEmpty(statut))
             {
                 if (statut == "Retard")
                     query = query.Where(c =>
                         c.DateFin < maintenant &&
                         c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
+                else if (statut == "A faire")
+                    query = query.Where(c => c.Pieces.All(p => p.Statut == "A faire"));
+                else if (statut == "En cours")
+                    query = query.Where(c =>
+                        c.Pieces.Any(p => p.Statut == "En cours")
+                     && !c.Pieces.Any(p => p.Statut == "Terminee" || p.Statut == "Livree"));
+                else if (statut == "Terminee")
+                    query = query.Where(c =>
+                        c.Pieces.Any(p => p.Statut == "Terminee")
+                     && !c.Pieces.Any(p => p.Statut == "Livree"));
+                else if (statut == "Livree")
+                    query = query.Where(c => c.Pieces.Any(p => p.Statut == "Livree"));
                 else
-                    // Pré-filtre SQL : inclut les commandes qui ont AU MOINS UNE pièce avec ce statut
-                    // (sur-sélection intentionnelle, affinée en mémoire juste après)
+                    // Autre valeur : pré-filtre large (rare)
                     query = query.Where(c => c.Pieces.Any(p => p.Statut == statut));
             }
 
@@ -195,35 +211,22 @@ namespace GestionCoutureApp.Services
             if (dateFin.HasValue)
                 query = query.Where(c => c.DateDebut < dateFin.Value.Date.AddDays(1));
 
-            // Perf-fix : Skip/Take en SQL, pas de chargement total en mémoire.
-            // Pour "Retard", le filtre SQL est exact (DateFin + statut pièce).
-            // Pour les autres statuts, le pré-filtre SQL est large, l'affinage
-            // StatutGlobal ne porte que sur la PAGE de 20 résultats.
-            int totalCount;
-            List<Commande> items;
+            // Perf-fix : Skip/Take en SQL, le filtre statut est maintenant EXACT en SQL.
+            // Plus besoin d'affinage mémoire (sauf cas rare de commande sans pièce).
+            int totalCount = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(c => c.DateDebut)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
+            // Affinage mémoire résiduel : couvre le cas rare d'une commande sans pièce
+            // (StatutGlobal retourne le vieux champ Statut, non filtrable en SQL).
             if (!string.IsNullOrEmpty(statut) && statut != "Retard")
             {
-                totalCount = await query.CountAsync();
-                items = await query
-                    .OrderByDescending(c => c.DateDebut)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToListAsync();
-
-                // Affinage mémoire sur la petite page (≤ pageSize items)
                 items = items.Where(c =>
                     c.StatutGlobal == statut ||
                     c.StatutGlobal.Replace(" partiellement", "") == statut).ToList();
-            }
-            else
-            {
-                totalCount = await query.CountAsync();
-                items = await query
-                    .OrderByDescending(c => c.DateDebut)
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToListAsync();
             }
 
             return new PagedResult<Commande>

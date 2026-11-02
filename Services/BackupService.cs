@@ -60,7 +60,7 @@ namespace GestionCoutureApp.Services
                 // Supprime une éventuelle sauvegarde partielle d'un essai précédent
                 if (File.Exists(dest)) File.Delete(dest);
 
-                using (var connexion = new SqliteConnection($"Data Source={dbSource};Cache=Shared"))
+                using (var connexion = new SqliteConnection($"Data Source={dbSource}"))
                 {
                     connexion.Open();
                     using var commande = connexion.CreateCommand();
