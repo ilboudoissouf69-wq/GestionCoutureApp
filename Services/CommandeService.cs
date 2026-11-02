@@ -1839,7 +1839,7 @@ namespace GestionCoutureApp.Services
                     .ThenInclude(p => p.Couturier)
                 .AsQueryable();
 
-            // Filtre par statut (filtre virtuel "Retard" = DateFin dépassée + pièce active)
+            // Filtre par statut — SQL EXACT équivalent à StatutGlobal (même logique que ObtenirPageLightAsync)
             if (!string.IsNullOrEmpty(statut))
             {
                 if (statut == "Retard")
@@ -1848,13 +1848,20 @@ namespace GestionCoutureApp.Services
                         c.DateFin < maintenant &&
                         c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"));
                 }
+                else if (statut == "A faire")
+                    query = query.Where(c => c.Pieces.All(p => p.Statut == "A faire"));
+                else if (statut == "En cours")
+                    query = query.Where(c =>
+                        c.Pieces.Any(p => p.Statut == "En cours")
+                     && !c.Pieces.Any(p => p.Statut == "Terminee" || p.Statut == "Livree"));
+                else if (statut == "Terminee")
+                    query = query.Where(c =>
+                        c.Pieces.Any(p => p.Statut == "Terminee")
+                     && !c.Pieces.Any(p => p.Statut == "Livree"));
+                else if (statut == "Livree")
+                    query = query.Where(c => c.Pieces.Any(p => p.Statut == "Livree"));
                 else
-                {
-                    // Le statut global est calculé : on filtre de façon approchée
-                    // (toutes les pièces au statut demandé OU au moins une pièce
-                    //  pour les statuts partiels). Puis on affine en mémoire.
                     query = query.Where(c => c.Pieces.Any(p => p.Statut == statut));
-                }
             }
 
             // Filtre recherche (nom/prénom client ou type de vêtement d'une pièce)
