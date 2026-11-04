@@ -32,14 +32,13 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("TresorerieService.CalculerChiffreAffaires", _logger);
             using var context = _contextFactory.CreateDbContext();
 
-            // AsEnumerable() : SQLite ne supporte pas Sum() sur decimal côté SQL
-            var ca = context.Paiements
+            // ÉTAPE 5 PERF — SUM SQL via (double) pour decimal SQLite
+            var ca = (decimal)context.Paiements
                 .AsNoTracking()
-                .Where(p => !p.EstAnnule 
-                         && p.DatePaiement.Date >= dateDebut.Date 
-                         && p.DatePaiement.Date <= dateFin.Date)
-                .AsEnumerable()
-                .Sum(p => p.MontantPaye);
+                .Where(p => !p.EstAnnule
+                         && p.DatePaiement >= dateDebut.Date
+                         && p.DatePaiement < dateFin.Date.AddDays(1))
+                .Sum(p => (double)p.MontantPaye);
 
             _logger.LogInformation(
                 "CA calculé — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy} : {CA:N0} FCFA",
@@ -57,13 +56,14 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("TresorerieService.CalculerTotalDepenses", _logger);
             using var context = _contextFactory.CreateDbContext();
 
-            var totalDepenses = context.Depenses
+            // ÉTAPE 5 PERF — SUM SQL via (double) pour decimal SQLite
+            var totalDepenses = (decimal)context.Depenses
                 .AsNoTracking()
-                .Where(d => d.DateDepense.Date >= dateDebut.Date 
-                         && d.DateDepense.Date <= dateFin.Date
-                         && d.StatutValidation == "Validee") // Seulement les validées
-                .AsEnumerable()
-                .Sum(d => d.Montant);
+                .Where(d => d.DateDepense >= dateDebut.Date
+                         && d.DateDepense < dateFin.Date.AddDays(1)
+                         && d.StatutValidation == "Validee"
+                         && !d.EstAnnulee)
+                .Sum(d => (double)d.Montant);
 
             _logger.LogInformation(
                 "Dépenses calculées — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy} : {Total:N0} FCFA",
@@ -82,18 +82,17 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("TresorerieService.CalculerTotalCommissions", _logger);
             using var context = _contextFactory.CreateDbContext();
 
+            // ÉTAPE 5 PERF — SUM SQL (MontantCommission + PrimeQualite) via double
             var commissions = context.Commissions
                 .AsNoTracking()
-                .Where(c => !c.EstAnnulee 
-                         && c.DateCalcul.Date >= dateDebut.Date 
-                         && c.DateCalcul.Date <= dateFin.Date)
+                .Where(c => !c.EstAnnulee
+                         && c.DateCalcul >= dateDebut.Date
+                         && c.DateCalcul < dateFin.Date.AddDays(1))
                 .ToList();
 
             decimal total = 0m;
             foreach (var c in commissions)
-            {
                 total += c.MontantCommission + c.PrimeQualite;
-            }
 
             _logger.LogInformation(
                 "Commissions calculées — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy} : {Total:N0} FCFA",
@@ -115,8 +114,8 @@ namespace GestionCoutureApp.Services
             var commandesPeriode = context.Commandes
                 .AsNoTracking()
                 .Include(c => c.MaterielSupplements)
-                .Where(c => c.DateFin.Date >= dateDebut.Date 
-                         && c.DateFin.Date <= dateFin.Date
+                .Where(c => c.DateFin >= dateDebut.Date
+                         && c.DateFin < dateFin.Date.AddDays(1)
                          && (c.Statut == "Terminee" || c.Statut == "Livree"))
                 .ToList();
 
@@ -158,8 +157,8 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Paiements)
                 .Where(c => !c.EstSupprimee
-                         && c.DateFin.Date >= dateDebut.Date
-                         && c.DateFin.Date <= dateFin.Date)
+                         && c.DateFin >= dateDebut.Date
+                         && c.DateFin < dateFin.Date.AddDays(1))
                 .ToList();
 
             decimal caEncaisseMateriaux  = 0m;
@@ -202,10 +201,9 @@ namespace GestionCoutureApp.Services
             var paiementsHorsPeriode = context.Paiements
                 .AsNoTracking()
                 .Where(p => !p.EstAnnule
-                         && p.DatePaiement.Date >= dateDebut.Date
-                         && p.DatePaiement.Date <= dateFin.Date
+                         && p.DatePaiement >= dateDebut.Date
+                         && p.DatePaiement < dateFin.Date.AddDays(1)
                          && !idsCommandesPeriode.Contains(p.IdCommande))
-                .AsEnumerable()
                 .ToList();
 
             // Ces paiements sont considérés entièrement comme "couture" (pas de matériaux associés dans la période)
@@ -252,9 +250,9 @@ namespace GestionCoutureApp.Services
             // 3. Commissions et primes (avec détail)
             var commissionsDetaillees = context.Commissions
                 .AsNoTracking()
-                .Where(c => !c.EstAnnulee 
-                         && c.DateCalcul.Date >= dateDebut.Date 
-                         && c.DateCalcul.Date <= dateFin.Date)
+                .Where(c => !c.EstAnnulee
+                         && c.DateCalcul >= dateDebut.Date
+                         && c.DateCalcul < dateFin.Date.AddDays(1))
                 .ToList();
 
             decimal totalCommissions = commissionsDetaillees.Sum(c => c.MontantCommission);
@@ -271,8 +269,8 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Paiements)
                 .Where(c => !c.EstSupprimee
-                         && c.DateFin.Date >= dateDebut.Date 
-                         && c.DateFin.Date <= dateFin.Date)
+                         && c.DateFin >= dateDebut.Date
+                         && c.DateFin < dateFin.Date.AddDays(1))
                 .ToList();
 
             decimal resteAEncaisser = 0m;
@@ -288,9 +286,9 @@ namespace GestionCoutureApp.Services
 
             // 6. Statistiques de comptage
             int nombrePaiements = context.Paiements
-                .Count(p => !p.EstAnnule 
-                         && p.DatePaiement.Date >= dateDebut.Date 
-                         && p.DatePaiement.Date <= dateFin.Date);
+                .Count(p => !p.EstAnnule
+                         && p.DatePaiement >= dateDebut.Date
+                         && p.DatePaiement < dateFin.Date.AddDays(1));
 
             int nombreCommandesLivrees = commandesPeriode
                 .Count(c => c.Statut == "Terminee" || c.Statut == "Livree");
@@ -337,18 +335,18 @@ namespace GestionCoutureApp.Services
             using var context = _contextFactory.CreateDbContext();
 
             bool aPaiements = context.Paiements
-                .Any(p => !p.EstAnnule 
-                       && p.DatePaiement.Date >= dateDebut.Date 
-                       && p.DatePaiement.Date <= dateFin.Date);
+                .Any(p => !p.EstAnnule
+                       && p.DatePaiement >= dateDebut.Date
+                       && p.DatePaiement < dateFin.Date.AddDays(1));
 
             bool aDepenses = context.Depenses
-                .Any(d => d.DateDepense.Date >= dateDebut.Date 
-                       && d.DateDepense.Date <= dateFin.Date);
+                .Any(d => d.DateDepense >= dateDebut.Date
+                       && d.DateDepense < dateFin.Date.AddDays(1));
 
             bool aCommissions = context.Commissions
-                .Any(c => !c.EstAnnulee 
-                       && c.DateCalcul.Date >= dateDebut.Date 
-                       && c.DateCalcul.Date <= dateFin.Date);
+                .Any(c => !c.EstAnnulee
+                       && c.DateCalcul >= dateDebut.Date
+                       && c.DateCalcul < dateFin.Date.AddDays(1));
 
             return aPaiements || aDepenses || aCommissions;
         }
@@ -373,10 +371,10 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Pieces)
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Paiements)
-                .Where(c => !c.EstSupprimee // Ignorer les commandes supprimées logiquement
-                         && c.DateFin.Date >= dateDebut.Date 
-                         && c.DateFin.Date <= dateFin.Date
-                         && (c.Statut == "Terminee" || c.Statut == "Livree" 
+                .Where(c => !c.EstSupprimee
+                         && c.DateFin >= dateDebut.Date
+                         && c.DateFin < dateFin.Date.AddDays(1)
+                         && (c.Statut == "Terminee" || c.Statut == "Livree"
                              || c.Pieces.Any(p => p.Statut == "Terminee" || p.Statut == "Livree")))
                 .ToList();
 
@@ -418,8 +416,8 @@ namespace GestionCoutureApp.Services
             // 2. Paiements encaissés dans la période (argent en caisse)
             var paiementsPeriode = context.Paiements
                 .AsNoTracking()
-                .Where(p => p.DatePaiement.Date >= dateDebut.Date 
-                         && p.DatePaiement.Date <= dateFin.Date)
+                .Where(p => p.DatePaiement >= dateDebut.Date
+                         && p.DatePaiement < dateFin.Date.AddDays(1))
                 .ToList();
 
             decimal totalPaiementsValides = paiementsPeriode.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);

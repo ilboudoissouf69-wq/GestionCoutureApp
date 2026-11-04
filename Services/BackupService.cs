@@ -29,22 +29,48 @@ namespace GestionCoutureApp.Services
     /// </summary>
     public class BackupService : IDisposable
     {
-        private const int MaxBackups = 15;
-        private const int IntervalHrs = 4;
+        // ÉTAPE 7 PERF — rétention 7 sauvegardes, au plus 1 fois par jour
+        private const int MaxBackups   = 7;
+        private const int IntervalHrs  = 24;
 
         private readonly ILogger<BackupService> _logger;
         private readonly System.Threading.Timer _timer;
+        // Chemin du dernier marqueur "déjà sauvegardé aujourd'hui"
+        private static string MarqueurFichier =>
+            Path.Combine(AppPaths.DossierBackups, ".last_backup_date");
 
         public BackupService(ILogger<BackupService> logger)
         {
             _logger = logger;
 
-            // Sauvegarde immédiate au démarrage, puis toutes les IntervalHrs heures
+            // Sauvegarde en arrière-plan (VACUUM INTO est non-bloquant pour les lecteurs).
+            // Délai initial de 30s pour laisser le démarrage de l'app se terminer.
             _timer = new System.Threading.Timer(
-                _ => Sauvegarder(),
+                _ => SauvegarderSiNecessaire(),
                 null,
-                TimeSpan.Zero,
+                TimeSpan.FromSeconds(30),
                 TimeSpan.FromHours(IntervalHrs));
+        }
+
+        /// <summary>Sauvegarde uniquement si aucune sauvegarde n'a été faite aujourd'hui.</summary>
+        public void SauvegarderSiNecessaire()
+        {
+            try
+            {
+                string today = DateTime.Today.ToString("yyyyMMdd");
+                if (File.Exists(MarqueurFichier) && File.ReadAllText(MarqueurFichier).Trim() == today)
+                {
+                    _logger.LogDebug("Sauvegarde ignorée : déjà effectuée aujourd'hui ({Date}).", today);
+                    return;
+                }
+                Sauvegarder();
+                File.WriteAllText(MarqueurFichier, today);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Vérification 'déjà sauvegardé' échouée, sauvegarde forcée.");
+                Sauvegarder();
+            }
         }
 
         public void Sauvegarder()
@@ -133,6 +159,22 @@ namespace GestionCoutureApp.Services
         public void Dispose()
         {
             _timer.Dispose();
+            // ÉTAPE 7 PERF — PRAGMA optimize à la fermeture (met à jour les statistiques du query planner)
+            try
+            {
+                string dbSource = AppPaths.CheminBaseDeDonnees;
+                if (!File.Exists(dbSource)) return;
+                using var conn = new SqliteConnection($"Data Source={dbSource}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "PRAGMA optimize;";
+                cmd.ExecuteNonQuery();
+                _logger.LogDebug("PRAGMA optimize exécuté à la fermeture.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "PRAGMA optimize échoué (non critique).");
+            }
         }
     }
 }

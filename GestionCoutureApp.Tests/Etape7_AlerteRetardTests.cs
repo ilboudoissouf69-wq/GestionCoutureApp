@@ -1,6 +1,7 @@
 using GestionCoutureApp.Data;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using GestionCoutureApp.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace GestionCoutureApp.Tests
@@ -96,7 +97,11 @@ namespace GestionCoutureApp.Tests
                 IdCommande    = cmd.IdCommande,
                 TypeVetement  = "Boubou brodé",
                 Statut        = statut,
-                MontantCouture = 5000m
+                MontantCouture = 5000m,
+                // ÉTAPE 1 PERF — colonnes dénormalisées (requises par ObtenirStatsDashboardAsync)
+                DateRdvEffective = GestionCoutureApp.Helpers.DateRdvHelper.CalculerDateRdvEffective(
+                    null, cmd.DateFin, cmd.HeureFin),
+                CommandeActive = true
             };
             ctx.PiecesCommande.Add(piece);
             ctx.SaveChanges();

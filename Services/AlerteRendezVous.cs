@@ -128,6 +128,32 @@ namespace GestionCoutureApp.Services
         public List<AlerteRendezVous> Retours { get; set; } = new();
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    // ÉTAPE 2 PERF — Nouvelle API SQL (COUNT + pagination)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>Sections d'alertes avec conditions SQL exclusives.</summary>
+    public enum SectionAlerte
+    {
+        Retards,
+        Prets,
+        Aujourdhui,
+        Imminentes,
+        RisqueRetard
+    }
+
+    /// <summary>Compteurs SQL pour les badges KPI (aucune ligne détaillée).</summary>
+    public sealed class ResumeAlertesDto
+    {
+        public int NbRetards { get; set; }
+        public int NbPrets { get; set; }
+        public int NbAujourdhui { get; set; }
+        public int NbImminentes { get; set; }
+        public int NbRisqueRetard { get; set; }
+        /// <summary>Badge du menu principal : retards + livraisons du jour.</summary>
+        public int NbBadgeMenu { get; set; }
+    }
+
     public interface IAlerteService
     {
         Task<List<AlerteRendezVous>> ObtenirAlertesActuelles();
@@ -155,5 +181,19 @@ namespace GestionCoutureApp.Services
         /// Même niveaux J-1 / Jour J / retard.
         /// </summary>
         Task<List<AlerteRendezVous>> ObtenirAlertesRetours();
+
+        // ════════════════════════════════════════════════════════════════════
+        // ÉTAPE 2 PERF — Nouvelle API SQL (COUNT + pagination)
+        // ════════════════════════════════════════════════════════════════════
+
+        /// <summary>Compteurs SQL pour les badges (aucune ligne détaillée chargée).</summary>
+        Task<ResumeAlertesDto> ObtenirResumeAsync();
+
+        /// <summary>
+        /// Page d'alertes pour une section donnée. Filtre + ORDER BY + LIMIT en SQL,
+        /// regroupement par commande sur la seule page (≤ 50 cartes).
+        /// </summary>
+        Task<PagedResult<AlerteCommandeVm>> ObtenirSectionAsync(
+            SectionAlerte section, int page, int taille = 50);
     }
 }

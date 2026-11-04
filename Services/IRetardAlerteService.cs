@@ -30,6 +30,13 @@ namespace GestionCoutureApp.Services
         /// </summary>
         Task<List<AlerteRendezVous>> ObtenirAlertesRisqueRetardAsync(DateTime? maintenant = null);
 
+        /// <summary>
+        /// ÉTAPE 2 PERF — Version paginée : retourne au plus `taille` alertes + total.
+        /// Filtre SQL + ORDER BY + LIMIT, NOT EXISTS pour l'exclusion des suivis.
+        /// </summary>
+        Task<PagedResult<AlerteRendezVous>> ObtenirAlertesRisqueRetardPageAsync(
+            int page = 1, int taille = 50, DateTime? maintenant = null);
+
         string GenererMessageExcuse(
             string modele,
             string client,

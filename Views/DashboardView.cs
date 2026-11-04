@@ -303,22 +303,17 @@ namespace GestionCoutureApp.Views
             var debutMoisSuiv = debutMois.AddMonths(1);
             var debutDemain  = aujourdhui.AddDays(1);
 
-            // KPI 1 — Encaissé ce mois
-            // D7 : DatePaiement < debutMoisSuiv (exclusif) au lieu de <= finMois.AddDays(1)
-            decimal caMois = context.Paiements
+            // KPI 1 — Encaissé ce mois (SUM SQL — decimal converti via double)
+            decimal caMois = (decimal)context.Paiements
                 .AsNoTracking()
                 .Where(p => p.DatePaiement >= debutMois && p.DatePaiement < debutMoisSuiv && !p.EstAnnule)
-                .Select(p => p.MontantPaye)
-                .AsEnumerable()
-                .Sum();
+                .Sum(p => (double)p.MontantPaye);
 
-            // D7 : encaissé aujourd'hui — borne < debutDemain (exclusif)
-            decimal caJour = context.Paiements
+            // D7 : encaissé aujourd'hui
+            decimal caJour = (decimal)context.Paiements
                 .AsNoTracking()
                 .Where(p => p.DatePaiement >= aujourdhui && p.DatePaiement < debutDemain && !p.EstAnnule)
-                .Select(p => p.MontantPaye)
-                .AsEnumerable()
-                .Sum();
+                .Sum(p => (double)p.MontantPaye);
 
             // KPI 2 & 3 — Commandes en cours / retards
             // Perf-fix : COUNT SQL au lieu de charger toutes les commandes avec leurs pièces.
@@ -343,14 +338,11 @@ namespace GestionCoutureApp.Views
 
             if (role == "Boss")
             {
-                // D7 : borne exclusive debutMoisSuiv
-                depMois = context.Depenses
+                depMois = (decimal)context.Depenses
                     .AsNoTracking()
                     .Where(d => d.DateDepense >= debutMois && d.DateDepense < debutMoisSuiv
                              && d.StatutValidation == "Validee")
-                    .Select(d => d.Montant)
-                    .AsEnumerable()
-                    .Sum();
+                    .Sum(d => (double)d.Montant);
             }
             else
             {
@@ -394,40 +386,59 @@ namespace GestionCoutureApp.Views
         // ------------------------------------------------------------------
         private async Task ChargerEcheancesAsync()
         {
+            // ÉTAPE 3 PERF — requête SQL directe sur DateRdvEffective (ORDER BY + LIMIT 6)
+            // Plus d'appel à ObtenirRetards()/ObtenirRendezVousSemaine() qui chargeaient 150k pièces.
             var aujourdhui = DateTime.Today;
+            var dans7j     = aujourdhui.AddDays(7);
+            var maintenant = DateTime.Now;
 
-            var retards = await _alerteService.ObtenirRetards().ConfigureAwait(false);
-            var semaine = await _alerteService.ObtenirRendezVousSemaine().ConfigureAwait(false);
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
 
-            var toutes = retards
-                .Concat(semaine)
-                .GroupBy(a => a.IdPieceCommande)
-                .Select(g => g.First())
-                .ToList();
+            // 6 échéances urgentes : retards en premier, puis RDV semaine
+            var pieces = await ctx.PiecesCommande
+                .AsNoTracking()
+                .Where(p => p.CommandeActive
+                         && p.Statut != "Livree"
+                         && (p.DateRdvEffective < maintenant || p.DateRdvEffective <= dans7j))
+                .OrderBy(p => p.DateRdvEffective < maintenant ? 0 : 1)
+                .ThenBy(p => p.DateRdvEffective)
+                .Take(30) // prendre 30 pour avoir 6 commandes distinctes
+                .Select(p => new
+                {
+                    p.IdCommande, p.IdPieceCommande,
+                    p.TypeVetement, p.Statut, p.DateRdvEffective,
+                    NomClient  = p.Commande != null && p.Commande.Client != null
+                        ? p.Commande.Client.Prenom + " " + p.Commande.Client.Nom : "?",
+                    Telephone  = p.Commande != null && p.Commande.Client != null
+                        ? p.Commande.Client.Telephone : "",
+                })
+                .ToListAsync();
 
-            var cartes = toutes
-                .GroupBy(a => a.IdCommande)
+            var cartes = pieces
+                .GroupBy(p => p.IdCommande)
+                .Take(6)
                 .Select(g =>
                 {
-                    var ordered = g.OrderBy(a => a.DateRendezVous).ToList();
-                    var plusUrgente = ordered.First();
-                    bool aPiecePrete = ordered.Any(a => a.PiecePrete);
-
+                    var first = g.OrderBy(x => x.DateRdvEffective).First();
+                    bool aPiecePrete = g.Any(x => x.Statut == "Terminee");
                     return new EcheanceDashboardVm
                     {
                         IdCommande    = g.Key,
-                        NomClient     = plusUrgente.NomClient,
-                        Telephone     = plusUrgente.Telephone,
-                        DateEcheance  = plusUrgente.DateRendezVous,
-                        DetailPieces  = string.Join(" • ", ordered.Select(a => $"{a.TypeVetement} ({a.Statut})")),
-                        EstEnRetard   = ordered.Any(a => a.NiveauAlerte == "retard") && !aPiecePrete,
-                        EstAujourdhui = ordered.Any(a => a.DateRendezVous.Date == aujourdhui),
+                        NomClient     = first.NomClient,
+                        Telephone     = first.Telephone ?? "",
+                        DateEcheance  = first.DateRdvEffective,
+                        DetailPieces  = string.Join(" • ", g.Select(x =>
+                        {
+                            string s = x.Statut switch { "A faire" => "À faire", "Terminee" => "Terminée", "Livree" => "Livrée", _ => x.Statut };
+                            return $"{x.TypeVetement} ({s})";
+                        })),
+                        EstEnRetard   = first.DateRdvEffective < maintenant && !aPiecePrete,
+                        EstAujourdhui = first.DateRdvEffective.Date == aujourdhui,
                         APiecePrete   = aPiecePrete
                     };
                 })
                 .OrderBy(vm => vm.EstEnRetard ? 0 : vm.EstAujourdhui ? 1 : 2)
                 .ThenBy(vm => vm.DateEcheance)
-                .Take(6)
                 .ToList();
 
             await Dispatcher.InvokeAsync(() =>
@@ -457,10 +468,10 @@ namespace GestionCoutureApp.Views
             var paiements7j = context.Paiements
                 .AsNoTracking()
                 .Where(p => p.DatePaiement >= debut7j && p.DatePaiement < borneHaute && !p.EstAnnule)
-                .Select(p => new { p.DatePaiement, p.MontantPaye })
-                .AsEnumerable()
                 .GroupBy(p => p.DatePaiement.Date)
-                .ToDictionary(g => g.Key, g => g.Sum(p => p.MontantPaye));
+                .Select(g => new { Date = g.Key, Total = g.Sum(p => (double)p.MontantPaye) })
+                .ToList()
+                .ToDictionary(x => x.Date, x => (decimal)x.Total);
 
             var revenus = new List<(string Jour, decimal Montant)>();
             for (int i = 6; i >= 0; i--)
@@ -594,14 +605,17 @@ namespace GestionCoutureApp.Views
                 .GroupBy(p => p.IdCouturier!.Value)
                 .ToDictionary(g => g.Key, g => g.Select(p => p.IdCommande).Distinct().Count());
 
-            // ── CA : projection (IdCouturier, MontantCouture) — somme en mémoire ──
+            // ── CA : SUM SQL par couturier (pas de .AsEnumerable()) ──────────
             var caData = context.PiecesCommande
                 .AsNoTracking()
                 .Where(p => p.IdCouturier.HasValue)
-                .Select(p => new { p.IdCouturier, p.MontantCouture })
-                .AsEnumerable()
                 .GroupBy(p => p.IdCouturier!.Value)
-                .ToDictionary(g => g.Key, g => g.Sum(p => p.MontantCouture));
+                .Select(g => new
+                {
+                    IdCouturier = g.Key,
+                    Ca = g.Sum(p => (double)p.MontantCouture)
+                })
+                .ToDictionary(x => x.IdCouturier, x => (decimal)x.Ca);
 
             // ── Assemblage par couturier ──
             var compteursParCouturier = compteurs

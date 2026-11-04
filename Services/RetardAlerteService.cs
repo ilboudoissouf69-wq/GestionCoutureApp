@@ -536,61 +536,32 @@ namespace GestionCoutureApp.Services
         public async Task<StatsRetardDashboard> ObtenirStatsDashboardAsync(DateTime? maintenant = null)
         {
             var now = maintenant ?? DateTime.Now;
-            var debutMois = new DateTime(now.Year, now.Month, 1);
+            var debutMois    = new DateTime(now.Year, now.Month, 1);
             var debutMoisUtc = debutMois.ToUniversalTime();
-            var seuilJourSuivant = now.Date.AddDays(1);
 
             await using var ctx = await _factory.CreateDbContextAsync();
 
-            // ── NbCommandesEnRetard : COUNT SQL DISTINCT IdCommande sur le pré-filtre ──
-            // Même pré-filtre que ObtenirAlertesRisqueRetardAsync (échéance <= now),
-            // puis exclusion des suivis (NbPreventions > 0 et MemeRdv) en mémoire sur le jeu réduit.
-            var candidats = await ctx.PiecesCommande
-                .Where(p => p.Statut != "Livree"
-                         && p.Statut != "Terminee"
-                         && p.Commande != null
-                         && !p.Commande.EstSupprimee
-                         && (p.RendezVousException.HasValue
-                                ? p.RendezVousException <= now
-                                : p.Commande!.DateFin < seuilJourSuivant))
-                .Select(p => new
-                {
-                    p.IdCommande,
-                    p.IdPieceCommande,
-                    p.RendezVousException,
-                    CmdDateFin = p.Commande!.DateFin,
-                    CmdHeureDebut = p.Commande.HeureDebut,
-                    CmdHeureFin = p.Commande.HeureFin
-                })
-                .AsNoTracking()
-                .ToListAsync();
-
-            // Chargé uniquement les suivis pertinents (ceux des cibles candidates)
-            var suivisList = await ctx.SuivisAlerteRetard.AsNoTracking().ToListAsync();
-            var suivis = suivisList.ToDictionary(s => (s.TypeCible, s.IdCible), s => s);
-
-            var commandesEnRetard = new HashSet<int>();
-            foreach (var p in candidats)
-            {
-                DateTime echeance;
-                if (p.RendezVousException.HasValue)
-                    echeance = p.RendezVousException.Value;
-                else
-                {
-                    var heure = p.CmdHeureFin ?? p.CmdHeureDebut;
-                    echeance = p.CmdDateFin.Date + heure;
-                }
-                if (echeance > now) continue;
-
-                string type = p.RendezVousException.HasValue ? CiblePiece : CibleCommande;
-                int id = p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande;
-
-                if (suivis.TryGetValue((type, id), out var suivi)
-                    && MemeRdv(suivi.DateRdvTraite, echeance) && suivi.NbPreventions > 0)
-                    continue;
-
-                commandesEnRetard.Add(p.IdCommande);
-            }
+            // ── ÉTAPE 2 PERF : COUNT SQL avec NOT EXISTS (plus de chargement en mémoire) ──
+            // NbCommandesEnRetard = nombre distinct de commandes qui ont au moins une pièce
+            // en retard (DateRdvEffective <= maintenant, CommandeActive, non terminée/livrée)
+            // ET qui n'ont pas de suivi valide (NbPreventions > 0 pour le même RDV).
+            //
+            // Note : MemeRdv compare à la minute près. En SQL on compare à la seconde :
+            // si DateRdvTraite est dans le même créneau d'1 minute que DateRdvEffective,
+            // la pièce est exclue. C'est suffisamment proche pour la sémantique métier.
+            var nbCommandesEnRetard = await ctx.PiecesCommande
+                .Where(p => (p.CommandeActive || (p.Commande != null && !p.Commande.EstSupprimee && !p.Commande.EstAnnulee))
+                         && (p.Statut == "A faire" || p.Statut == "En cours")
+                         && p.DateRdvEffective <= now
+                         && !ctx.SuivisAlerteRetard.Any(s =>
+                             s.IdCible == p.IdCommande
+                             && s.TypeCible == CibleCommande
+                             && s.NbPreventions > 0
+                             && s.DateRdvTraite >= p.DateRdvEffective.AddMinutes(-1)
+                             && s.DateRdvTraite <  p.DateRdvEffective.AddMinutes(1)))
+                .Select(p => p.IdCommande)
+                .Distinct()
+                .CountAsync();
 
             int reports = await ctx.JournalAudit.CountAsync(j =>
                 j.TypeAction == ActionReport && j.DateHeureUtc >= debutMoisUtc);
@@ -606,15 +577,103 @@ namespace GestionCoutureApp.Services
 
             return new StatsRetardDashboard
             {
-                NbCommandesEnRetard    = commandesEnRetard.Count,
-                NbReportsMois          = reports,
-                NbClientsPrevenusMois  = clients
+                NbCommandesEnRetard   = nbCommandesEnRetard,
+                NbReportsMois         = reports,
+                NbClientsPrevenusMois = clients
             };
         }
 
         private static SuiviAlerteRetard? TrouverSuivi(
             List<SuiviAlerteRetard> suivis, string type, int id) =>
             suivis.FirstOrDefault(s => s.TypeCible == type && s.IdCible == id);
+
+        // ════════════════════════════════════════════════════════════════════
+        // ÉTAPE 2 PERF — Version paginée de ObtenirAlertesRisqueRetardAsync
+        // ════════════════════════════════════════════════════════════════════
+        public async Task<PagedResult<AlerteRendezVous>> ObtenirAlertesRisqueRetardPageAsync(
+            int page = 1, int taille = 50, DateTime? maintenant = null)
+        {
+            var now = maintenant ?? DateTime.Now;
+            int minutes = await _parametres.ObtenirRetardAlerteAvantMinutes();
+            if (minutes != 60 && minutes != 120) minutes = ParametresService.RetardAlerteAvantMinutesDefaut;
+            var seuil = now.AddMinutes(minutes);
+
+            await using var ctx = await _factory.CreateDbContextAsync();
+
+            // ── COUNT SQL avec NOT EXISTS ─────────────────────────────────
+            var baseQuery = ctx.PiecesCommande
+                .Where(p => p.CommandeActive
+                         && p.Statut != "Terminee" && p.Statut != "Livree"
+                         && p.DateRdvEffective <= seuil
+                         && !ctx.SuivisAlerteRetard.Any(s =>
+                             s.TypeCible == (p.RendezVousException.HasValue ? CiblePiece : CibleCommande)
+                             && s.IdCible == (p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande)
+                             && s.NbPreventions > 0
+                             && s.DateRdvTraite >= p.DateRdvEffective.AddMinutes(-1)
+                             && s.DateRdvTraite <  p.DateRdvEffective.AddMinutes(1)));
+
+            int total = await baseQuery.AsNoTracking().CountAsync();
+
+            var piecesData = await baseQuery
+                .AsNoTracking()
+                .OrderBy(p => p.DateRdvEffective)
+                .Skip((page - 1) * taille)
+                .Take(taille)
+                .Select(p => new
+                {
+                    p.IdPieceCommande, p.IdCommande,
+                    p.TypeVetement, p.Statut, p.RendezVousException,
+                    p.DateRdvEffective,
+                    CmdIdClient  = p.Commande != null ? p.Commande.IdClient : 0,
+                    ClientPrenom = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Prenom : null,
+                    ClientNom    = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Nom : null,
+                    ClientTel    = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Telephone : null,
+                    CoutPrenom   = p.Couturier != null ? p.Couturier.Prenom : null,
+                    CoutNom      = p.Couturier != null ? p.Couturier.Nom : null
+                })
+                .ToListAsync();
+
+            var alertes = new List<AlerteRendezVous>();
+            foreach (var p in piecesData)
+            {
+                var echeance = p.DateRdvEffective;
+                string type = p.RendezVousException.HasValue ? CiblePiece : CibleCommande;
+                int id = p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande;
+
+                // Récupérer le suivi pour le compteur d'affichage
+                var suivi = await ctx.SuivisAlerteRetard
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.TypeCible == type && s.IdCible == id);
+
+                string nomCouturier = !string.IsNullOrEmpty(p.CoutPrenom) || !string.IsNullOrEmpty(p.CoutNom)
+                    ? $"{p.CoutPrenom} {p.CoutNom}".Trim() : "(non assigné)";
+                string nomClient = !string.IsNullOrEmpty(p.ClientPrenom) || !string.IsNullOrEmpty(p.ClientNom)
+                    ? $"{p.ClientPrenom} {p.ClientNom}".Trim() : "(client inconnu)";
+                string statutAffiche = p.Statut switch
+                {
+                    "A faire" => "À faire", "En cours" => "En cours",
+                    "Terminee" => "Terminée", "Livree" => "Livrée", _ => p.Statut
+                };
+
+                var temps = echeance - now;
+                alertes.Add(new AlerteRendezVous
+                {
+                    IdCommande = p.IdCommande, IdPieceCommande = p.IdPieceCommande,
+                    NomClient = nomClient, Telephone = p.ClientTel ?? "",
+                    TypeVetement = p.TypeVetement, DateRendezVous = echeance,
+                    HeureRendezVous = echeance.ToString("HH:mm"), Statut = statutAffiche,
+                    TempsRestant = FormaterTemps(temps), NomCouturier = nomCouturier,
+                    EstUrgent = true, TypeAlerte = echeance <= now ? "Retard" : "RisqueRetard",
+                    TypeCibleRetard = type, IdCibleRetard = id, IdClientRetard = p.CmdIdClient,
+                    NbFoisPrevenu = suivi?.NbPreventions ?? 0, AlerteTraiteePourCeRdv = false
+                });
+            }
+
+            return new PagedResult<AlerteRendezVous>
+            {
+                Items = alertes, TotalCount = total, Page = page, PageSize = taille
+            };
+        }
 
         private static string FormaterTemps(TimeSpan reste)
         {
