@@ -73,6 +73,8 @@ namespace GestionCoutureApp.Views
         // Liste partagée des couturiers disponibles (utilisée dans AjouterCarte)
         private List<Employe> _couturiers = new();
         private bool _donneesReferenceChargees;
+        private Task? _chargementInitialCommandes;
+        private Task? _chargementSecondaireInitial;
         private bool _chargementCompteurRetard;
         private DateTime _dernierComptageRetardUtc = DateTime.MinValue;
 
@@ -270,7 +272,7 @@ namespace GestionCoutureApp.Views
 
             // Fix 2 — Reste à payer : recharger les commandes quand on revient sur cette page
             // (par ex. après un paiement enregistré depuis BtnActionPaiement_Click)
-            Loaded += async (s, e) =>
+            Loaded += (s, e) =>
             {
                 if (NavigationService != null)
                     NavigationService.Navigated += OnNavigatedBackToThis;
@@ -279,11 +281,9 @@ namespace GestionCoutureApp.Views
                 if (Window.GetWindow(this) is MainWindow mainWin)
                     mainWin.ActiverBoutonCommandes();
 
-                if (!_donneesReferenceChargees)
-                    await ChargerDonneesReferenceAsync();
-
-                // Étape 5A — Vérifier si un brouillon existe
-                _ = VerifierBrouillonExistantAsync();
+                // Les commandes sont prioritaires : les listes de formulaire et
+                // le brouillon se chargent après le premier affichage du tableau.
+                _chargementSecondaireInitial ??= ChargerDonneesSecondairesApresAffichageAsync();
             };
             Unloaded += (s, e) =>
             {
@@ -340,15 +340,28 @@ namespace GestionCoutureApp.Views
             TxtModalAcompte.AddHandler(DataObject.PastingEvent,
                 new DataObjectPastingEventHandler(TxtModalAcompte_Pasting));
 
-            _ = ChargerCommandes();
+            _chargementInitialCommandes = ChargerCommandes();
             ViderChamps();
 
             // ── Étape 5A : Initialiser le brouillon automatique ──
             InitialiserBrouillonAutomatique();
         }
 
+        private async Task ChargerDonneesSecondairesApresAffichageAsync()
+        {
+            if (_chargementInitialCommandes != null)
+                await _chargementInitialCommandes;
+
+            if (!_donneesReferenceChargees)
+                await ChargerDonneesReferenceAsync();
+
+            await VerifierBrouillonExistantAsync();
+        }
+
         private async Task ChargerDonneesReferenceAsync()
         {
+            using var perf = GestionCoutureApp.Helpers.PerfLogger.Start(
+                "CommandesView.ChargerDonneesReferenceAsync");
             try
             {
                 await using var context = await _contextFactory.CreateDbContextAsync();
@@ -651,14 +664,19 @@ namespace GestionCoutureApp.Views
 
                 PagedResult<Commande> result;
 
-                result = await _commandeService.ObtenirPageLightAsync(
-                    _currentPage, PAGE_SIZE,
-                    string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch,
-                    _filtreStatut,
-                    _filtreCouturierId,
-                    _filtreDate1,
-                    _filtreDate2,
-                    cancellationToken: cancellationToken);
+                // Microsoft.Data.Sqlite exécute ses opérations EF "Async" de
+                // façon synchrone. Déporter la requête évite de bloquer le
+                // thread WPF pendant le COUNT et le chargement de la page.
+                result = await Task.Run(
+                    () => _commandeService.ObtenirPageLightAsync(
+                        _currentPage, PAGE_SIZE,
+                        string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch,
+                        _filtreStatut,
+                        _filtreCouturierId,
+                        _filtreDate1,
+                        _filtreDate2,
+                        cancellationToken: cancellationToken),
+                    cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // Filtrer les pièces vides (sans type) pour l'affichage

@@ -228,9 +228,8 @@ namespace GestionCoutureApp.Services
         // ===== StatutView V2 — Vue par commande =====
 
         /// <summary>
-        /// Renvoie une page paginée de commandes pour l'écran Statut, avec toutes
-        /// les navigations nécessaires (Pieces+Couturier, Client, Paiements,
-        /// MaterielSupplements). Évite le N+1. Filtre optionnel par statut global
+        /// Renvoie une page paginée de commandes pour l'écran Statut, avec les
+        /// navigations affichées (Pieces+Couturier, Client). Filtre optionnel par statut global
         /// de la commande (calculé depuis ses pièces).
         /// <para>
         /// Valeurs de filtre : null = toutes, "A faire", "En cours", "Terminee",
@@ -239,7 +238,9 @@ namespace GestionCoutureApp.Services
         /// </para>
         /// </summary>
         Task<PagedResult<Commande>> ObtenirPageCommandesStatutAsync(
-            string? statut, int page, int pageSize, string? recherche = null);
+            string? statut, int page, int pageSize, string? recherche = null,
+            CancellationToken cancellationToken = default,
+            int? idCommandePrioritaire = null);
 
         /// <summary>
         /// Change le statut d'une seule pièce sans toucher aux mesures ni au prix.

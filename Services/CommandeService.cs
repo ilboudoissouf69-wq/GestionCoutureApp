@@ -155,6 +155,8 @@ namespace GestionCoutureApp.Services
             CancellationToken cancellationToken = default)
         {
             using var context = _contextFactory.CreateDbContext();
+            using var perf = GestionCoutureApp.Helpers.PerfLogger.Start(
+                "CommandeService.ObtenirPageLightAsync.Filtres", _logger);
             DateTime maintenant = DateTime.Now;
 
             // Étape 2 : les commandes supprimées/annulées ne sont jamais effacées ;
@@ -227,11 +229,13 @@ namespace GestionCoutureApp.Services
             // Perf-fix : Skip/Take en SQL, le filtre statut est maintenant EXACT en SQL.
             // Plus besoin d'affinage mémoire (sauf cas rare de commande sans pièce).
             int totalCount = await query.CountAsync(cancellationToken);
+            perf.Checkpoint("Count termine");
             var items = await query
                 .OrderByDescending(c => c.DateDebut)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync(cancellationToken);
+            perf.Checkpoint("Page chargee");
 
             // Affinage mémoire résiduel : couvre le cas rare d'une commande sans pièce
             // (StatutGlobal retourne le vieux champ Statut, non filtrable en SQL).
@@ -1904,21 +1908,25 @@ namespace GestionCoutureApp.Services
         // ===== StatutView V2 — vue paginée par COMMANDE =====
 
         public async Task<PagedResult<Commande>> ObtenirPageCommandesStatutAsync(
-            string? statut, int page, int pageSize, string? recherche = null)
+            string? statut, int page, int pageSize, string? recherche = null,
+            CancellationToken cancellationToken = default,
+            int? idCommandePrioritaire = null)
         {
             using var context = _contextFactory.CreateDbContext();
+            using var perf = GestionCoutureApp.Helpers.PerfLogger.Start(
+                "CommandeService.ObtenirPageCommandesStatutAsync", _logger);
             DateTime maintenant = DateTime.Now;
 
-            // Chargement complet en une seule requête pour éviter le N+1.
-            // On inclut Paiements et MaterielSupplements pour que les propriétés
-            // calculées (ResteAPayer, MontantTotalAvecMateriaux) soient correctes.
+            // La carte Suivi Atelier n'affiche ni paiements ni matériaux.
+            // Ne charger que les données visibles évite les produits cartésiens
+            // entre plusieurs collections (qui rendaient la recherche coûteuse).
             var query = context.Commandes
+                .AsNoTracking()
                 .Where(c => !c.EstSupprimee)
                 .Include(c => c.Client)
-                .Include(c => c.Paiements)
-                .Include(c => c.MaterielSupplements)
                 .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
+                .AsSplitQuery()
                 .AsQueryable();
 
             // Filtre par statut — SQL EXACT équivalent à StatutGlobal (même logique que ObtenirPageLightAsync)
@@ -1958,15 +1966,20 @@ namespace GestionCoutureApp.Services
                     c.Pieces.Any(p => p.TypeVetement.StartsWith(recherche.Trim())));
             }
 
-            var totalCount = await query.CountAsync();
+            var totalCount = await query.CountAsync(cancellationToken);
+            perf.Checkpoint("Count termine");
 
-            // Tri : retards en tête (DateFin la plus ancienne), puis DateFin croissante
+            // Après une transition récente, remonter cette commande en tête de
+            // sa nouvelle colonne; sinon garder les rendez-vous les plus proches.
             var items = await query
-                .OrderBy(c => c.DateFin)
+                .OrderByDescending(c => idCommandePrioritaire.HasValue
+                    && c.IdCommande == idCommandePrioritaire.Value)
+                .ThenBy(c => c.DateFin)
                 .ThenByDescending(c => c.DateDebut)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
+            perf.Checkpoint("Page chargee");
 
             // Affinage en mémoire si filtre statut exact (le filtre EF était approché)
             if (!string.IsNullOrEmpty(statut) && statut != "Retard")

@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GestionCoutureApp.Views
@@ -42,6 +43,8 @@ namespace GestionCoutureApp.Views
         private int _versionChargement = 0;
         private bool _pret = false;
         private readonly DispatcherTimer _rechercheTimer;
+        private CancellationTokenSource? _ctsChargement;
+        private int? _commandePrioritaireId;
 
         // ──────────────────────────────────────────────────────────────
         public StatutView()
@@ -66,51 +69,46 @@ namespace GestionCoutureApp.Views
                 if (_role == "Couturier")
                     PanelFiltreCouturier.Visibility = Visibility.Collapsed;
 
-                RemplirFiltreCouturier();
-                await ChargerCommandes();
-
                 _commandeService.CommandeChanged -= OnCommandeChanged;
                 _commandeService.CommandeChanged += OnCommandeChanged;
                 _pret = true;
+                await ChargerCommandes();
+                if (_role != "Couturier")
+                    _ = RemplirFiltreCouturierAsync();
             };
 
             Unloaded += (s, e) =>
             {
                 _pret = false;
                 _rechercheTimer.Stop();
+                _ctsChargement?.Cancel();
                 _commandeService.CommandeChanged -= OnCommandeChanged;
             };
         }
 
         // ── Filtre couturier ──────────────────────────────────────────
-        private void RemplirFiltreCouturier()
+        private async Task RemplirFiltreCouturierAsync()
         {
             _suppressCmbCouturier = true;
             try
             {
                 var sentinelle = new Employe { IdEmploye = 0, Prenom = "Tous les couturiers", Nom = "", Role = "", Statut = "" };
-                List<Employe> couturiers = new();
-                try
+                var ctxFactory = App.Services.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<Data.ApplicationDbContext>>();
+                var couturiers = await Task.Run(() =>
                 {
-                    var ctxFactory = App.Services.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<Data.ApplicationDbContext>>();
                     using var ctx = ctxFactory.CreateDbContext();
-                    couturiers = ctx.Employes
+                    return ctx.Employes.AsNoTracking()
                         .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
                         .OrderBy(e => e.Prenom)
                         .Select(e => new Employe
                         {
                             IdEmploye = e.IdEmploye,
-                            Nom       = e.Nom,
-                            Prenom    = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
-                            Role      = e.Role,
-                            Statut    = e.Statut
+                            Nom = e.Nom,
+                            Prenom = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
+                            Role = e.Role,
+                            Statut = e.Statut
                         }).ToList();
-                }
-                catch (Exception ex)
-                {
-                    // Erreur non bloquante : la liste restera vide mais l'écran fonctionnera
-                    System.Diagnostics.Debug.WriteLine($"[StatutView] Erreur chargement couturiers : {ex.Message}");
-                }
+                });
 
                 var liste = new List<Employe> { sentinelle };
                 liste.AddRange(couturiers);
@@ -118,13 +116,22 @@ namespace GestionCoutureApp.Views
                 CmbFiltreCouturier.SelectedIndex = 0;
                 _filtreCouturierId = null;
             }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[StatutView] Erreur chargement couturiers : {ex.Message}");
+            }
             finally { _suppressCmbCouturier = false; }
         }
 
         // ── CommandeChanged ───────────────────────────────────────────
         private async void OnCommandeChanged(object? sender, CommandeChangedEventArgs e)
         {
-            await Dispatcher.InvokeAsync(async () => await ChargerCommandes());
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (e.TypeChangement is "StatutModifie" or "PieceTerminee")
+                    _commandePrioritaireId = e.IdCommande;
+                return ChargerCommandes();
+            }).Task.Unwrap();
 
             if (e.TypeChangement == "PieceTerminee")
             {
@@ -154,6 +161,10 @@ namespace GestionCoutureApp.Views
         private async Task ChargerCommandes()
         {
             int maVersion = System.Threading.Interlocked.Increment(ref _versionChargement);
+            _ctsChargement?.Cancel();
+            var cts = new CancellationTokenSource();
+            _ctsChargement = cts;
+            var cancellationToken = cts.Token;
             try
             {
                 LoadingIndicator.Visibility = Visibility.Visible;
@@ -165,10 +176,10 @@ namespace GestionCoutureApp.Views
 
                 if (_filtreStatut == null)
                 {
-                    var t1 = _commandeService.ObtenirPageCommandesStatutAsync("A faire",  _currentPage, PAGE_SIZE, rech);
-                    var t2 = _commandeService.ObtenirPageCommandesStatutAsync("En cours", _currentPage, PAGE_SIZE, rech);
-                    var t3 = _commandeService.ObtenirPageCommandesStatutAsync("Terminee", _currentPage, PAGE_SIZE, rech);
-                    var t4 = _commandeService.ObtenirPageCommandesStatutAsync("Livree",   _currentPage, PAGE_SIZE, rech);
+                    var t1 = ChargerPageStatutEnArrierePlanAsync("A faire", rech, cancellationToken);
+                    var t2 = ChargerPageStatutEnArrierePlanAsync("En cours", rech, cancellationToken);
+                    var t3 = ChargerPageStatutEnArrierePlanAsync("Terminee", rech, cancellationToken);
+                    var t4 = ChargerPageStatutEnArrierePlanAsync("Livree", rech, cancellationToken);
                     await Task.WhenAll(t1, t2, t3, t4);
                     afaire   = t1.Result.Items; tAfaire   = t1.Result.TotalCount;
                     enCours  = t2.Result.Items; tEnCours  = t2.Result.TotalCount;
@@ -177,14 +188,14 @@ namespace GestionCoutureApp.Views
                 }
                 else if (_filtreStatut == "Retard")
                 {
-                    var r = await _commandeService.ObtenirPageCommandesStatutAsync("Retard", _currentPage, PAGE_SIZE, rech);
+                    var r = await ChargerPageStatutEnArrierePlanAsync("Retard", rech, cancellationToken);
                     afaire  = r.Items.Where(c => c.StatutGlobal == "A faire").ToList();
                     enCours = r.Items.Where(c => c.StatutGlobal == "En cours").ToList();
                     tAfaire = afaire.Count; tEnCours = enCours.Count;
                 }
                 else
                 {
-                    var r = await _commandeService.ObtenirPageCommandesStatutAsync(_filtreStatut, _currentPage, PAGE_SIZE, rech);
+                    var r = await ChargerPageStatutEnArrierePlanAsync(_filtreStatut, rech, cancellationToken);
                     switch (_filtreStatut)
                     {
                         case "A faire":  afaire   = r.Items; tAfaire   = r.TotalCount; break;
@@ -200,6 +211,15 @@ namespace GestionCoutureApp.Views
                 _itemsEnCours  = FiltreCouturier(enCours);
                 _itemsTerminee = FiltreCouturier(terminee);
                 _itemsLivree   = FiltreCouturier(livree);
+
+                if (_commandePrioritaireId.HasValue)
+                {
+                    PromouvoirCommandeRecente(_itemsAfaire);
+                    PromouvoirCommandeRecente(_itemsEnCours);
+                    PromouvoirCommandeRecente(_itemsTerminee);
+                    PromouvoirCommandeRecente(_itemsLivree);
+                    _commandePrioritaireId = null;
+                }
 
                 ListeAfaire.ItemsSource   = _itemsAfaire;
                 ListeEnCours.ItemsSource  = _itemsEnCours;
@@ -227,15 +247,41 @@ namespace GestionCoutureApp.Views
             catch (Exception ex)
             {
                 if (maVersion != _versionChargement) return;
+                if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested) return;
                 MessageBox.Show("Erreur chargement : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
+                cts.Dispose();
                 if (maVersion == _versionChargement)
                 {
+                    _ctsChargement = null;
                     LoadingIndicator.Visibility = Visibility.Collapsed;
                     GrilleKanban.IsEnabled      = true;
                 }
+            }
+        }
+
+        private Task<PagedResult<Commande>> ChargerPageStatutEnArrierePlanAsync(
+            string? statut, string? recherche, CancellationToken cancellationToken)
+        {
+            int? prioritaire = _commandePrioritaireId;
+            int page = _currentPage;
+            return Task.Run(
+                () => _commandeService.ObtenirPageCommandesStatutAsync(
+                    statut, page, PAGE_SIZE, recherche, cancellationToken, prioritaire),
+                cancellationToken);
+        }
+
+        private void PromouvoirCommandeRecente(List<Commande> items)
+        {
+            if (!_commandePrioritaireId.HasValue) return;
+            int index = items.FindIndex(c => c.IdCommande == _commandePrioritaireId.Value);
+            if (index > 0)
+            {
+                var commande = items[index];
+                items.RemoveAt(index);
+                items.Insert(0, commande);
             }
         }
 
@@ -401,7 +447,11 @@ namespace GestionCoutureApp.Views
                 await Task.Run(() => _commandeService.ForcerStatutToutesPieces(
                     idCommande, statut, idOp, nomOp, motifTransition ?? motif));
             });
-            if (ok) await ChargerCommandes();
+            if (ok)
+            {
+                _commandePrioritaireId = idCommande;
+                await ChargerCommandes();
+            }
         }
 
         // ── AvecControleLivraison — règle uniforme avec CommandesView ────
