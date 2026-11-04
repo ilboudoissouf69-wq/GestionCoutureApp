@@ -1,10 +1,23 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Windows;
 
+// Attributs d'assembly déclarés manuellement (GenerateAssemblyInfo=false dans le .csproj)
+// pour éviter le bug CS0579 "attribut en double" du SDK WPF (projet wpftmp).
+[assembly: AssemblyTitle("GestionCoutureApp")]
+[assembly: AssemblyDescription("Application de gestion pour atelier de couture")]
+[assembly: AssemblyCompany("GestionCoutureApp")]
+[assembly: AssemblyProduct("GestionCoutureApp")]
+[assembly: AssemblyVersion("2.0.0")]
+[assembly: AssemblyFileVersion("2.0.0")]
+[assembly: AssemblyInformationalVersion("2.0.0")]
+[assembly: AssemblyConfiguration("Debug")]
+
+// Accès internal depuis le projet de tests
+[assembly: InternalsVisibleTo("GestionCoutureApp.Tests")]
+
 [assembly: ThemeInfo(
-    ResourceDictionaryLocation.None,            //where theme specific resource dictionaries are located
-                                                //(used if a resource is not found in the page,
-                                                // or application resource dictionaries)
-    ResourceDictionaryLocation.SourceAssembly   //where the generic resource dictionary is located
-                                                //(used if a resource is not found in the page,
-                                                // app, or any theme specific resource dictionaries)
+    ResourceDictionaryLocation.None,
+    ResourceDictionaryLocation.SourceAssembly
 )]

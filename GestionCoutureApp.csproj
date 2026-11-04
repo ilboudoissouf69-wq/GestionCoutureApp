@@ -9,6 +9,11 @@
     <!-- Permet dotnet run sur une app WPF (UseWindowsShell=true lance le processus via l'OS) -->
     <UseWindowsShellExecute>true</UseWindowsShellExecute>
 
+    <!-- Fix bug wpftmp : le projet WPF temporaire duplique les attributs d'assembly.
+         En désactivant la génération automatique, on évite le CS0579 sans rien perdre
+         (les attributs sont déjà déclarés manuellement dans AssemblyInfo.cs). -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
     <!-- Icône de l'exécutable (visible dans l'explorateur, la barre des tâches, l'installeur) -->
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
 
@@ -59,13 +64,6 @@
     <PackageReference Include="System.Drawing.Common" Version="8.0.19" />
   </ItemGroup>
 
-  <!-- Accès aux membres internal depuis le projet de tests -->
-  <ItemGroup>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>GestionCoutureApp.Tests</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
-
   <!-- Exclure le sous-dossier de tests du SDK WPF (evite que le compilateur
        wpftmp ramasse les fichiers xUnit et echoue). -->
   <ItemGroup>
@@ -73,6 +71,14 @@
     <EmbeddedResource Remove="GestionCoutureApp.Tests\**" />
     <None Remove="GestionCoutureApp.Tests\**" />
     <Content Remove="GestionCoutureApp.Tests\**" />
+  </ItemGroup>
+
+  <!-- Exclure aussi StressDataGenerator (projet console séparé) du SDK WPF -->
+  <ItemGroup>
+    <Compile Remove="StressDataGenerator\**" />
+    <EmbeddedResource Remove="StressDataGenerator\**" />
+    <None Remove="StressDataGenerator\**" />
+    <Content Remove="StressDataGenerator\**" />
   </ItemGroup>
 
   <!-- client_secret.json NE DOIT PAS être inclus dans le projet ni copié.
