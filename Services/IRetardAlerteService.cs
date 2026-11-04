@@ -35,7 +35,8 @@ namespace GestionCoutureApp.Services
         /// Filtre SQL + ORDER BY + LIMIT, NOT EXISTS pour l'exclusion des suivis.
         /// </summary>
         Task<PagedResult<AlerteRendezVous>> ObtenirAlertesRisqueRetardPageAsync(
-            int page = 1, int taille = 50, DateTime? maintenant = null);
+            int page = 1, int taille = 50, DateTime? maintenant = null,
+            CancellationToken cancellationToken = default);
 
         string GenererMessageExcuse(
             string modele,

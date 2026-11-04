@@ -26,6 +26,8 @@ namespace GestionCoutureApp.Views
         private const int PAGE_SIZE = 20;
         private int _currentPage = 1;
         private string _currentSearch = "";
+        private readonly System.Windows.Threading.DispatcherTimer _rechercheTimer;
+        private CancellationTokenSource? _rechercheCts;
 
         // ── Modale ───────────────────────────────────────────────────────
         // true  = on modifie le client dont l'id est _clientSelectionneId
@@ -45,6 +47,16 @@ namespace GestionCoutureApp.Views
             _languageService = App.Services.GetRequiredService<ILanguageService>();
             _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
             _mesureClientService = App.Services.GetRequiredService<IMesureClientService>();
+            _rechercheTimer = new System.Windows.Threading.DispatcherTimer
+                { Interval = TimeSpan.FromMilliseconds(300) };
+            _rechercheTimer.Tick += async (_, _) =>
+            {
+                _rechercheTimer.Stop();
+                _rechercheCts?.Cancel();
+                _rechercheCts?.Dispose();
+                _rechercheCts = new CancellationTokenSource();
+                await ChargerClientsPage(_rechercheCts.Token);
+            };
 
             // ✅ S'abonner aux changements de langue et de thème
             _eventAggregator.Subscribe(SettingsChangedType.Language, OnLanguageChanged);
@@ -55,6 +67,8 @@ namespace GestionCoutureApp.Views
             // Se désabonner à la fermeture de la page
             Unloaded += (s, e) =>
             {
+                _rechercheTimer.Stop();
+                _rechercheCts?.Cancel();
                 _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
                 _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
             };
@@ -104,7 +118,7 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Chargement paginé
         // ==================================================================
-        private async Task ChargerClientsPage()
+        private async Task ChargerClientsPage(CancellationToken cancellationToken = default)
         {
             try
             {
@@ -115,7 +129,7 @@ namespace GestionCoutureApp.Views
                 if (string.IsNullOrWhiteSpace(_currentSearch))
                     result = await _clientService.ObtenirPageAsync(_currentPage, PAGE_SIZE);
                 else
-                    result = await _clientService.RechercherPageAsync(_currentSearch, _currentPage, PAGE_SIZE);
+                    result = await _clientService.RechercherPageAsync(_currentSearch, _currentPage, PAGE_SIZE, cancellationToken);
 
                 // ── Enrichissement NbCommandes / DerniereCommande (sans N+1) ──
                 if (result.Items.Count > 0)
@@ -162,6 +176,7 @@ namespace GestionCoutureApp.Views
                     ? "Aucun client"
                     : $"{result.TotalCount} client{(result.TotalCount > 1 ? "s" : "")} enregistré{(result.TotalCount > 1 ? "s" : "")}";
             }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 MessageBox.Show("Erreur lors du chargement des clients : " + ex.Message,
@@ -193,7 +208,8 @@ namespace GestionCoutureApp.Views
 
             _currentSearch = TxtRecherche.Text.Trim();
             _currentPage   = 1;
-            await ChargerClientsPage();
+            _rechercheTimer.Stop();
+            _rechercheTimer.Start();
         }
 
         // ==================================================================

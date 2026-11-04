@@ -266,6 +266,8 @@ internal static class Program
                             ? dateDebut.AddDays(2) : null,
                         RendezVousException = rdvExc,
                         DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(rdvExc, dateFin, null),
+                        DateMiParcours = DateRdvHelper.CalculerDateMiParcours(dateDebut.Date.AddHours(8),
+                            DateRdvHelper.CalculerDateRdvEffective(rdvExc, dateFin, null)),
                         CommandeActive = true
                     });
                 }

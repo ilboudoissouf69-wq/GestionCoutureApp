@@ -23,6 +23,11 @@ namespace GestionCoutureApp.Views
         private int _dashPage = 1;
         private int _dashTotal = 0;
 
+        // Pagination de la carte « Charge des Couturiers ».
+        private const int COUTURIER_PAGE_SIZE = 3;
+        private int _couturierPage = 1;
+        private List<ChargeCouturierDtoItem> _statsCouturiers = new();
+
         // ── Rafraîchissement automatique ─────────────────────────────────
 
         /// <summary>Timer de sécurité : rafraîchit toutes les 60 secondes même sans événement.</summary>
@@ -62,7 +67,11 @@ namespace GestionCoutureApp.Views
 
             // Périodique : toutes les 60 secondes
             _timerPeriodique = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
-            _timerPeriodique.Tick += async (_, _) => await RafraichirAsync();
+            _timerPeriodique.Tick += async (_, _) =>
+            {
+                if (IsVisible && !_refreshEnCours)
+                    await RafraichirAsync();
+            };
 
             // Handler nommé pour désabonnement propre
             _handlerDomaine = _ => PlanifierRefresh();
@@ -320,16 +329,22 @@ namespace GestionCoutureApp.Views
             // Règle d'origine conservée : en cours = commande sans pièce OU avec au moins
             // une pièce != "Livree". Retards = même condition + DateFin < aujourd'hui.
             // Pas de .Date dans le filtre pour permettre l'usage de l'index.
-            int enCours = context.Commandes
+            int commandesAvecPiecesEnCours = context.PiecesCommande
                 .AsNoTracking()
-                .Count(c => !c.EstSupprimee && !c.EstAnnulee
-                         && (!c.Pieces.Any() || c.Pieces.Any(p => p.Statut != "Livree")));
+                .Where(p => p.CommandeActive && p.Statut != "Livree")
+                .Select(p => p.IdCommande).Distinct().Count();
+            int commandesSansPiece = context.Commandes.AsNoTracking()
+                .Count(c => !c.EstSupprimee && !c.EstAnnulee && !c.Pieces.Any());
+            int enCours = commandesAvecPiecesEnCours + commandesSansPiece;
 
-            int retards = context.Commandes
-                .AsNoTracking()
-                .Count(c => !c.EstSupprimee && !c.EstAnnulee
-                         && (!c.Pieces.Any() || c.Pieces.Any(p => p.Statut != "Livree"))
+            int retardsPieces = context.PiecesCommande.AsNoTracking()
+                .Where(p => p.CommandeActive && p.Statut != "Livree"
+                         && p.Commande != null && p.Commande.DateFin < aujourdhui)
+                .Select(p => p.IdCommande).Distinct().Count();
+            int retardsSansPiece = context.Commandes.AsNoTracking()
+                .Count(c => !c.EstSupprimee && !c.EstAnnulee && !c.Pieces.Any()
                          && c.DateFin < aujourdhui);
+            int retards = retardsPieces + retardsSansPiece;
 
             // KPI 4 — Dépenses du mois (Boss) ou Clients enregistrés (Secrétaire)
             decimal depMois = 0m;
@@ -394,15 +409,13 @@ namespace GestionCoutureApp.Views
 
             await using var ctx = await _contextFactory.CreateDbContextAsync();
 
-            // 6 échéances urgentes : retards en premier, puis RDV semaine
-            var pieces = await ctx.PiecesCommande
+            // Deux parcours indexés : retards, puis échéances à venir.
+            var retards = await ctx.PiecesCommande
                 .AsNoTracking()
                 .Where(p => p.CommandeActive
                          && p.Statut != "Livree"
-                         && (p.DateRdvEffective < maintenant || p.DateRdvEffective <= dans7j))
-                .OrderBy(p => p.DateRdvEffective < maintenant ? 0 : 1)
-                .ThenBy(p => p.DateRdvEffective)
-                .Take(30) // prendre 30 pour avoir 6 commandes distinctes
+                         && p.DateRdvEffective < maintenant)
+                .OrderBy(p => p.DateRdvEffective).Take(30)
                 .Select(p => new
                 {
                     p.IdCommande, p.IdPieceCommande,
@@ -413,6 +426,21 @@ namespace GestionCoutureApp.Views
                         ? p.Commande.Client.Telephone : "",
                 })
                 .ToListAsync();
+            var aVenir = await ctx.PiecesCommande
+                .AsNoTracking()
+                .Where(p => p.CommandeActive && p.Statut != "Livree"
+                         && p.DateRdvEffective >= maintenant && p.DateRdvEffective <= dans7j)
+                .OrderBy(p => p.DateRdvEffective).Take(30)
+                .Select(p => new
+                {
+                    p.IdCommande, p.IdPieceCommande,
+                    p.TypeVetement, p.Statut, p.DateRdvEffective,
+                    NomClient = p.Commande != null && p.Commande.Client != null
+                        ? p.Commande.Client.Prenom + " " + p.Commande.Client.Nom : "?",
+                    Telephone = p.Commande != null && p.Commande.Client != null
+                        ? p.Commande.Client.Telephone : ""
+                }).ToListAsync();
+            var pieces = retards.Concat(aVenir).ToList();
 
             var cartes = pieces
                 .GroupBy(p => p.IdCommande)
@@ -572,6 +600,7 @@ namespace GestionCoutureApp.Views
             var couturiers = context.Employes
                 .AsNoTracking()
                 .Where(e => e.Role == "Couturier")
+                .OrderBy(e => e.Prenom).ThenBy(e => e.Nom).ThenBy(e => e.IdEmploye)
                 .Select(e => new { e.IdEmploye, e.Prenom, e.Nom })
                 .ToList();
 
@@ -589,26 +618,20 @@ namespace GestionCoutureApp.Views
                 .ToList();
 
             // ── Retards : projeter (IdCouturier, IdCommande) puis DISTINCT en mémoire ──
-            var retardsData = context.PiecesCommande
+            var retardsParCouturier = context.PiecesCommande
                 .AsNoTracking()
                 .Where(p => p.IdCouturier.HasValue
-                         && p.Commande != null
-                         && !p.Commande.EstSupprimee
-                         && !p.Commande.EstAnnulee
+                         && p.CommandeActive
                          && p.Statut != "Livree"
-                         && p.Commande.DateFin < aujourdhui)
-                .Select(p => new { p.IdCouturier, p.IdCommande })
-                .Distinct()
-                .ToList();
-
-            var retardsParCouturier = retardsData
+                         && p.Commande != null && p.Commande.DateFin < aujourdhui)
                 .GroupBy(p => p.IdCouturier!.Value)
-                .ToDictionary(g => g.Key, g => g.Select(p => p.IdCommande).Distinct().Count());
+                .Select(g => new { Id = g.Key, Count = g.Select(p => p.IdCommande).Distinct().Count() })
+                .ToDictionary(x => x.Id, x => x.Count);
 
             // ── CA : SUM SQL par couturier (pas de .AsEnumerable()) ──────────
             var caData = context.PiecesCommande
                 .AsNoTracking()
-                .Where(p => p.IdCouturier.HasValue)
+                .Where(p => p.IdCouturier.HasValue && p.CommandeActive)
                 .GroupBy(p => p.IdCouturier!.Value)
                 .Select(g => new
                 {
@@ -659,7 +682,20 @@ namespace GestionCoutureApp.Views
 
         private void AppliquerStatsCouturiersDto(List<ChargeCouturierDtoItem> items)
         {
-            ItemsChargeCouturiers.ItemsSource = items.Select(dto => new ChargeCouturierVm
+            _statsCouturiers = items;
+            var nombrePages = Math.Max(1, (int)Math.Ceiling((double)_statsCouturiers.Count / COUTURIER_PAGE_SIZE));
+            _couturierPage = Math.Clamp(_couturierPage, 1, nombrePages);
+            AfficherPageCouturiers();
+        }
+
+        private void AfficherPageCouturiers()
+        {
+            int nombrePages = Math.Max(1, (int)Math.Ceiling((double)_statsCouturiers.Count / COUTURIER_PAGE_SIZE));
+            int debut = (_couturierPage - 1) * COUTURIER_PAGE_SIZE;
+            ItemsChargeCouturiers.ItemsSource = _statsCouturiers
+                .Skip(debut)
+                .Take(COUTURIER_PAGE_SIZE)
+                .Select(dto => new ChargeCouturierVm
             {
                 NomComplet      = dto.NomComplet,
                 TotalPieces     = dto.TotalPieces,
@@ -672,6 +708,31 @@ namespace GestionCoutureApp.Views
                 LargeurEnCours   = dto.LargeurEnCours,
                 LargeurReste     = dto.LargeurReste
             }).ToList();
+
+            TxtCouturierPaginationInfo.Text = _statsCouturiers.Count == 0
+                ? "Aucun couturier"
+                : $"{debut + 1}–{Math.Min(debut + COUTURIER_PAGE_SIZE, _statsCouturiers.Count)} sur {_statsCouturiers.Count}";
+            BtnCouturierPagePrec.IsEnabled = _couturierPage > 1;
+            BtnCouturierPageSuiv.IsEnabled = _couturierPage < nombrePages;
+        }
+
+        private void BtnCouturierPagePrec_Click(object sender, RoutedEventArgs e)
+        {
+            if (_couturierPage > 1)
+            {
+                _couturierPage--;
+                AfficherPageCouturiers();
+            }
+        }
+
+        private void BtnCouturierPageSuiv_Click(object sender, RoutedEventArgs e)
+        {
+            int nombrePages = Math.Max(1, (int)Math.Ceiling((double)_statsCouturiers.Count / COUTURIER_PAGE_SIZE));
+            if (_couturierPage < nombrePages)
+            {
+                _couturierPage++;
+                AfficherPageCouturiers();
+            }
         }
 
         // ------------------------------------------------------------------

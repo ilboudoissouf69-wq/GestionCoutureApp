@@ -53,6 +53,10 @@ namespace GestionCoutureApp.Services
         {
             ValiderClient(client);
 
+            client.Telephone = client.Telephone.Trim();
+            client.NomRecherche = NormaliserNom(client);
+            client.PrenomNomRecherche = NormaliserPrenom(client);
+
             using var context = _contextFactory.CreateDbContext();
 
             // ── Détection de doublon Nom+Prénom+Téléphone ────────────────────
@@ -63,19 +67,18 @@ namespace GestionCoutureApp.Services
             //   • Si téléphone vide      : doublon = même (nomPrenom normalisé) seulement
             //     → avertissement moins fort car deux personnes du même nom peuvent
             //       n'avoir aucun téléphone sans être la même personne.
-            string nomPrenomNormalise = Helpers.TexteHelper.NormaliserPourRecherche(
-                $"{client.Nom} {client.Prenom}");
-
-            var candidats = context.Clients
-                .AsEnumerable()
-                .Where(c =>
-                    Helpers.TexteHelper.NormaliserPourRecherche($"{c.Nom} {c.Prenom}") == nomPrenomNormalise)
+            string nomPrenomNormalise = client.NomRecherche;
+            bool telephoneRenseigne = !string.IsNullOrWhiteSpace(client.Telephone);
+            var candidats = context.Clients.AsNoTracking()
+                .Where(c => c.NomRecherche == nomPrenomNormalise
+                         && (telephoneRenseigne
+                             ? c.Telephone == client.Telephone
+                             : c.Telephone == null || c.Telephone == ""))
+                .Take(20)
                 .ToList();
 
             if (candidats.Count > 0)
             {
-                bool telephoneRenseigne = !string.IsNullOrWhiteSpace(client.Telephone);
-
                 if (telephoneRenseigne)
                 {
                     // Doublon fort : même nom normalisé ET même numéro de téléphone
@@ -133,13 +136,9 @@ namespace GestionCoutureApp.Services
                 // Trouver le client existant portant ce numéro pour fournir
                 // un message complet (et permettre à ClientsView de proposer
                 // la fiche existante, comme pour un doublon applicatif).
-                var clientExistant = context.Clients
-                    .AsEnumerable()
-                    .FirstOrDefault(c =>
-                        !string.IsNullOrWhiteSpace(c.Telephone) &&
-                        !string.IsNullOrWhiteSpace(client.Telephone) &&
-                        c.Telephone.Trim() == client.Telephone.Trim() &&
-                        c.IdClient != client.IdClient);
+                var telephoneRecherche = client.Telephone.Trim();
+                var clientExistant = context.Clients.AsNoTracking()
+                    .FirstOrDefault(c => c.Telephone == telephoneRecherche && c.IdClient != client.IdClient);
 
                 if (clientExistant != null)
                 {
@@ -176,7 +175,9 @@ namespace GestionCoutureApp.Services
             if (existant == null) return;
             existant.Nom = client.Nom;
             existant.Prenom = client.Prenom;
-            existant.Telephone = client.Telephone;
+            existant.Telephone = client.Telephone.Trim();
+            existant.NomRecherche = NormaliserNom(existant);
+            existant.PrenomNomRecherche = NormaliserPrenom(existant);
             context.SaveChanges();
             _logger.LogInformation("Client modifié — {Id} {Prenom} {Nom}", client.IdClient, client.Prenom, client.Nom);
         }
@@ -209,48 +210,36 @@ namespace GestionCoutureApp.Services
             // Contains() SQL brut qui ratait silencieusement les noms accentués.
             string cle = Helpers.TexteHelper.NormaliserPourRecherche(motCle);
 
-            return context.Clients
-                .AsEnumerable()
-                .Where(c => Helpers.TexteHelper.NormaliserPourRecherche(c.Nom).Contains(cle)
-                         || Helpers.TexteHelper.NormaliserPourRecherche(c.Prenom).Contains(cle)
-                         || (c.Telephone ?? "").Contains(motCle))
+            return context.Clients.AsNoTracking()
+                .Where(c => c.NomRecherche.StartsWith(cle)
+                         || c.PrenomNomRecherche.StartsWith(cle)
+                         || (c.Telephone ?? "").StartsWith(motCle))
+                .OrderBy(c => c.NomRecherche)
+                .Take(50)
                 .ToList();
         }
         
         // ✅ PAGINATION : Cherche des clients avec pagination
-        public async Task<PagedResult<Client>> RechercherPageAsync(string motCle, int page, int pageSize)
+        public async Task<PagedResult<Client>> RechercherPageAsync(string motCle, int page, int pageSize,
+            CancellationToken cancellationToken = default)
         {
-            using var context = _contextFactory.CreateDbContext();
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            pageSize = Math.Clamp(pageSize, 1, 50);
             
             // ✅ OPTIMISATION : Filtrer côté base de données quand possible
             string cle = Helpers.TexteHelper.NormaliserPourRecherche(motCle);
             
-            var query = context.Clients.AsQueryable();
-            
-            // Si pas d'accents dans la recherche, utiliser le filtrage SQL
-            if (!Helpers.TexteHelper.ContientAccents(motCle))
-            {
-                query = query.Where(c => c.Nom.Contains(motCle) 
-                                      || c.Prenom.Contains(motCle)
-                                      || (c.Telephone ?? "").Contains(motCle));
-            }
-            else
-            {
-                // Sinon, filtrer en mémoire (plus lent mais nécessaire pour les accents)
-                query = query.AsEnumerable()
-                    .Where(c => Helpers.TexteHelper.NormaliserPourRecherche(c.Nom).Contains(cle)
-                             || Helpers.TexteHelper.NormaliserPourRecherche(c.Prenom).Contains(cle)
-                             || (c.Telephone ?? "").Contains(motCle))
-                    .AsQueryable();
-            }
-            
-            var totalCount = query.Count();
-            var items = query
-                .OrderBy(c => c.Nom)
-                .ThenBy(c => c.Prenom)
+            var query = context.Clients.AsNoTracking().Where(c =>
+                c.NomRecherche.StartsWith(cle)
+                || c.PrenomNomRecherche.StartsWith(cle)
+                || (c.Telephone ?? "").StartsWith(motCle));
+
+            var totalCount = await query.CountAsync(cancellationToken);
+            var items = await query
+                .OrderBy(c => c.NomRecherche)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToList();
+                .ToListAsync(cancellationToken);
             
             return new PagedResult<Client>
             {
@@ -260,6 +249,12 @@ namespace GestionCoutureApp.Services
                 PageSize = pageSize
             };
         }
+
+        private static string NormaliserNom(Client client) =>
+            Helpers.TexteHelper.NormaliserPourRecherche($"{client.Nom} {client.Prenom}");
+
+        private static string NormaliserPrenom(Client client) =>
+            Helpers.TexteHelper.NormaliserPourRecherche($"{client.Prenom} {client.Nom}");
 
         // ----------------------------------------------------------------
         // Rapport de détection des doublons existants (pour le Boss)

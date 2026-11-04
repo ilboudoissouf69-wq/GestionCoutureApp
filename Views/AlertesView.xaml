@@ -164,7 +164,7 @@
                         </Border>
 
                         <!-- Liste -->
-                        <ItemsControl x:Name="ListePrets">
+                        <ListBox x:Name="ListePrets" BorderThickness="0" Background="Transparent" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border BorderBrush="#F0FDF4" BorderThickness="0,0,0,1"
@@ -261,7 +261,11 @@
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        </ListBox>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
+                            <TextBlock x:Name="TxtTotalPrets" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <Button x:Name="BtnPlusPrets" Content="Voir plus" Tag="Prets" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
+                        </StackPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroPrets"
@@ -305,7 +309,7 @@
                         </Border>
 
                         <!-- Liste -->
-                        <ItemsControl x:Name="ListeRetards">
+                        <ListBox x:Name="ListeRetards" BorderThickness="0" Background="Transparent" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border BorderBrush="#FEF2F2" BorderThickness="0,0,0,1"
@@ -400,7 +404,11 @@
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        </ListBox>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
+                            <TextBlock x:Name="TxtTotalRetards" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <Button x:Name="BtnPlusRetards" Content="Voir plus" Tag="Retards" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
+                        </StackPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroRetard"
@@ -444,7 +452,7 @@
                         </Border>
 
                         <!-- Liste -->
-                        <ItemsControl x:Name="ListeAujourdhui">
+                        <ListBox x:Name="ListeAujourdhui" BorderThickness="0" Background="Transparent" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border BorderBrush="#FFFBEB" BorderThickness="0,0,0,1"
@@ -540,7 +548,11 @@
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        </ListBox>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
+                            <TextBlock x:Name="TxtTotalAujourdhui" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <Button x:Name="BtnPlusAujourdhui" Content="Voir plus" Tag="Aujourdhui" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
+                        </StackPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroAujourdhui"
@@ -590,7 +602,7 @@
                         </Border>
 
                         <!-- Liste -->
-                        <ItemsControl x:Name="ListeImminentes">
+                        <ListBox x:Name="ListeImminentes" BorderThickness="0" Background="Transparent" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border BorderBrush="#F3F4F6" BorderThickness="0,0,0,1"
@@ -664,7 +676,11 @@
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        </ListBox>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
+                            <TextBlock x:Name="TxtTotalImminentes" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <Button x:Name="BtnPlusImminentes" Content="Voir plus" Tag="Imminentes" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
+                        </StackPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroImminentes"

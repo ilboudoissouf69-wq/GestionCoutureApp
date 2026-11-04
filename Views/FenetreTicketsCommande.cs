@@ -29,6 +29,7 @@ namespace GestionCoutureApp.Views
         private const string SEP  = "================================";
         private const string SEP2 = "--------------------------------";
         private const string SEP_APERCU = "✂ - - - - -";
+        private const double EchelleApercuTicket = 0.85;
 
         private static readonly Brush Noir   = Brushes.Black;
         private static readonly Brush Gris   = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
@@ -143,9 +144,10 @@ namespace GestionCoutureApp.Views
                 : ModeImpression.EtiquetteSeule;
 
             Title                   = $"Tickets Commande — CMD #{commande.IdCommande}";
-            Width                   = 860;
-            Height                  = 780;
-            MinWidth                = 740;
+            Width                   = Math.Min(760, SystemParameters.WorkArea.Width * 0.92);
+            Height                  = Math.Min(680, SystemParameters.WorkArea.Height * 0.90);
+            MinWidth                = Math.Min(600, Width);
+            MinHeight               = Math.Min(500, Height);
             WindowStartupLocation   = WindowStartupLocation.CenterOwner;
             ResizeMode              = ResizeMode.CanResize;
             Background              = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
@@ -331,6 +333,7 @@ namespace GestionCoutureApp.Views
                 // Si plusieurs panels étiquette (une par pièce), les empiler dans un wrapper
                 if (_panelsEtiquette.Count == 1)
                 {
+                    _panelsEtiquette[0].LayoutTransform = new ScaleTransform(EchelleApercuTicket, EchelleApercuTicket);
                     _scrollViewer.Content = _panelsEtiquette[0];
                 }
                 else
@@ -342,11 +345,13 @@ namespace GestionCoutureApp.Views
                         if (p != _panelsEtiquette.Last())
                             Ligne(wrapper, SEP_APERCU, 10, TextAlignment.Center, Gris, FontWeights.Bold);
                     }
+                    wrapper.LayoutTransform = new ScaleTransform(EchelleApercuTicket, EchelleApercuTicket);
                     _scrollViewer.Content = wrapper;
                 }
             }
             else
             {
+                _panelBonClient.LayoutTransform = new ScaleTransform(EchelleApercuTicket, EchelleApercuTicket);
                 _scrollViewer.Content = _panelBonClient;
             }
         }

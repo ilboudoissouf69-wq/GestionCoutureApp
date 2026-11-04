@@ -116,6 +116,9 @@ namespace GestionCoutureApp.Models
         // Maintenue par CommandeService à chaque suppression/annulation.
         public bool CommandeActive { get; set; } = true;
 
+        /// <summary>Milieu du délai dépôt-RDV, persisté pour filtrer les pièces stagnantes.</summary>
+        public DateTime DateMiParcours { get; set; }
+
         [NotMapped]
         public string StatutAffiche => Statut switch
         {

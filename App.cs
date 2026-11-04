@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Data;
 using System.Diagnostics;
 using System.Windows.Diagnostics;
@@ -189,6 +189,8 @@ namespace GestionCoutureApp
                                            "MontantTotal", "Statut", "TypeVetement",
                                            "EstSupprimee", "IdOperateurCreation",
                                            "EstAnnulee", "DateImpressionRecu" },
+                    ["PiecesCommande"] = new[] { "IdPieceCommande", "DateRdvEffective", "CommandeActive", "DateMiParcours" },
+                    ["Clients"] = new[] { "IdClient", "Nom", "Prenom", "Telephone", "NomRecherche", "PrenomNomRecherche" },
                     ["Paiements"] = new[] { "IdPaiement", "IdCommande", "MontantPaye",
                                            "DatePaiement", "ModePaiement", "IdOperateur" },
                     ["Depenses"]  = new[] { "IdDepense", "TypeDepense", "Montant",
@@ -709,7 +711,8 @@ namespace GestionCoutureApp
         /// minimaux sans BuildTargetModel complet). Vérifie __EFMigrationsHistory pour
         /// l'idempotence — chaque migration n'est appliquée qu'une seule fois.
         /// </summary>
-        private static void AppliquerMigrationsManquantes(ApplicationDbContext context, ILogService log)
+        internal static void AppliquerMigrationsManquantes(
+            ApplicationDbContext context, ILogService log, string? cheminConnexionTest = null)
         {
             // Connexion ADO.NET séparée — ne pas réutiliser celle du context EF Core
             // qui vient d'exécuter Migrate() et peut avoir des locks résiduels.
@@ -717,7 +720,7 @@ namespace GestionCoutureApp
             // Cache=Shared fait que SQLite partage le cache entre connexions du même
             // processus — ce qui peut cacher les colonnes fraîchement ajoutées par
             // Migrate() quand on ouvre une deuxième connexion juste après.
-            string connStr = AppPaths.ChaineConnexionSqlite
+            string connStr = (cheminConnexionTest ?? AppPaths.ChaineConnexionSqlite)
                 .Replace(";Cache=Shared", "", StringComparison.OrdinalIgnoreCase)
                 .Replace("Cache=Shared;", "", StringComparison.OrdinalIgnoreCase)
                 .Replace("Cache=Shared",  "", StringComparison.OrdinalIgnoreCase);
@@ -751,26 +754,27 @@ namespace GestionCoutureApp
                 catch (Exception ex)
                 {
                     log.LogError($"[MIGRATION MANUELLE] Erreur sur {migrationId} : {ex.Message}", ex);
+                    throw;
                 }
             }
 
             // Helper : ALTER TABLE idempotent (ignore "duplicate column name")
             void AjouterCol(System.Data.Common.DbConnection c, string table, string col, string def)
             {
-                try
+                using (var check = c.CreateCommand())
                 {
-                    using var cmd = c.CreateCommand();
-                    cmd.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{col}\" {def}";
-                    cmd.ExecuteNonQuery();
+                    check.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name='{col}'";
+                    if (Convert.ToInt64(check.ExecuteScalar()) > 0) return;
                 }
-                catch { /* colonne déjà présente — ignoré */ }
+                using var cmd = c.CreateCommand();
+                cmd.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{col}\" {def}";
+                cmd.ExecuteNonQuery();
             }
 
             // Helper : CREATE INDEX IF NOT EXISTS
             void CreerIndex(System.Data.Common.DbConnection c, string sql)
             {
-                try { using var cmd = c.CreateCommand(); cmd.CommandText = sql; cmd.ExecuteNonQuery(); }
-                catch { }
+                using var cmd = c.CreateCommand(); cmd.CommandText = sql; cmd.ExecuteNonQuery();
             }
 
             // ── 20260916000000_AjoutRetoursChampsReprise ──────────────────────
@@ -789,7 +793,23 @@ namespace GestionCoutureApp
 
             // ── 20260918000000_AjoutContrainteUniqueRecuNumero ────────────────
             AppliquerSi("20260918000000_AjoutContrainteUniqueRecuNumero", c =>
-                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\")"));
+            {
+                using (var reparer = c.CreateCommand())
+                {
+                    reparer.CommandText = @"
+                        UPDATE ""Paiements""
+                        SET ""RecuNumero"" = ""RecuNumero"" || '-DUP-' || ""IdPaiement""
+                        WHERE ""RecuNumero"" != ''
+                          AND ""IdPaiement"" NOT IN (
+                              SELECT MIN(""IdPaiement"")
+                              FROM ""Paiements""
+                              WHERE ""RecuNumero"" != ''
+                              GROUP BY ""RecuNumero""
+                          );";
+                    reparer.ExecuteNonQuery();
+                }
+                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\") WHERE \"RecuNumero\" != ''");
+            });
 
             // ── 20260918000001_AjoutDerniereModificationMotDePasse ────────────
             AppliquerSi("20260918000001_AjoutDerniereModificationMotDePasse", c =>
@@ -867,7 +887,23 @@ namespace GestionCoutureApp
                 }
                 catch (Exception ex) { log.LogError("[MIGRATION MANUELLE] Erreur Paiements : " + ex.Message, ex); }
 
-                CreerIndex(conn, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\")");
+                // Réparer aussi les bases dont l'historique indique déjà la migration
+                // mais où l'index n'a jamais été créé (ou a été supprimé).
+                using (var reparer = conn.CreateCommand())
+                {
+                    reparer.CommandText = @"
+                        UPDATE ""Paiements""
+                        SET ""RecuNumero"" = ""RecuNumero"" || '-DUP-' || ""IdPaiement""
+                        WHERE ""RecuNumero"" != ''
+                          AND ""IdPaiement"" NOT IN (
+                              SELECT MIN(""IdPaiement"")
+                              FROM ""Paiements""
+                              WHERE ""RecuNumero"" != ''
+                              GROUP BY ""RecuNumero""
+                          );";
+                    reparer.ExecuteNonQuery();
+                }
+                CreerIndex(conn, "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" ON \"Paiements\" (\"RecuNumero\") WHERE \"RecuNumero\" != ''");
 
                 // Employes
                 AjouterCol(conn, "Employes", "DerniereModificationMotDePasse", "TEXT NULL");
@@ -1222,6 +1258,172 @@ namespace GestionCoutureApp
                     "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SuivisAlerteRetard_TypeCible_IdCible\" " +
                     "ON \"SuivisAlerteRetard\" (\"TypeCible\", \"IdCible\")");
             });
+            // La migration n'a pas de designer EF complet et est donc appliquée ici.
+            // Elle doit précéder tout accès EF aux colonnes dénormalisées.
+            AppliquerSi("20261018000000_IndexesPerformance", c =>
+            {
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_DateTerminee ON PiecesCommande (DateTerminee);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Statut ON PiecesCommande (Statut);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCouturier ON PiecesCommande (IdCouturier);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCommande_Statut ON PiecesCommande (IdCommande, Statut);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commandes_DateFin ON Commandes (DateFin);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commandes_Statut ON Commandes (Statut);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commandes_DateDebut ON Commandes (DateDebut);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commandes_EstSupprimee_DateDebut ON Commandes (EstSupprimee, DateDebut DESC);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Paiements_DatePaiement_EstAnnule ON Paiements (DatePaiement, EstAnnule);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Paiements_IdCommande ON Paiements (IdCommande);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Depenses_DateDepense_Statut ON Depenses (DateDepense, StatutValidation);");
+                using (var drop = c.CreateCommand()) { drop.CommandText = "DROP INDEX IF EXISTS IX_Retours_NumeroRetour;"; drop.ExecuteNonQuery(); }
+                CreerIndex(c, "CREATE UNIQUE INDEX IF NOT EXISTS IX_Retours_NumeroRetour ON Retours (NumeroRetour) WHERE NumeroRetour != ''; ");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Retours_Statut_EstAnnule ON Retours (Statut, EstAnnule);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Retours_EstAnnule_Statut_DateRdvReprise ON Retours (EstAnnule, Statut, DateRdvReprise);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Retours_DateSignalement ON Retours (DateSignalement DESC);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Retours_IdPieceCommande ON Retours (IdPieceCommande);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_JournalAudit_DateHeureUtc ON JournalAudit (DateHeureUtc DESC);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_JournalAudit_IdOperateur ON JournalAudit (IdOperateur);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_JournalAudit_TypeAction ON JournalAudit (TypeAction);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commissions_DateCalcul_EstAnnulee ON Commissions (DateCalcul, EstAnnulee);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Clients_Nom_Prenom ON Clients (Nom, Prenom);");
+            });
+
+            AppliquerSi("20261102000000_AjoutColonnesDenormalisees", c =>
+            {
+                log.LogInfo("Mise à jour de la base, veuillez patienter…");
+                AjouterCol(c, "PiecesCommande", "DateRdvEffective", "TEXT NOT NULL DEFAULT '1900-01-01 00:00:00'");
+                AjouterCol(c, "PiecesCommande", "CommandeActive", "INTEGER NOT NULL DEFAULT 1");
+                using var backfillTransaction = c.BeginTransaction();
+                using (var update = c.CreateCommand())
+                {
+                    update.Transaction = backfillTransaction;
+                    update.CommandText = @"
+                        UPDATE PiecesCommande
+                        SET DateRdvEffective = CASE
+                            WHEN RendezVousException IS NOT NULL THEN RendezVousException
+                            ELSE (SELECT substr(c.DateFin, 1, 10) || ' ' ||
+                                CASE WHEN length(COALESCE(c.HeureFin, '17:00:00')) = 5
+                                     THEN COALESCE(c.HeureFin, '17:00:00') || ':00'
+                                     ELSE COALESCE(c.HeureFin, '17:00:00') END
+                                  FROM Commandes c WHERE c.IdCommande = PiecesCommande.IdCommande)
+                        END
+                        WHERE EXISTS (SELECT 1 FROM Commandes c WHERE c.IdCommande = PiecesCommande.IdCommande)
+                          AND DateRdvEffective = '1900-01-01 00:00:00';
+                        UPDATE PiecesCommande
+                        SET CommandeActive = (SELECT CASE WHEN COALESCE(c.EstSupprimee, 0) = 0
+                            AND COALESCE(c.EstAnnulee, 0) = 0 THEN 1 ELSE 0 END
+                            FROM Commandes c WHERE c.IdCommande = PiecesCommande.IdCommande)
+                        WHERE EXISTS (SELECT 1 FROM Commandes c WHERE c.IdCommande = PiecesCommande.IdCommande);";
+                    update.ExecuteNonQuery();
+                }
+                backfillTransaction.Commit();
+                using (var drop = c.CreateCommand())
+                {
+                    drop.CommandText = "DROP INDEX IF EXISTS IX_PiecesCommande_CommandeActive_Statut_DateRdv; DROP INDEX IF EXISTS IX_PiecesCommande_IdCouturier_Statut; DROP INDEX IF EXISTS IX_PiecesCommande_Statut_DateRdvEffective;";
+                    drop.ExecuteNonQuery();
+                }
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_DateRdv_Statut ON PiecesCommande (CommandeActive, DateRdvEffective, Statut);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_Statut_DateRdv_IdCommande ON PiecesCommande (CommandeActive, Statut, DateRdvEffective, IdCommande);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCouturier_Statut_DateRdv ON PiecesCommande (IdCouturier, Statut, DateRdvEffective);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commandes_EstSupprimee_EstAnnulee_DateFin ON Commandes (EstSupprimee, EstAnnulee, DateFin);");
+                using var analyze = c.CreateCommand(); analyze.CommandText = "ANALYZE;"; analyze.ExecuteNonQuery();
+            });
+
+            AppliquerSi("20261103000000_AjoutColonnesRechercheClient", c =>
+            {
+                log.LogInfo("Mise à jour de la recherche clients, veuillez patienter…");
+                AjouterCol(c, "Clients", "NomRecherche", "TEXT NOT NULL DEFAULT ''");
+                AjouterCol(c, "Clients", "PrenomNomRecherche", "TEXT NOT NULL DEFAULT ''");
+
+                using var transaction = c.BeginTransaction();
+                int dernierId = 0;
+                while (true)
+                {
+                    var lignes = new List<(int Id, string Nom, string Prenom)>();
+                    using (var select = c.CreateCommand())
+                    {
+                        select.Transaction = transaction;
+                        select.CommandText = "SELECT IdClient, Nom, Prenom FROM Clients WHERE IdClient > @id ORDER BY IdClient LIMIT 5000";
+                        var p = select.CreateParameter(); p.ParameterName = "@id"; p.Value = dernierId; select.Parameters.Add(p);
+                        using var reader = select.ExecuteReader();
+                        while (reader.Read()) lignes.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2)));
+                    }
+                    if (lignes.Count == 0) break;
+                    using var update = c.CreateCommand();
+                    update.Transaction = transaction;
+                    update.CommandText = "UPDATE Clients SET NomRecherche=@nom, PrenomNomRecherche=@prenom WHERE IdClient=@id";
+                    var pn = update.CreateParameter(); pn.ParameterName = "@nom"; update.Parameters.Add(pn);
+                    var pp = update.CreateParameter(); pp.ParameterName = "@prenom"; update.Parameters.Add(pp);
+                    var pi = update.CreateParameter(); pi.ParameterName = "@id"; update.Parameters.Add(pi);
+                    foreach (var row in lignes)
+                    {
+                        pn.Value = Helpers.TexteHelper.NormaliserPourRecherche($"{row.Nom} {row.Prenom}");
+                        pp.Value = Helpers.TexteHelper.NormaliserPourRecherche($"{row.Prenom} {row.Nom}");
+                        pi.Value = row.Id;
+                        update.ExecuteNonQuery();
+                        dernierId = row.Id;
+                    }
+                }
+                transaction.Commit();
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Clients_NomRecherche ON Clients (NomRecherche);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Clients_PrenomNomRecherche ON Clients (PrenomNomRecherche);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Clients_Telephone_Recherche ON Clients (Telephone COLLATE NOCASE);");
+            });
+
+            AppliquerSi("20261104000000_AjoutDateMiParcours", c =>
+            {
+                AjouterCol(c, "PiecesCommande", "DateMiParcours", "TEXT NOT NULL DEFAULT '1900-01-01 00:00:00'");
+                using var transaction = c.BeginTransaction();
+                int dernierId = 0;
+                while (true)
+                {
+                    var lignes = new List<(int Id, string DateDepot, string HeureDepot, string DateRdv)>();
+                    using (var select = c.CreateCommand())
+                    {
+                        select.Transaction = transaction;
+                        select.CommandText = @"SELECT p.IdPieceCommande, c.DateDebut, c.HeureDebut, p.DateRdvEffective
+                            FROM PiecesCommande p JOIN Commandes c ON c.IdCommande=p.IdCommande
+                            WHERE p.IdPieceCommande>@id ORDER BY p.IdPieceCommande LIMIT 5000";
+                        var p = select.CreateParameter(); p.ParameterName = "@id"; p.Value = dernierId; select.Parameters.Add(p);
+                        using var reader = select.ExecuteReader();
+                        while (reader.Read()) lignes.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+                    }
+                    if (lignes.Count == 0) break;
+                    using var update = c.CreateCommand();
+                    update.Transaction = transaction;
+                    update.CommandText = "UPDATE PiecesCommande SET DateMiParcours=@mi WHERE IdPieceCommande=@id";
+                    var pm = update.CreateParameter(); pm.ParameterName = "@mi"; update.Parameters.Add(pm);
+                    var pi = update.CreateParameter(); pi.ParameterName = "@id"; update.Parameters.Add(pi);
+                    foreach (var row in lignes)
+                    {
+                        var debut = DateTime.Parse(row.DateDepot, System.Globalization.CultureInfo.InvariantCulture).Date
+                            + TimeSpan.Parse(row.HeureDepot, System.Globalization.CultureInfo.InvariantCulture);
+                        var rdv = DateTime.Parse(row.DateRdv, System.Globalization.CultureInfo.InvariantCulture);
+                        pm.Value = Helpers.DateRdvHelper.CalculerDateMiParcours(debut, rdv);
+                        pi.Value = row.Id;
+                        update.ExecuteNonQuery();
+                        dernierId = row.Id;
+                    }
+                }
+                transaction.Commit();
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_Statut_DateMiParcours ON PiecesCommande (CommandeActive, Statut, DateMiParcours);");
+            });
+
+            AppliquerSi("20261105000000_IndexSuivisEtAuditPerformance", c =>
+            {
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_JournalAudit_TypeAction_DateHeureUtc ON JournalAudit (TypeAction, DateHeureUtc);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Suivis_Type_Id_Preventions_DateRdv ON SuivisAlerteRetard (TypeCible, IdCible, NbPreventions, DateRdvTraite);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Suivis_Preventions_DateMessage_Client ON SuivisAlerteRetard (NbPreventions, DateDernierMessage, IdClient);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCommande_MontantCouture ON PiecesCommande (IdCommande, MontantCouture);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Paiements_IdCommande_EstAnnule_MontantPaye ON Paiements (IdCommande, EstAnnule, MontantPaye);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_MaterielsSupplements_IdCommande_Totaux ON MaterielsSupplements (IdCommande, Quantite, PrixUnitaire);");
+            });
+            AppliquerSi("20261106000000_IndexAgregatsFinanciers", c =>
+            {
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCommande_MontantCouture ON PiecesCommande (IdCommande, MontantCouture);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Paiements_IdCommande_EstAnnule_MontantPaye ON Paiements (IdCommande, EstAnnule, MontantPaye);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_MaterielsSupplements_IdCommande_Totaux ON MaterielsSupplements (IdCommande, Quantite, PrixUnitaire);");
+            });
+
+
         }
 
         /// <summary>
@@ -1259,7 +1461,7 @@ namespace GestionCoutureApp
                 }
 
                 // PRAGMA table_info pour les tables critiques
-                foreach (var table in new[] { "Mesures", "Commandes", "Paiements", "Depenses", "MaterielsSupplements" })
+                foreach (var table in new[] { "Mesures", "Commandes", "PiecesCommande", "Clients", "Paiements", "Depenses", "MaterielsSupplements", "Retours", "SuivisAlerteRetard" })
                 {
                     using var cmd2 = conn.CreateCommand();
                     cmd2.CommandText = $"PRAGMA table_info('{table}')";
@@ -1270,6 +1472,27 @@ namespace GestionCoutureApp
                         sb.AppendLine($"  {table} : TABLE ABSENTE");
                     else
                         sb.AppendLine($"  {table} ({cols.Count} colonnes) : {string.Join(", ", cols)}");
+                }
+
+                using (var indexes = conn.CreateCommand())
+                {
+                    indexes.CommandText = @"SELECT name FROM sqlite_master WHERE type='index'
+                        AND name IN ('IX_PiecesCommande_Active_DateRdv_Statut',
+                                     'IX_PiecesCommande_Active_Statut_DateRdv_IdCommande',
+                                     'IX_PiecesCommande_Active_Statut_DateMiParcours',
+                                     'IX_PiecesCommande_IdCouturier_Statut_DateRdv',
+                                     'IX_Retours_EstAnnule_Statut_DateRdvReprise',
+                                     'IX_JournalAudit_TypeAction_DateHeureUtc',
+                                     'IX_Suivis_Type_Id_Preventions_DateRdv',
+                                     'IX_Suivis_Preventions_DateMessage_Client',
+                                     'IX_PiecesCommande_IdCommande_MontantCouture',
+                                     'IX_Paiements_IdCommande_EstAnnule_MontantPaye',
+                                     'IX_MaterielsSupplements_IdCommande_Totaux',
+                                     'IX_Clients_NomRecherche', 'IX_Clients_PrenomNomRecherche',
+                                     'IX_Clients_Telephone_Recherche')
+                        ORDER BY name";
+                    using var reader = indexes.ExecuteReader();
+                    while (reader.Read()) sb.AppendLine($"  Index : {reader.GetString(0)}");
                 }
 
                 log.LogInfo(sb.ToString());
@@ -1321,6 +1544,34 @@ namespace GestionCoutureApp
                         if (!colonnesReelles.Contains(col))
                             erreurs.AppendLine($"  Table '{table}' : colonne manquante '{col}'");
                     }
+                }
+
+                foreach (var index in new[]
+                {
+                    "IX_PiecesCommande_Active_DateRdv_Statut",
+                    "IX_PiecesCommande_Active_Statut_DateRdv_IdCommande",
+                    "IX_PiecesCommande_IdCouturier_Statut_DateRdv",
+                    "IX_PiecesCommande_Active_Statut_DateMiParcours",
+                    "IX_Retours_EstAnnule_Statut_DateRdvReprise",
+                    "IX_JournalAudit_TypeAction_DateHeureUtc",
+                    "IX_Suivis_Type_Id_Preventions_DateRdv",
+                    "IX_Suivis_Preventions_DateMessage_Client",
+                    "IX_PiecesCommande_IdCommande_MontantCouture",
+                    "IX_Paiements_IdCommande_EstAnnule_MontantPaye",
+                    "IX_MaterielsSupplements_IdCommande_Totaux",
+                    "IX_Clients_NomRecherche",
+                    "IX_Clients_PrenomNomRecherche",
+                    "IX_Clients_Telephone_Recherche"
+                })
+                {
+                    using var cmdIndex = conn.CreateCommand();
+                    cmdIndex.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=@name";
+                    var parameter = cmdIndex.CreateParameter();
+                    parameter.ParameterName = "@name";
+                    parameter.Value = index;
+                    cmdIndex.Parameters.Add(parameter);
+                    if (Convert.ToInt64(cmdIndex.ExecuteScalar()) == 0)
+                        erreurs.AppendLine($"  Index manquant '{index}'");
                 }
             }
             catch (Exception ex)

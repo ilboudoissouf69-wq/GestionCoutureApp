@@ -576,6 +576,11 @@ namespace GestionCoutureApp.Migrations
 
                     b.HasIndex("IdCommande");
 
+                    b.HasIndex("RecuNumero")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Paiements_RecuNumero")
+                        .HasFilter("\"RecuNumero\" != ''");
+
                     b.ToTable("Paiements");
                 });
 

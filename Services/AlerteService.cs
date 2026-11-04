@@ -78,9 +78,12 @@ namespace GestionCoutureApp.Services
             await using var context = await _contextFactory.CreateDbContextAsync();
 
             _cachePieces = await context.PiecesCommande
-                .Where(p => p.Statut != "Livree"
+                .Where(p => p.CommandeActive
+                         && p.Statut != "Livree"
                          && p.Commande != null
                          && p.Commande.EstSupprimee == false)
+                .OrderBy(p => p.DateRdvEffective)
+                .Take(500) // API historique; l'écran utilise ObtenirSectionAsync (pagination SQL).
                 .Select(p => new PieceAlerteDto
                 {
                     IdPieceCommande     = p.IdPieceCommande,
@@ -138,7 +141,7 @@ namespace GestionCoutureApp.Services
                     alertes.Add(ConstruireAlerteFromDto(piece, dateRdv, maintenant, "RendezVousProche"));
             }
 
-            return alertes.OrderBy(a => a.DateRendezVous).ToList();
+            return alertes.OrderBy(a => a.DateRendezVous).Take(50).ToList();
         }
 
         public async Task<List<AlerteRendezVous>> ObtenirTousRendezVousAVenir()
@@ -154,7 +157,7 @@ namespace GestionCoutureApp.Services
                 if (dateRdv <= maintenant) continue;
                 resultat.Add(ConstruireAlerteFromDto(piece, dateRdv, maintenant, "RendezVousProche"));
             }
-            return resultat.OrderBy(a => a.DateRendezVous).ToList();
+            return resultat.OrderBy(a => a.DateRendezVous).Take(50).ToList();
         }
 
         public async Task<List<AlerteRendezVous>> ObtenirRendezVousSemaine()
@@ -181,6 +184,7 @@ namespace GestionCoutureApp.Services
             return resultat
                 .OrderBy(a => a.ProposerContactWhatsApp ? 0 : 1)
                 .ThenBy(a => a.DateRendezVous)
+                .Take(50)
                 .ToList();
         }
 
@@ -205,7 +209,7 @@ namespace GestionCoutureApp.Services
                 resultat.Add(alerte);
             }
 
-            return resultat.OrderBy(a => a.DateRendezVous).ToList();
+            return resultat.OrderBy(a => a.DateRendezVous).Take(50).ToList();
         }
 
         // ── UNE seule requête pour toutes les sections ──
@@ -264,6 +268,9 @@ namespace GestionCoutureApp.Services
             // ── Retours (requête séparée, légère) ──
             dto.Retours = await ObtenirAlertesRetours();
 
+            dto.Production = dto.Production.OrderBy(a => a.DateRendezVous).Take(50).ToList();
+            dto.Retrait = dto.Retrait.OrderBy(a => a.DateRendezVous).Take(50).ToList();
+            dto.Retards = dto.Retards.OrderBy(a => a.DateRendezVous).Take(50).ToList();
             return dto;
         }
 
@@ -289,14 +296,17 @@ namespace GestionCoutureApp.Services
             };
         }
 
-        public async Task<List<AlerteRendezVous>> ObtenirAlertesRetours()
+        public async Task<List<AlerteRendezVous>> ObtenirAlertesRetours(int max = 50)
         {
             using var t = PerfLogger.Start("AlerteService.ObtenirAlertesRetours", _logger);
             await using var context = await _contextFactory.CreateDbContextAsync();
 
             // Projection : pas d'Include, pas de MotDePasse
             var retoursData = await context.Retours
-                .Where(r => !r.EstAnnule && r.Statut != "Rendu" && r.DateRdvReprise.HasValue)
+                .Where(r => !r.EstAnnule && r.Statut != "Rendu" && r.DateRdvReprise.HasValue
+                         && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee)
+                .OrderBy(r => r.DateRdvReprise)
+                .Take(Math.Clamp(max, 1, 500))
                 .Select(r => new
                 {
                     r.IdRetour,
@@ -390,10 +400,10 @@ namespace GestionCoutureApp.Services
         //                 && DateRdvEffective ∈ [maintenant, +7j]
         //   (Prêts remplace la notion de Retrait; Retards > Prêts > Aujourd'hui > Imminentes)
 
-        public async Task<ResumeAlertesDto> ObtenirResumeAsync()
+        public async Task<ResumeAlertesDto> ObtenirResumeAsync(CancellationToken cancellationToken = default)
         {
             using var t = PerfLogger.Start("AlerteService.ObtenirResumeAsync", _logger);
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var maintenant = DateTime.Now;
             var debutJour  = maintenant.Date;
             var debutDemain = debutJour.AddDays(1);
@@ -405,35 +415,36 @@ namespace GestionCoutureApp.Services
             // ── Compteurs SQL (aucune entité chargée) ────────────────────────
             var nbRetards = await ctx.PiecesCommande
                 .Where(p => p.CommandeActive
-                         && (p.Statut == "A faire" || p.Statut == "En cours")
+                         && (p.Statut == "A faire" || p.Statut == "En cours" || p.Statut == "Terminee")
                          && p.DateRdvEffective < maintenant)
                 .Select(p => p.IdCommande)
                 .Distinct()
-                .CountAsync();
+                .CountAsync(cancellationToken);
 
             var nbPrets = await ctx.PiecesCommande
-                .Where(p => p.CommandeActive && p.Statut == "Terminee")
+                .Where(p => p.CommandeActive && p.Statut == "Terminee" && p.DateRdvEffective >= maintenant)
                 .Select(p => p.IdCommande)
                 .Distinct()
-                .CountAsync();
+                .CountAsync(cancellationToken);
 
             var nbAujourdhui = await ctx.PiecesCommande
                 .Where(p => p.CommandeActive
                          && p.Statut != "Terminee" && p.Statut != "Livree"
-                         && p.DateRdvEffective >= debutJour
+                         && p.DateRdvEffective >= maintenant
                          && p.DateRdvEffective < debutDemain)
                 .Select(p => p.IdCommande)
                 .Distinct()
-                .CountAsync();
+                .CountAsync(cancellationToken);
 
             var nbImminentes = await ctx.PiecesCommande
                 .Where(p => p.CommandeActive
                          && p.Statut != "Terminee" && p.Statut != "Livree"
-                         && p.DateRdvEffective >= debutDemain
-                         && p.DateRdvEffective <= dans7j)
+                         && ((p.DateRdvEffective >= debutDemain && p.DateRdvEffective <= dans7j)
+                             || (p.Statut == "A faire" && p.DateMiParcours <= maintenant
+                                 && p.DateRdvEffective > dans7j)))
                 .Select(p => p.IdCommande)
                 .Distinct()
-                .CountAsync();
+                .CountAsync(cancellationToken);
 
             // Risque de retard : pièces non terminées avec DateRdvEffective <= seuilImminent,
             // excluant celles dont le suivi existe avec NbPreventions > 0 pour ce RDV.
@@ -441,27 +452,58 @@ namespace GestionCoutureApp.Services
             var nbRisque = await ctx.PiecesCommande
                 .Where(p => p.CommandeActive
                          && p.Statut != "Terminee" && p.Statut != "Livree"
-                         && p.DateRdvEffective <= seuilImminent)
+                         && p.DateRdvEffective <= seuilImminent
+                         && !ctx.SuivisAlerteRetard.Any(s =>
+                             s.TypeCible == (p.RendezVousException.HasValue ? "Piece" : "Commande")
+                             && s.IdCible == (p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande)
+                             && s.NbPreventions > 0
+                             && s.DateRdvTraite >= p.DateRdvEffective.AddMinutes(-1)
+                             && s.DateRdvTraite < p.DateRdvEffective.AddMinutes(1)))
                 .Select(p => new { p.IdCommande, p.IdPieceCommande, p.DateRdvEffective })
                 .Distinct()
-                .CountAsync();
+                .CountAsync(cancellationToken);
+            int nbRisqueRetours = await ctx.Retours.CountAsync(r => !r.EstAnnule
+                && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
+                && r.DateRdvReprise.HasValue && r.DateRdvReprise <= seuilImminent
+                && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee
+                && !ctx.SuivisAlerteRetard.Any(s => s.TypeCible == RetardAlerteService.CibleRetour
+                    && s.IdCible == r.IdRetour && s.NbPreventions > 0
+                    && s.DateRdvTraite >= r.DateRdvReprise!.Value.AddMinutes(-1)
+                    && s.DateRdvTraite < r.DateRdvReprise.Value.AddMinutes(1)), cancellationToken);
+
+            int nbRetardsRetours = await ctx.Retours.CountAsync(r => !r.EstAnnule
+                && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
+                && r.DateRdvReprise.HasValue && r.DateRdvReprise < debutJour
+                && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee, cancellationToken);
+            int nbPretsRetours = await ctx.Retours.CountAsync(r => !r.EstAnnule
+                && (r.Statut == "Termine" || r.Statut == "Pret") && r.DateRdvReprise.HasValue
+                && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee, cancellationToken);
+            int nbAujourdhuiRetours = await ctx.Retours.CountAsync(r => !r.EstAnnule
+                && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
+                && r.DateRdvReprise >= debutJour && r.DateRdvReprise < debutDemain
+                && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee, cancellationToken);
+            int nbImminentesRetours = await ctx.Retours.CountAsync(r => !r.EstAnnule
+                && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
+                && r.DateRdvReprise >= debutDemain && r.DateRdvReprise <= dans7j
+                && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee, cancellationToken);
 
             return new ResumeAlertesDto
             {
-                NbRetards     = nbRetards,
-                NbPrets       = nbPrets,
-                NbAujourdhui  = nbAujourdhui,
-                NbImminentes  = nbImminentes,
-                NbRisqueRetard = nbRisque,
+                NbRetards     = nbRetards + nbRetardsRetours,
+                NbPrets       = nbPrets + nbPretsRetours,
+                NbAujourdhui  = nbAujourdhui + nbAujourdhuiRetours,
+                NbImminentes  = nbImminentes + nbImminentesRetours,
+                NbRisqueRetard = nbRisque + nbRisqueRetours,
                 NbBadgeMenu   = nbRetards + nbAujourdhui
             };
         }
 
         public async Task<PagedResult<AlerteCommandeVm>> ObtenirSectionAsync(
-            SectionAlerte section, int page, int taille = 50)
+            SectionAlerte section, int page, int taille = 50,
+            CancellationToken cancellationToken = default)
         {
             using var t = PerfLogger.Start($"AlerteService.ObtenirSectionAsync({section})", _logger);
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var maintenant = DateTime.Now;
             var debutJour   = maintenant.Date;
             var debutDemain = debutJour.AddDays(1);
@@ -474,26 +516,28 @@ namespace GestionCoutureApp.Services
                 case SectionAlerte.Retards:
                     query = ctx.PiecesCommande
                         .Where(p => p.CommandeActive
-                                 && (p.Statut == "A faire" || p.Statut == "En cours")
+                                 && (p.Statut == "A faire" || p.Statut == "En cours" || p.Statut == "Terminee")
                                  && p.DateRdvEffective < maintenant);
                     break;
                 case SectionAlerte.Prets:
                     query = ctx.PiecesCommande
-                        .Where(p => p.CommandeActive && p.Statut == "Terminee");
+                        .Where(p => p.CommandeActive && p.Statut == "Terminee"
+                                 && p.DateRdvEffective >= maintenant);
                     break;
                 case SectionAlerte.Aujourdhui:
                     query = ctx.PiecesCommande
                         .Where(p => p.CommandeActive
                                  && p.Statut != "Terminee" && p.Statut != "Livree"
-                                 && p.DateRdvEffective >= debutJour
+                                 && p.DateRdvEffective >= maintenant
                                  && p.DateRdvEffective < debutDemain);
                     break;
                 case SectionAlerte.Imminentes:
                     query = ctx.PiecesCommande
                         .Where(p => p.CommandeActive
                                  && p.Statut != "Terminee" && p.Statut != "Livree"
-                                 && p.DateRdvEffective >= debutDemain
-                                 && p.DateRdvEffective <= dans7j);
+                                 && ((p.DateRdvEffective >= debutDemain && p.DateRdvEffective <= dans7j)
+                                     || (p.Statut == "A faire" && p.DateMiParcours <= maintenant
+                                         && p.DateRdvEffective > dans7j)));
                     break;
                 default: // RisqueRetard — géré par IRetardAlerteService
                     return new PagedResult<AlerteCommandeVm>
@@ -501,14 +545,24 @@ namespace GestionCoutureApp.Services
             }
 
             // ── COUNT SQL ────────────────────────────────────────────────────
-            int totalPieces = await query.AsNoTracking().CountAsync();
+            int totalCommandes = await query.AsNoTracking().Select(p => p.IdCommande)
+                .Distinct().CountAsync(cancellationToken);
+
+            var idsCommandesPage = await query.AsNoTracking()
+                .GroupBy(p => p.IdCommande)
+                .Select(g => new { IdCommande = g.Key, Date = g.Min(p => p.DateRdvEffective) })
+                .OrderBy(x => x.Date)
+                .Skip((page - 1) * taille)
+                .Take(page * taille)
+                .Select(x => x.IdCommande)
+                .ToListAsync(cancellationToken);
 
             // ── Projection paginée (ORDER BY + LIMIT) ───────────────────────
             var pieces = await query
+                .Where(p => idsCommandesPage.Contains(p.IdCommande))
                 .AsNoTracking()
                 .OrderBy(p => p.DateRdvEffective)
                 .Skip((page - 1) * taille)
-                .Take(taille)
                 .Select(p => new
                 {
                     p.IdCommande,
@@ -523,7 +577,7 @@ namespace GestionCoutureApp.Services
                     NomCouturier = p.Couturier != null
                         ? p.Couturier.Prenom + " " + p.Couturier.Nom : "(non assigné)"
                 })
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             // ── Regroupement par commande (sur la seule page ≤ 50) ──────────
             var libelleBouton = section switch
@@ -569,14 +623,106 @@ namespace GestionCoutureApp.Services
                 .OrderBy(c => c.DateEcheance)
                 .ToList();
 
+            var retoursQuery = ctx.Retours.AsNoTracking()
+                .Where(r => !r.EstAnnule && r.Statut != "Rendu" && r.DateRdvReprise.HasValue
+                         && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee);
+            retoursQuery = section switch
+            {
+                SectionAlerte.Retards => retoursQuery.Where(r => r.Statut != "Termine" && r.Statut != "Pret" && r.DateRdvReprise < maintenant),
+                SectionAlerte.Prets => retoursQuery.Where(r => r.Statut == "Termine" || r.Statut == "Pret"),
+                SectionAlerte.Aujourdhui => retoursQuery.Where(r => r.Statut != "Termine" && r.Statut != "Pret" && r.DateRdvReprise >= debutJour && r.DateRdvReprise < debutDemain),
+                SectionAlerte.Imminentes => retoursQuery.Where(r => r.Statut != "Termine" && r.Statut != "Pret" && r.DateRdvReprise >= debutDemain && r.DateRdvReprise <= dans7j),
+                _ => retoursQuery.Where(r => false)
+            };
+            int totalRetours = await retoursQuery.CountAsync(cancellationToken);
+            var retourDtos = await retoursQuery.OrderBy(r => r.DateRdvReprise)
+                .Take(page * taille)
+                .Select(r => new
+                {
+                    r.IdRetour, r.IdCommande, r.IdPieceCommande, r.NumeroRetour, r.Statut,
+                    r.DateRdvReprise, r.HeureDebutReprise,
+                    TypeVetement = r.PieceCommande != null ? r.PieceCommande.TypeVetement : "Retour",
+                    ClientNom = r.Commande!.Client != null ? r.Commande.Client.Nom : "",
+                    ClientPrenom = r.Commande!.Client != null ? r.Commande.Client.Prenom : "",
+                    Telephone = r.Commande!.Client != null ? r.Commande.Client.Telephone : "",
+                    CouturierNom = r.CouturierReprise != null ? r.CouturierReprise.Nom : "",
+                    CouturierPrenom = r.CouturierReprise != null ? r.CouturierReprise.Prenom : ""
+                }).ToListAsync(cancellationToken);
+            var cartesRetours = retourDtos.Select(r =>
+            {
+                var date = r.DateRdvReprise!.Value;
+                if (r.HeureDebutReprise.HasValue) date = date.Date + r.HeureDebutReprise.Value;
+                return new AlerteCommandeVm
+                {
+                    IdCommande = r.IdCommande,
+                    NomClient = $"{r.ClientPrenom} {r.ClientNom}".Trim(),
+                    Telephone = r.Telephone ?? "",
+                    DateEcheance = date,
+                    HeureRdv = date.ToString("HH:mm"),
+                    DetailPieces = $"🔄 RETOUR {r.NumeroRetour} — {r.TypeVetement} ({r.Statut}) — {(string.IsNullOrWhiteSpace(r.CouturierNom) ? "(non assigné)" : $"{r.CouturierPrenom} {r.CouturierNom}".Trim())}",
+                    EstAlertRetour = true,
+                    IdRetour = r.IdRetour,
+                    NumeroRetour = r.NumeroRetour
+                };
+            }).OrderBy(r => r.DateEcheance).ToList();
+            cartes = cartes.Concat(cartesRetours).OrderBy(c => c.DateEcheance)
+                .Skip((page - 1) * taille).Take(taille).ToList();
+
             // Borne sur le nombre de cartes affichées (une commande = 1 carte)
             return new PagedResult<AlerteCommandeVm>
             {
-                Items      = cartes.Take(taille).ToList(),
-                TotalCount = totalPieces,
+                Items      = cartes,
+                TotalCount = totalCommandes + totalRetours,
                 Page       = page,
                 PageSize   = taille
             };
+        }
+
+        public async Task<List<AlerteCommandeVm>> ObtenirAlertesUrgentesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var maintenant = DateTime.Now;
+            var seuil = maintenant.AddHours(1);
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var pieces = await ctx.PiecesCommande.AsNoTracking()
+                .Where(p => p.CommandeActive && p.Statut != "Livree" && p.DateRdvEffective <= seuil)
+                .OrderBy(p => p.DateRdvEffective).Take(20)
+                .Select(p => new AlerteCommandeVm
+                {
+                    IdCommande = p.IdCommande,
+                    NomClient = p.Commande != null && p.Commande.Client != null
+                        ? p.Commande.Client.Prenom + " " + p.Commande.Client.Nom : "?",
+                    Telephone = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Telephone : "",
+                    DateEcheance = p.DateRdvEffective,
+                    HeureRdv = "",
+                    DetailPieces = $"{p.TypeVetement} ({p.Statut})"
+                }).ToListAsync(cancellationToken);
+            var retours = await ctx.Retours.AsNoTracking()
+                .Where(r => !r.EstAnnule && r.Statut != "Rendu" && r.DateRdvReprise.HasValue
+                         && r.DateRdvReprise <= seuil && r.Commande != null
+                         && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee)
+                .OrderBy(r => r.DateRdvReprise).Take(20)
+                .Select(r => new
+                {
+                    r.IdRetour, r.IdCommande, r.NumeroRetour, r.Statut, r.DateRdvReprise, r.HeureDebutReprise,
+                    Nom = r.Commande!.Client != null ? r.Commande.Client.Prenom + " " + r.Commande.Client.Nom : "?",
+                    Tel = r.Commande!.Client != null ? r.Commande.Client.Telephone : "",
+                    Vetement = r.PieceCommande != null ? r.PieceCommande.TypeVetement : "Retour"
+                }).ToListAsync(cancellationToken);
+            pieces.ForEach(p => p.HeureRdv = p.DateEcheance.ToString("HH:mm"));
+            pieces.AddRange(retours.Select(r =>
+            {
+                var date = r.DateRdvReprise!.Value;
+                if (r.HeureDebutReprise.HasValue) date = date.Date + r.HeureDebutReprise.Value;
+                return new AlerteCommandeVm
+                {
+                    IdCommande = r.IdCommande, NomClient = r.Nom, Telephone = r.Tel ?? "",
+                    DateEcheance = date, HeureRdv = date.ToString("HH:mm"),
+                    DetailPieces = $"🔄 RETOUR {r.NumeroRetour} — {r.Vetement} ({r.Statut})",
+                    EstAlertRetour = true, IdRetour = r.IdRetour, NumeroRetour = r.NumeroRetour
+                };
+            }).Where(r => r.DateEcheance <= seuil));
+            return pieces.OrderBy(p => p.DateEcheance).Take(20).ToList();
         }
     }
 }

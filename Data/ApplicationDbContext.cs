@@ -13,6 +13,35 @@ namespace GestionCoutureApp.Data
         {
         }
 
+        public override int SaveChanges()
+        {
+            MaintenirClesRechercheClients();
+            return base.SaveChanges();
+        }
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            MaintenirClesRechercheClients();
+            return base.SaveChangesAsync(cancellationToken);
+        }
+
+        private void MaintenirClesRechercheClients()
+        {
+            foreach (var entry in ChangeTracker.Entries<Client>()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified))
+            {
+                if (entry.State == EntityState.Modified &&
+                    !entry.Property(c => c.Nom).IsModified &&
+                    !entry.Property(c => c.Prenom).IsModified)
+                    continue;
+
+                entry.Entity.NomRecherche = Helpers.TexteHelper.NormaliserPourRecherche(
+                    $"{entry.Entity.Nom} {entry.Entity.Prenom}");
+                entry.Entity.PrenomNomRecherche = Helpers.TexteHelper.NormaliserPourRecherche(
+                    $"{entry.Entity.Prenom} {entry.Entity.Nom}");
+            }
+        }
+
         // ====== DbSets (tables de la base) ======
         public DbSet<Client> Clients { get; set; }
         public DbSet<Commande> Commandes { get; set; }
@@ -225,6 +254,9 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<PieceCommande>()
                 .HasIndex(p => new { p.IdCommande, p.Statut })
                 .HasDatabaseName("IX_PiecesCommande_IdCommande_Statut");
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.IdCommande, p.MontantCouture })
+                .HasDatabaseName("IX_PiecesCommande_IdCommande_MontantCouture");
 
             // Commandes
             modelBuilder.Entity<Commande>()
@@ -247,6 +279,17 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<Paiement>()
                 .HasIndex(p => p.IdCommande)
                 .HasDatabaseName("IX_Paiements_IdCommande");
+            modelBuilder.Entity<Paiement>()
+                .HasIndex(p => p.RecuNumero)
+                .IsUnique()
+                .HasFilter("\"RecuNumero\" != ''")
+                .HasDatabaseName("IX_Paiements_RecuNumero");
+            modelBuilder.Entity<Paiement>()
+                .HasIndex(p => new { p.IdCommande, p.EstAnnule, p.MontantPaye })
+                .HasDatabaseName("IX_Paiements_IdCommande_EstAnnule_MontantPaye");
+            modelBuilder.Entity<MaterielSupplement>()
+                .HasIndex(m => new { m.IdCommande, m.Quantite, m.PrixUnitaire })
+                .HasDatabaseName("IX_MaterielsSupplements_IdCommande_Totaux");
 
             // Dépenses
             modelBuilder.Entity<Depense>()
@@ -273,6 +316,9 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<Retour>()
                 .HasIndex(r => r.IdPieceCommande)
                 .HasDatabaseName("IX_Retours_IdPieceCommande");
+            modelBuilder.Entity<Retour>()
+                .HasIndex(r => new { r.EstAnnule, r.Statut, r.DateRdvReprise })
+                .HasDatabaseName("IX_Retours_EstAnnule_Statut_DateRdvReprise");
 
             // Journal d'audit
             modelBuilder.Entity<JournalAudit>()
@@ -284,6 +330,9 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<JournalAudit>()
                 .HasIndex(j => j.TypeAction)
                 .HasDatabaseName("IX_JournalAudit_TypeAction");
+            modelBuilder.Entity<JournalAudit>()
+                .HasIndex(j => new { j.TypeAction, j.DateHeureUtc })
+                .HasDatabaseName("IX_JournalAudit_TypeAction_DateHeureUtc");
 
             // Commissions
             modelBuilder.Entity<Commission>()
@@ -294,31 +343,46 @@ namespace GestionCoutureApp.Data
             modelBuilder.Entity<Client>()
                 .HasIndex(c => new { c.Nom, c.Prenom })
                 .HasDatabaseName("IX_Clients_Nom_Prenom");
+            modelBuilder.Entity<Client>()
+                .HasIndex(c => c.NomRecherche)
+                .HasDatabaseName("IX_Clients_NomRecherche");
+            modelBuilder.Entity<Client>().Property(c => c.NomRecherche).UseCollation("NOCASE");
+            modelBuilder.Entity<Client>()
+                .HasIndex(c => c.PrenomNomRecherche)
+                .HasDatabaseName("IX_Clients_PrenomNomRecherche");
+            modelBuilder.Entity<Client>().Property(c => c.PrenomNomRecherche).UseCollation("NOCASE");
+            modelBuilder.Entity<Client>().HasIndex(c => c.Telephone).HasDatabaseName("IX_Clients_Telephone_Recherche");
 
             // Étape 7 — une ligne de suivi par cible
             modelBuilder.Entity<SuiviAlerteRetard>()
                 .HasIndex(s => new { s.TypeCible, s.IdCible })
                 .IsUnique();
+            modelBuilder.Entity<SuiviAlerteRetard>()
+                .HasIndex(s => new { s.TypeCible, s.IdCible, s.NbPreventions, s.DateRdvTraite })
+                .HasDatabaseName("IX_Suivis_Type_Id_Preventions_DateRdv");
+            modelBuilder.Entity<SuiviAlerteRetard>()
+                .HasIndex(s => new { s.NbPreventions, s.DateDernierMessage, s.IdClient })
+                .HasDatabaseName("IX_Suivis_Preventions_DateMessage_Client");
 
             // ══════════════════════════════════════════════════════════════════
             // ÉTAPE 1 PERF — Colonnes dénormalisées + index composites
             // ════════════════════════════════════════════════════════════════════
-            // (Statut, DateRdvEffective) : filtre principal des alertes —
-            //   WHERE Statut != 'Livree' AND DateRdvEffective < seuil
+            // Ordre date avant statut : permet le tri paginé sans tri temporaire.
             modelBuilder.Entity<PieceCommande>()
-                .HasIndex(p => new { p.Statut, p.DateRdvEffective })
-                .HasDatabaseName("IX_PiecesCommande_Statut_DateRdvEffective");
+                .HasIndex(p => new { p.CommandeActive, p.DateRdvEffective, p.Statut })
+                .HasDatabaseName("IX_PiecesCommande_Active_DateRdv_Statut");
 
-            // (CommandeActive, Statut, DateRdvEffective) : filtre des alertes
-            //   sans jointure sur Commandes
             modelBuilder.Entity<PieceCommande>()
-                .HasIndex(p => new { p.CommandeActive, p.Statut, p.DateRdvEffective })
-                .HasDatabaseName("IX_PiecesCommande_CommandeActive_Statut_DateRdv");
+                .HasIndex(p => new { p.CommandeActive, p.Statut, p.DateRdvEffective, p.IdCommande })
+                .HasDatabaseName("IX_PiecesCommande_Active_Statut_DateRdv_IdCommande");
 
-            // (IdCouturier, Statut) : stats couturiers Dashboard
+            // (IdCouturier, Statut, DateRdvEffective) : stats couturiers et qualité.
             modelBuilder.Entity<PieceCommande>()
-                .HasIndex(p => new { p.IdCouturier, p.Statut })
-                .HasDatabaseName("IX_PiecesCommande_IdCouturier_Statut");
+                .HasIndex(p => new { p.IdCouturier, p.Statut, p.DateRdvEffective })
+                .HasDatabaseName("IX_PiecesCommande_IdCouturier_Statut_DateRdv");
+            modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.CommandeActive, p.Statut, p.DateMiParcours })
+                .HasDatabaseName("IX_PiecesCommande_Active_Statut_DateMiParcours");
 
             // Commandes(EstSupprimee, EstAnnulee, DateFin) : requêtes d'alertes
             //   et dashboard sur la table Commandes

@@ -53,8 +53,8 @@ namespace GestionCoutureApp.Services
                 // (date de RDV). Une pièce sans DateTerminee n'est pas encore terminée.
                 .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
                             p.DateTerminee.HasValue &&
-                            p.DateTerminee.Value.Date >= dateDebut.Date &&
-                            p.DateTerminee.Value.Date <= dateFin.Date &&
+                            p.DateTerminee.Value >= dateDebut.Date &&
+                            p.DateTerminee.Value < dateFin.Date.AddDays(1) &&
                             p.Commande != null &&
                             p.IdCouturier.HasValue &&
                             p.IdCommission == null);
@@ -156,8 +156,8 @@ namespace GestionCoutureApp.Services
             var retoursParCouturier = context.Retours
                 .AsNoTracking()
                 .Where(r => !r.EstAnnule &&
-                            r.DateSignalement.Date >= dateDebut.Date &&
-                            r.DateSignalement.Date <= dateFin.Date &&
+                            r.DateSignalement >= dateDebut.Date &&
+                            r.DateSignalement < dateFin.Date.AddDays(1) &&
                             idsPiecesPeriode.Contains(r.IdPieceCommande))
                 .GroupBy(r => r.IdCouturier)
                 .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
@@ -326,8 +326,8 @@ namespace GestionCoutureApp.Services
                         // Pas de DateTerminee
                         !p.DateTerminee.HasValue ||
                         // DateTerminee hors période
-                        p.DateTerminee.Value.Date < dateDebut.Date ||
-                        p.DateTerminee.Value.Date > dateFin.Date ||
+                        p.DateTerminee.Value < dateDebut.Date ||
+                        p.DateTerminee.Value >= dateFin.Date.AddDays(1) ||
                         // Retour actif
                         retoursNonResolus.Contains(p.IdPieceCommande)
                     ).ToList();
@@ -405,8 +405,8 @@ namespace GestionCoutureApp.Services
                     var idsPiecesLigne = pieces.Select(p => p.IdPieceCommande).ToHashSet();
                     int nbRetoursSrv = context.Retours
                         .Where(r => !r.EstAnnule &&
-                                    r.DateSignalement.Date >= dateDebut.Date &&
-                                    r.DateSignalement.Date <= dateFin.Date &&
+                                    r.DateSignalement >= dateDebut.Date &&
+                                    r.DateSignalement < dateFin.Date.AddDays(1) &&
                                     idsPiecesLigne.Contains(r.IdPieceCommande) &&
                                     r.IdCouturier == ligne.IdEmploye)
                         .Count();

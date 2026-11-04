@@ -170,6 +170,8 @@ namespace GestionCoutureApp.Data
                     Mesures = MesuresPour(typeNom),
                     // ÉTAPE 1 PERF — colonnes dénormalisées
                     DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(null, dateFin, null),
+                    DateMiParcours = DateRdvHelper.CalculerDateMiParcours(dateDebut.Date,
+                        DateRdvHelper.CalculerDateRdvEffective(null, dateFin, null)),
                     CommandeActive = true
                 };
 

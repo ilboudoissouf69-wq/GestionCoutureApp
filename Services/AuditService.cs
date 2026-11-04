@@ -50,7 +50,43 @@ namespace GestionCoutureApp.Services
             string? motif = null,
             bool envoyerNotification = false)
         {
-            using var context = _contextFactory.CreateDbContext();
+            await EnregistrerActionInterneAsync(null, idOperateur, nomOperateur, roleOperateur,
+                typeAction, entite, idEntite, valeursAvant, valeursApres, motif, envoyerNotification);
+        }
+
+        public Task EnregistrerActionAsync(
+            ApplicationDbContext contextePartage,
+            int idOperateur,
+            string nomOperateur,
+            string roleOperateur,
+            string typeAction,
+            string entite,
+            int idEntite,
+            object? valeursAvant = null,
+            object? valeursApres = null,
+            string? motif = null,
+            bool envoyerNotification = false)
+        {
+            return EnregistrerActionInterneAsync(contextePartage, idOperateur, nomOperateur,
+                roleOperateur, typeAction, entite, idEntite, valeursAvant, valeursApres, motif,
+                envoyerNotification);
+        }
+
+        private async Task EnregistrerActionInterneAsync(
+            ApplicationDbContext? contextePartage,
+            int idOperateur,
+            string nomOperateur,
+            string roleOperateur,
+            string typeAction,
+            string entite,
+            int idEntite,
+            object? valeursAvant,
+            object? valeursApres,
+            string? motif,
+            bool envoyerNotification)
+        {
+            using var contextePossede = contextePartage == null ? _contextFactory.CreateDbContext() : null;
+            var context = contextePartage ?? contextePossede!;
 
             // Récupérer le hash de la dernière entrée pour le chaînage.
             // On lit en ORDER BY IdJournal DESC pour avoir le vrai dernier enregistrement.

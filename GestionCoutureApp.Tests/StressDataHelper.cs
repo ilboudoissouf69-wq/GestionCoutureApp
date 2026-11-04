@@ -19,6 +19,7 @@ namespace GestionCoutureApp.Tests
     /// </summary>
     internal static class StressDataHelper
     {
+        private const int TAILLE_LOT = 1_000;
         private static readonly Random _rng = new(42);
         private static readonly string[] Statuts = { "A faire", "En cours", "Terminee", "Livree" };
         private static readonly string[] Types = { "Pantalon", "Chemise", "Robe", "Boubou", "Veste" };
@@ -64,12 +65,12 @@ namespace GestionCoutureApp.Tests
             ctx.ChangeTracker.Clear();
 
             // ── Clients par lots ───────────────────────────────────────────
-            for (int lot = 0; lot < nbClients / 500; lot++)
+            for (int lot = 0; lot < nbClients / TAILLE_LOT; lot++)
             {
-                var batch = new List<Client>(500);
-                for (int i = 0; i < 500; i++)
+                var batch = new List<Client>(TAILLE_LOT);
+                for (int i = 0; i < TAILLE_LOT; i++)
                 {
-                    int id = lot * 500 + i + 1;
+                    int id = lot * TAILLE_LOT + i + 1;
                     // Cas extrême : homonymes (recherche)
                     string nom = (id % 1000 == 0) ? "Diop" : (id % 500 == 0) ? "Ndiaye" : $"NomClient{id}";
                     string prenom = (id % 1000 == 0) ? "Mamadou" : (id % 500 == 0) ? "Awa" : $"Prenom{id}";
@@ -90,16 +91,16 @@ namespace GestionCoutureApp.Tests
             int paiementsRestants = nbPaiements;
             int materiels = 0;
 
-            for (int lot = 0; lot < nbCommandes / 500; lot++)
+            for (int lot = 0; lot < nbCommandes / TAILLE_LOT; lot++)
             {
-                var commandes = new List<Commande>(500);
+                var commandes = new List<Commande>(TAILLE_LOT);
                 var pieces = new List<PieceCommande>();
                 var paiements = new List<Paiement>();
                 var materiaux = new List<MaterielSupplement>();
 
-                for (int i = 0; i < 500; i++)
+                for (int i = 0; i < TAILLE_LOT; i++)
                 {
-                    int idCmd = lot * 500 + i + 1;
+                    int idCmd = lot * TAILLE_LOT + i + 1;
                     int idClient = (idCmd % nbClients) + 1;
                     int idCout = (idCmd % nbCouturiers) + 2;
                     var statut = Statuts[idCmd % Statuts.Length];
@@ -143,6 +144,8 @@ namespace GestionCoutureApp.Tests
                                 ? dateDebut.AddDays(2) : null,
                             RendezVousException = rdvExc,
                             DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(rdvExc, dateFin, null),
+                            DateMiParcours = DateRdvHelper.CalculerDateMiParcours(dateDebut.Date.AddHours(8),
+                                DateRdvHelper.CalculerDateRdvEffective(rdvExc, dateFin, null)),
                             CommandeActive = true
                         });
                     }
@@ -188,14 +191,21 @@ namespace GestionCoutureApp.Tests
             if (nbRetours > 0)
             {
                 int annee = DateTime.Now.Year; int num = 0;
-                for (int lot = 0; lot < nbRetours / 500; lot++)
+                for (int lot = 0; lot < nbRetours / TAILLE_LOT; lot++)
                 {
-                    var batch = new List<Retour>(500);
-                    for (int i = 0; i < 500; i++)
+                    var batch = new List<Retour>(TAILLE_LOT);
+                    for (int i = 0; i < TAILLE_LOT; i++)
                     {
-                        num++; int idRetour = lot * 500 + i + 1;
-                        int idPiece = Math.Max(1, (_rng.Next(1, nbPieces / 2 + 1) * 2));
-                        int idCmd = (int)Math.Ceiling((double)idPiece / 2);
+                        num++; int idRetour = lot * TAILLE_LOT + i + 1;
+                        // Reconstituer la relation réelle pièce/commande. Les pièces
+                        // supplémentaires ne concernent que les commandes paires.
+                        int idCmd = _rng.Next(1, nbCommandes + 1);
+                        int premieresPiecesAvant = idCmd - 1
+                            + (nbPieces > nbCommandes ? (idCmd - 1) / 2 : 0);
+                        int idPiece = premieresPiecesAvant + 1;
+                        bool commandeDeuxPieces = nbPieces > nbCommandes && idCmd % 2 == 0;
+                        if (commandeDeuxPieces && idPiece < nbPieces && _rng.Next(2) == 1)
+                            idPiece++;
                         var dateSig = DateTime.Now.AddDays(-_rng.Next(1, 90));
                         string statut = (idRetour % 5) switch
                         {
@@ -207,6 +217,7 @@ namespace GestionCoutureApp.Tests
                             NumeroRetour = $"RET-{annee}-{num:D5}", Statut = statut,
                             DateSignalement = dateSig, DescriptionProbleme = "Défaut de couture",
                             EstAnnule = false, IdCouturier = (idCmd % 150) + 2,
+                            IdOperateurEnregistrement = 1, NomOperateurEnregistrement = "Boss",
                             DateRdvReprise = idRetour % 3 == 0
                                 ? DateTime.Now.AddDays(_rng.Next(-5, 10)) : null,
                             DateResolution = statut is "Termine" or "Rendu"
@@ -221,12 +232,12 @@ namespace GestionCoutureApp.Tests
             int nbSuivis = nbPieces / 20;
             if (nbSuivis > 0)
             {
-                for (int lot = 0; lot < nbSuivis / 500; lot++)
+                for (int lot = 0; lot < nbSuivis / TAILLE_LOT; lot++)
                 {
-                    var batch = new List<SuiviAlerteRetard>(500);
-                    for (int i = 0; i < 500; i++)
+                    var batch = new List<SuiviAlerteRetard>(TAILLE_LOT);
+                    for (int i = 0; i < TAILLE_LOT; i++)
                     {
-                        int n = lot * 500 + i + 1;
+                        int n = lot * TAILLE_LOT + i + 1;
                         string type = n % 3 == 0 ? "Piece" : "Commande";
                         int idCible = n % 3 == 0 ? (n * 3) : n;
                         batch.Add(new SuiviAlerteRetard

@@ -396,6 +396,7 @@ namespace GestionCoutureApp.Views
                 var pd = new System.Windows.Controls.PrintDialog();
                 if (pd.ShowDialog() == true)
                 {
+                    ConfigurerFormatThermique80Mm(pd);
                     _receiptPanel.Measure(new Size(290, double.PositiveInfinity));
                     _receiptPanel.Arrange(
                         new Rect(new Point(0, 0), _receiptPanel.DesiredSize));
@@ -419,6 +420,30 @@ namespace GestionCoutureApp.Views
                 MessageBox.Show("Erreur impression :\n" + ex.Message,
                     "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// Configure le reçu pour un rouleau thermique 80 mm : largeur papier
+        /// de 80 mm, longueur ajustée au reçu pour éviter une page A4 ou une
+        /// coupure fixe au bout de 80 mm.
+        /// </summary>
+        private void ConfigurerFormatThermique80Mm(System.Windows.Controls.PrintDialog dialogue)
+        {
+            const double dipParPouce = 96d;
+            const double mmParPouce = 25.4d;
+            double largeurPapier = 80d * dipParPouce / mmParPouce;
+            double hauteurMinimale = largeurPapier;
+
+            _receiptPanel.Measure(new Size(290, double.PositiveInfinity));
+            double hauteurRecu = Math.Max(hauteurMinimale, _receiptPanel.DesiredSize.Height + 12d);
+
+            var ticket = dialogue.PrintTicket ?? new System.Printing.PrintTicket();
+            ticket.PageOrientation = System.Printing.PageOrientation.Portrait;
+            ticket.PageMediaSize = new System.Printing.PageMediaSize(
+                System.Printing.PageMediaSizeName.Unknown,
+                largeurPapier,
+                hauteurRecu);
+            dialogue.PrintTicket = ticket;
         }
 
         // ----------------------------------------------------------------

@@ -88,11 +88,8 @@ namespace GestionCoutureApp.Services
                 .Where(c => !c.EstAnnulee
                          && c.DateCalcul >= dateDebut.Date
                          && c.DateCalcul < dateFin.Date.AddDays(1))
-                .ToList();
-
-            decimal total = 0m;
-            foreach (var c in commissions)
-                total += c.MontantCommission + c.PrimeQualite;
+                .Sum(c => (double)(c.MontantCommission + c.PrimeQualite));
+            decimal total = (decimal)commissions;
 
             _logger.LogInformation(
                 "Commissions calculées — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy} : {Total:N0} FCFA",
@@ -110,20 +107,13 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("TresorerieService.CalculerTotalMateriaux", _logger);
             using var context = _contextFactory.CreateDbContext();
 
-            // Récupérer toutes les commandes de la période
-            var commandesPeriode = context.Commandes
+            return (decimal)context.MaterielsSupplements
                 .AsNoTracking()
-                .Include(c => c.MaterielSupplements)
-                .Where(c => c.DateFin >= dateDebut.Date
-                         && c.DateFin < dateFin.Date.AddDays(1)
-                         && (c.Statut == "Terminee" || c.Statut == "Livree"))
-                .ToList();
-
-            var totalMateriaux = commandesPeriode
-                .SelectMany(c => c.MaterielSupplements)
-                .Sum(m => m.Quantite * m.PrixUnitaire);
-
-            return totalMateriaux;
+                .Where(m => m.Commande != null
+                         && m.Commande.DateFin >= dateDebut.Date
+                         && m.Commande.DateFin < dateFin.Date.AddDays(1)
+                         && (m.Commande.Statut == "Terminee" || m.Commande.Statut == "Livree"))
+                .Sum(m => (double)(m.Quantite * m.PrixUnitaire));
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -148,28 +138,39 @@ namespace GestionCoutureApp.Services
         {
             using var context = _contextFactory.CreateDbContext();
 
-            // Toutes les commandes de la période (DateFin dans la période)
-            // On inclut toutes les commandes non supprimées (pas seulement Terminee/Livree)
-            // car une commande En cours peut avoir des paiements.
-            var commandes = context.Commandes
-                .AsNoTracking()
-                .Include(c => c.Pieces)
-                .Include(c => c.MaterielSupplements)
-                .Include(c => c.Paiements)
-                .Where(c => !c.EstSupprimee
-                         && c.DateFin >= dateDebut.Date
-                         && c.DateFin < dateFin.Date.AddDays(1))
-                .ToList();
+            var debut = dateDebut.Date;
+            var finExclusive = dateFin.Date.AddDays(1);
+            var commandes = context.Commandes.AsNoTracking()
+                .Where(c => !c.EstSupprimee && c.DateFin >= debut && c.DateFin < finExclusive);
+
+            // Chaque table est agrégée séparément en SQL. Cela évite le produit
+            // cartésien des trois collections chargées avec Include.
+            var coutureParCommande = context.PiecesCommande.AsNoTracking()
+                .Where(p => commandes.Select(c => c.IdCommande).Contains(p.IdCommande))
+                .GroupBy(p => p.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(p => (double)p.MontantCouture) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var materiauxParCommande = context.MaterielsSupplements.AsNoTracking()
+                .Where(m => commandes.Select(c => c.IdCommande).Contains(m.IdCommande))
+                .GroupBy(m => m.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(m => (double)(m.Quantite * m.PrixUnitaire)) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var paiementsParCommande = context.Paiements.AsNoTracking()
+                .Where(p => !p.EstAnnule && commandes.Select(c => c.IdCommande).Contains(p.IdCommande))
+                .GroupBy(p => p.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(p => (double)p.MontantPaye) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var commandesIds = commandes.Select(c => c.IdCommande).ToList();
 
             decimal caEncaisseMateriaux  = 0m;
             decimal caEncaisseCouture    = 0m;
             decimal totalMateriauxFactures = 0m;
             decimal materiauxNonRembourses = 0m;
 
-            foreach (var cmd in commandes)
+            foreach (var idCommande in commandesIds)
             {
-                decimal totalMat  = cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
-                decimal paye      = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                decimal totalMat = materiauxParCommande.GetValueOrDefault(idCommande);
+                decimal paye = paiementsParCommande.GetValueOrDefault(idCommande);
 
                 // Matériaux facturés (tous, quelle que soit la situation de paiement)
                 totalMateriauxFactures += totalMat;
@@ -190,24 +191,24 @@ namespace GestionCoutureApp.Services
 
                 // Matériaux non remboursés = commande non soldée qui a des matériaux
                 // (alerte de créances : le client n'a pas encore tout réglé)
-                decimal totalCmd = cmd.Pieces.Sum(p => p.MontantCouture) + totalMat;
+                decimal totalCmd = coutureParCommande.GetValueOrDefault(idCommande) + totalMat;
                 if (paye < totalCmd - 0.01m)
                     materiauxNonRembourses += totalMat;
             }
 
             // Pour les paiements hors-période (paiements dont la commande n'est pas dans la période)
             // On récupère les paiements de la période sur des commandes hors-DateFin
-            var idsCommandesPeriode = commandes.Select(c => c.IdCommande).ToHashSet();
             var paiementsHorsPeriode = context.Paiements
                 .AsNoTracking()
                 .Where(p => !p.EstAnnule
-                         && p.DatePaiement >= dateDebut.Date
-                         && p.DatePaiement < dateFin.Date.AddDays(1)
-                         && !idsCommandesPeriode.Contains(p.IdCommande))
-                .ToList();
+                         && p.DatePaiement >= debut
+                         && p.DatePaiement < finExclusive
+                         && !context.Commandes.Any(c => c.IdCommande == p.IdCommande
+                             && !c.EstSupprimee && c.DateFin >= debut && c.DateFin < finExclusive))
+                .Sum(p => (double)p.MontantPaye);
 
             // Ces paiements sont considérés entièrement comme "couture" (pas de matériaux associés dans la période)
-            caEncaisseCouture += paiementsHorsPeriode.Sum(p => p.MontantPaye);
+            caEncaisseCouture += (decimal)paiementsHorsPeriode;
 
             _logger.LogDebug(
                 "Répartition CA — MatEncaissés: {MatE:N0}, CoutureEncaissée: {CoutE:N0}, " +
@@ -237,6 +238,15 @@ namespace GestionCoutureApp.Services
             using var t = PerfLogger.Start("TresorerieService.CalculerBilan", _logger);
             using var context = _contextFactory.CreateDbContext();
 
+            try
+            {
+                return CalculerBilanSql(context, dateDebut, dateFin);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Le calcul SQL condensé du bilan a échoué; repli sur le calcul EF.");
+            }
+
             _logger.LogInformation(
                 "Calcul bilan financier — période {Debut:dd/MM/yyyy}→{Fin:dd/MM/yyyy}",
                 dateDebut, dateFin);
@@ -248,37 +258,41 @@ namespace GestionCoutureApp.Services
             decimal depenses = CalculerTotalDepenses(dateDebut, dateFin);
 
             // 3. Commissions et primes (avec détail)
-            var commissionsDetaillees = context.Commissions
-                .AsNoTracking()
-                .Where(c => !c.EstAnnulee
-                         && c.DateCalcul >= dateDebut.Date
-                         && c.DateCalcul < dateFin.Date.AddDays(1))
-                .ToList();
-
-            decimal totalCommissions = commissionsDetaillees.Sum(c => c.MontantCommission);
-            decimal totalPrimes      = commissionsDetaillees.Sum(c => c.PrimeQualite);
+            var commissionsQuery = context.Commissions.AsNoTracking()
+                .Where(c => !c.EstAnnulee && c.DateCalcul >= dateDebut.Date
+                         && c.DateCalcul < dateFin.Date.AddDays(1));
+            decimal totalCommissions = (decimal)commissionsQuery.Sum(c => (double)c.MontantCommission);
+            decimal totalPrimes = (decimal)commissionsQuery.Sum(c => (double)c.PrimeQualite);
 
             // 4. Répartition couture / matériaux via la méthode centrale
             //    Règle : matériaux remboursés EN PREMIER (min(paye, totalMat))
             var repartition = CalculerRepartitionCa(dateDebut, dateFin);
 
             // 5. Reste à encaisser (commandes de la période non soldées)
-            var commandesPeriode = context.Commandes
-                .AsNoTracking()
-                .Include(c => c.Pieces)
-                .Include(c => c.MaterielSupplements)
-                .Include(c => c.Paiements)
-                .Where(c => !c.EstSupprimee
-                         && c.DateFin >= dateDebut.Date
-                         && c.DateFin < dateFin.Date.AddDays(1))
-                .ToList();
+            var debut = dateDebut.Date;
+            var finExclusive = dateFin.Date.AddDays(1);
+            var commandesPeriode = context.Commandes.AsNoTracking()
+                .Where(c => !c.EstSupprimee && c.DateFin >= debut && c.DateFin < finExclusive);
+            var idsPeriode = commandesPeriode.Select(c => c.IdCommande);
+            var coutureParCommande = context.PiecesCommande.AsNoTracking()
+                .Where(p => idsPeriode.Contains(p.IdCommande)).GroupBy(p => p.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(p => (double)p.MontantCouture) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var materiauxParCommande = context.MaterielsSupplements.AsNoTracking()
+                .Where(m => idsPeriode.Contains(m.IdCommande)).GroupBy(m => m.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(m => (double)(m.Quantite * m.PrixUnitaire)) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var paiementsParCommande = context.Paiements.AsNoTracking()
+                .Where(p => !p.EstAnnule && idsPeriode.Contains(p.IdCommande)).GroupBy(p => p.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(p => (double)p.MontantPaye) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
 
             decimal resteAEncaisser = 0m;
-            foreach (var cmd in commandesPeriode)
+            foreach (var idCommande in commandesPeriode.Select(c => c.IdCommande))
             {
-                decimal totalFacture = cmd.Pieces.Sum(p => p.MontantCouture) 
-                                     + cmd.MaterielSupplements.Sum(m => m.Quantite * m.PrixUnitaire);
-                decimal encaisse = cmd.Paiements.Where(p => !p.EstAnnule).Sum(p => p.MontantPaye);
+                decimal totalFacture = coutureParCommande.GetValueOrDefault(idCommande)
+                                     + materiauxParCommande.GetValueOrDefault(idCommande);
+                decimal encaisse = paiementsParCommande.GetValueOrDefault(idCommande);
                 decimal reste = totalFacture - encaisse;
                 if (reste > 0)
                     resteAEncaisser += reste;
@@ -286,9 +300,7 @@ namespace GestionCoutureApp.Services
 
             // 6. Statistiques de comptage
             int nombrePaiements = context.Paiements
-                .Count(p => !p.EstAnnule
-                         && p.DatePaiement >= dateDebut.Date
-                         && p.DatePaiement < dateFin.Date.AddDays(1));
+                .Count(p => !p.EstAnnule && p.DatePaiement >= debut && p.DatePaiement < finExclusive);
 
             int nombreCommandesLivrees = commandesPeriode
                 .Count(c => c.Statut == "Terminee" || c.Statut == "Livree");
@@ -322,6 +334,89 @@ namespace GestionCoutureApp.Services
                 NombreCommandesLivrees   = nombreCommandesLivrees,
                 ResteAEncaisser          = resteAEncaisser,
                 MateriauxNonRembourses   = repartition.MateriauxNonRembourses
+            };
+        }
+
+        private static BilanFinancier CalculerBilanSql(
+            ApplicationDbContext context, DateTime dateDebut, DateTime dateFin)
+        {
+            var debut = dateDebut.Date;
+            var finExclusive = dateFin.Date.AddDays(1);
+            static string DbDate(DateTime d) => d.ToString(
+                "yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+
+            context.Database.OpenConnection();
+            context.Database.ExecuteSqlRaw("PRAGMA temp_store = MEMORY;");
+            context.Database.ExecuteSqlRaw("PRAGMA cache_size = -32768;");
+            using var command = context.Database.GetDbConnection().CreateCommand();
+            command.CommandText = @"
+WITH
+commandes_periode AS (
+  SELECT IdCommande, Statut FROM Commandes
+  WHERE EstSupprimee = 0 AND DateFin >= @debut AND DateFin < @fin
+),
+pieces AS (
+  SELECT IdCommande, SUM(CAST(MontantCouture AS REAL)) AS total
+  FROM PiecesCommande GROUP BY IdCommande
+),
+materiaux AS (
+  SELECT IdCommande, SUM(Quantite * CAST(PrixUnitaire AS REAL)) AS total
+  FROM MaterielsSupplements GROUP BY IdCommande
+),
+paiements AS (
+  SELECT IdCommande, SUM(CAST(MontantPaye AS REAL)) AS total
+  FROM Paiements WHERE EstAnnule = 0 GROUP BY IdCommande
+),
+resume AS (
+  SELECT c.IdCommande, COALESCE(pi.total, 0) AS couture,
+         COALESCE(ma.total, 0) AS materiaux, COALESCE(pa.total, 0) AS paye
+  FROM commandes_periode c
+  LEFT JOIN pieces pi ON pi.IdCommande = c.IdCommande
+  LEFT JOIN materiaux ma ON ma.IdCommande = c.IdCommande
+  LEFT JOIN paiements pa ON pa.IdCommande = c.IdCommande
+)
+SELECT
+ (SELECT COALESCE(SUM(CAST(MontantPaye AS REAL)), 0) FROM Paiements
+  WHERE EstAnnule = 0 AND DatePaiement >= @debut AND DatePaiement < @fin),
+ (SELECT COALESCE(SUM(CAST(Montant AS REAL)), 0) FROM Depenses
+  WHERE DateDepense >= @debut AND DateDepense < @fin
+    AND StatutValidation = 'Validee' AND EstAnnulee = 0),
+ (SELECT COALESCE(SUM(CAST(MontantCommission AS REAL)), 0) FROM Commissions
+  WHERE EstAnnulee = 0 AND DateCalcul >= @debut AND DateCalcul < @fin),
+ (SELECT COALESCE(SUM(CAST(PrimeQualite AS REAL)), 0) FROM Commissions
+  WHERE EstAnnulee = 0 AND DateCalcul >= @debut AND DateCalcul < @fin),
+ COALESCE((SELECT SUM(MIN(paye, materiaux)) FROM resume), 0),
+ COALESCE((SELECT SUM(MAX(0, paye - materiaux)) FROM resume), 0) +
+ (SELECT COALESCE(SUM(CAST(p.MontantPaye AS REAL)), 0) FROM Paiements p
+  WHERE p.EstAnnule = 0 AND p.DatePaiement >= @debut AND p.DatePaiement < @fin
+    AND NOT EXISTS (SELECT 1 FROM commandes_periode cp WHERE cp.IdCommande = p.IdCommande)),
+ COALESCE((SELECT SUM(materiaux) FROM resume), 0),
+ COALESCE((SELECT SUM(CASE WHEN paye < couture + materiaux - 0.01
+                            THEN materiaux ELSE 0 END) FROM resume), 0),
+ COALESCE((SELECT SUM(MAX(0, couture + materiaux - paye)) FROM resume), 0),
+ (SELECT COUNT(*) FROM Paiements WHERE EstAnnule = 0 AND DatePaiement >= @debut AND DatePaiement < @fin),
+ (SELECT COUNT(*) FROM commandes_periode WHERE Statut IN ('Terminee', 'Livree'));";
+            var pDebut = command.CreateParameter();
+            pDebut.ParameterName = "@debut"; pDebut.Value = DbDate(debut); command.Parameters.Add(pDebut);
+            var pFin = command.CreateParameter();
+            pFin.ParameterName = "@fin"; pFin.Value = DbDate(finExclusive); command.Parameters.Add(pFin);
+
+            using var reader = command.ExecuteReader();
+            if (!reader.Read()) throw new InvalidOperationException("Le calcul SQL du bilan n'a retourné aucune ligne.");
+            decimal Amount(int ordinal) => Convert.ToDecimal(reader.GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+            int Count(int ordinal) => Convert.ToInt32(reader.GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+            decimal ca = Amount(0), depenses = Amount(1), commissions = Amount(2), primes = Amount(3);
+            decimal caMateriaux = Amount(4), caCouture = Amount(5), materiaux = Amount(6);
+            decimal nonRembourses = Amount(7), reste = Amount(8);
+            return new BilanFinancier
+            {
+                DateDebut = debut, DateFin = dateFin.Date,
+                ChiffreAffaires = ca, ChiffreAffairesCouture = caCouture,
+                ChiffreAffairesMateriaux = caMateriaux, TotalMateriauxFactures = materiaux,
+                TotalDepenses = depenses, TotalCommissions = commissions,
+                TotalPrimesQualite = primes, BilanNet = caCouture - commissions - primes - depenses,
+                NombrePaiements = Count(9), NombreCommandesLivrees = Count(10),
+                ResteAEncaisser = reste, MateriauxNonRembourses = nonRembourses
             };
         }
 

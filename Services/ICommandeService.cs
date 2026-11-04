@@ -31,7 +31,11 @@ namespace GestionCoutureApp.Services
             int? idCouturier,
             DateTime? dateDebut,
             DateTime? dateFin,
-            bool inclureSupprimees = false);
+            bool inclureSupprimees = false,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>Compte les commandes en retard sans charger leur graphe complet.</summary>
+        Task<int> CompterCommandesEnRetardAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Crée une nouvelle commande avec sa première pièce et ses mesures.

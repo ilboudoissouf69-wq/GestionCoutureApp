@@ -1,4 +1,5 @@
 using GestionCoutureApp.Models;
+using GestionCoutureApp.Data;
 
 namespace GestionCoutureApp.Services
 {
@@ -31,6 +32,28 @@ namespace GestionCoutureApp.Services
             object? valeursApres = null,
             string? motif = null,
             bool envoyerNotification = false);
+
+        /// <summary>
+        /// Enregistre l'audit dans le même contexte/transaction que l'opération métier.
+        /// L'implémentation par défaut conserve la compatibilité des services de test.
+        /// </summary>
+        Task EnregistrerActionAsync(
+            ApplicationDbContext contextePartage,
+            int idOperateur,
+            string nomOperateur,
+            string roleOperateur,
+            string typeAction,
+            string entite,
+            int idEntite,
+            object? valeursAvant = null,
+            object? valeursApres = null,
+            string? motif = null,
+            bool envoyerNotification = false)
+        {
+            contextePartage.SaveChanges();
+            return EnregistrerActionAsync(idOperateur, nomOperateur, roleOperateur,
+                typeAction, entite, idEntite, valeursAvant, valeursApres, motif, envoyerNotification);
+        }
 
         /// <summary>
         /// Récupère toutes les entrées du journal d'audit (lecture seule)

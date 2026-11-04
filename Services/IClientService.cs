@@ -33,7 +33,8 @@ namespace GestionCoutureApp.Services
         List<Client> Rechercher(string motCle);
 
         // ✅ PAGINATION : Cherche des clients avec pagination
-        Task<PagedResult<Client>> RechercherPageAsync(string motCle, int page, int pageSize);
+        Task<PagedResult<Client>> RechercherPageAsync(string motCle, int page, int pageSize,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Rapport de détection des doublons existants en base (clients ayant le même

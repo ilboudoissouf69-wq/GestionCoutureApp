@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using GestionCoutureApp.Data;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using GestionCoutureApp.Services;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,7 @@ namespace GestionCoutureApp.Views
         private readonly ICommandeService _commandeService;
         private readonly IClientService _clientService;
         private readonly ApplicationDbContext _context;
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IMaterielService _materielService;
         private readonly IWhatsAppService _whatsApp;
         private readonly ILanguageService _languageService;
@@ -53,6 +55,8 @@ namespace GestionCoutureApp.Views
         // Filtre date — null = pas de filtre actif
         private DateTime? _filtreDate1 = null;
         private DateTime? _filtreDate2 = null;
+        private System.Windows.Threading.DispatcherTimer? _timerRechercheCommandes;
+        private CancellationTokenSource? _ctsChargementCommandes;
 
         // Date RDV par défaut
         private DateTime _dateRdvDefaut = DateTime.Today.AddDays(1);
@@ -68,6 +72,9 @@ namespace GestionCoutureApp.Views
 
         // Liste partagée des couturiers disponibles (utilisée dans AjouterCarte)
         private List<Employe> _couturiers = new();
+        private bool _donneesReferenceChargees;
+        private bool _chargementCompteurRetard;
+        private DateTime _dernierComptageRetardUtc = DateTime.MinValue;
 
         // Liste complète des clients (pour le filtre temps réel du combobox modal)
         private List<Client> _tousLesClients = new();
@@ -240,8 +247,8 @@ namespace GestionCoutureApp.Views
                 _mesureClientService = App.Services.GetRequiredService<IMesureClientService>();
                 _brouillonService = App.Services.GetRequiredService<IBrouillonCommandeService>();
 
-                var contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-                _context = contextFactory.CreateDbContext();
+                _contextFactory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                _context = _contextFactory.CreateDbContext();
             }
             catch (Exception ex)
             {
@@ -252,6 +259,8 @@ namespace GestionCoutureApp.Views
 
             Unloaded += (s, e) =>
             {
+                _timerRechercheCommandes?.Stop();
+                _ctsChargementCommandes?.Cancel();
                 _context?.Dispose();
                 _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
                 _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
@@ -261,7 +270,7 @@ namespace GestionCoutureApp.Views
 
             // Fix 2 — Reste à payer : recharger les commandes quand on revient sur cette page
             // (par ex. après un paiement enregistré depuis BtnActionPaiement_Click)
-            Loaded += (s, e) =>
+            Loaded += async (s, e) =>
             {
                 if (NavigationService != null)
                     NavigationService.Navigated += OnNavigatedBackToThis;
@@ -269,6 +278,9 @@ namespace GestionCoutureApp.Views
                 // Fix sidebar : activer le bouton Commandes quelle que soit la page d'origine
                 if (Window.GetWindow(this) is MainWindow mainWin)
                     mainWin.ActiverBoutonCommandes();
+
+                if (!_donneesReferenceChargees)
+                    await ChargerDonneesReferenceAsync();
 
                 // Étape 5A — Vérifier si un brouillon existe
                 _ = VerifierBrouillonExistantAsync();
@@ -309,64 +321,6 @@ namespace GestionCoutureApp.Views
             CmbClient.ItemsSource      = _tousLesClients;
             CmbModalClient.ItemsSource = _tousLesClients;
 
-            // ── Couturiers (filtre rôle Couturier + Boss) ──
-            _couturiers = _context.Employes
-                .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
-                .OrderBy(e => e.Prenom)
-                .ToList()
-                .Select(e => new Employe
-                {
-                    IdEmploye   = e.IdEmploye,
-                    Nom         = e.Nom,
-                    Prenom      = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
-                    Role        = e.Role, Statut = e.Statut,
-                    Identifiant = e.Identifiant, MotDePasse = e.MotDePasse
-                }).ToList();
-            // Entrée « Aucun couturier » en tête pour permettre de retirer un couturier
-            _couturiers.Insert(0, new Employe { IdEmploye = 0, Prenom = "— Aucun couturier —",
-                                                Nom = "", Identifiant = "", MotDePasse = "" });
-            CmbCouturier.ItemsSource = _couturiers;
-
-            // ── CmbFiltreCouturier (avec entrée "Tous") ──
-            if (CmbFiltreCouturier != null)
-            {
-                var filtreCouturiers = new List<Employe>
-                {
-                    new Employe { IdEmploye = 0, Prenom = "Tous", Nom = "les couturiers",
-                                  Identifiant = "", MotDePasse = "" }
-                };
-                filtreCouturiers.AddRange(_couturiers.Where(e => e.IdEmploye > 0));
-                CmbFiltreCouturier.ItemsSource  = filtreCouturiers;
-                CmbFiltreCouturier.SelectedIndex = 0;
-            }
-
-            // ── Types de vêtements ──
-            try
-            {
-                _typesVetement = _context.TypesVetements
-                    .Include(t => t.MesuresRequises)
-                    .Include(t => t.Descriptions)
-                    .ToList();
-                if (_typesVetement == null || _typesVetement.Count == 0)
-                {
-                    _typesVetement = new List<TypeVetement>();
-                    MessageBox.Show("Aucun type de vêtement enregistré. Créez-en d'abord.",
-                        "Données manquantes", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            catch (Exception ex)
-            {
-                _typesVetement = new List<TypeVetement>();
-                MessageBox.Show("Erreur chargement types vêtements : " + ex.Message,
-                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-
-            // ── CmbTypeVetement legacy ──
-            CmbTypeVetement.ItemsSource = _typesVetement.Select(t => new
-            {
-                t.IdTypeVetement,
-                DisplayText = t.Nom + " (" + t.PrixBase + " FCFA)"
-            }).ToList();
             CmbTypeVetement.SelectedValuePath = "IdTypeVetement";
 
             for (int i = 0; i <= 20; i++)
@@ -391,6 +345,67 @@ namespace GestionCoutureApp.Views
 
             // ── Étape 5A : Initialiser le brouillon automatique ──
             InitialiserBrouillonAutomatique();
+        }
+
+        private async Task ChargerDonneesReferenceAsync()
+        {
+            try
+            {
+                await using var context = await _contextFactory.CreateDbContextAsync();
+                var employes = await context.Employes.AsNoTracking()
+                    .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
+                    .OrderBy(e => e.Prenom)
+                    .Select(e => new Employe
+                    {
+                        IdEmploye = e.IdEmploye,
+                        Nom = e.Nom,
+                        Prenom = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
+                        Role = e.Role,
+                        Statut = e.Statut,
+                        Identifiant = string.Empty,
+                        MotDePasse = string.Empty
+                    })
+                    .ToListAsync();
+
+                _couturiers = new List<Employe>
+                {
+                    new Employe { IdEmploye = 0, Prenom = "— Aucun couturier —", Nom = "" }
+                };
+                _couturiers.AddRange(employes);
+                CmbCouturier.ItemsSource = _couturiers;
+
+                if (CmbFiltreCouturier != null)
+                {
+                    var filtres = new List<Employe>
+                    {
+                        new Employe { IdEmploye = 0, Prenom = "Tous", Nom = "les couturiers" }
+                    };
+                    filtres.AddRange(employes);
+                    CmbFiltreCouturier.ItemsSource = filtres;
+                    CmbFiltreCouturier.SelectedIndex = 0;
+                }
+
+                _typesVetement = await context.TypesVetements.AsNoTracking()
+                    .Include(t => t.MesuresRequises)
+                    .Include(t => t.Descriptions)
+                    .ToListAsync();
+                CmbTypeVetement.ItemsSource = _typesVetement.Select(t => new
+                {
+                    t.IdTypeVetement,
+                    DisplayText = t.Nom + " (" + t.PrixBase + " FCFA)"
+                }).ToList();
+                _donneesReferenceChargees = true;
+
+                if (_typesVetement.Count == 0)
+                    MessageBox.Show("Aucun type de vêtement enregistré. Créez-en d'abord.",
+                        "Données manquantes", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                _typesVetement = new List<TypeVetement>();
+                MessageBox.Show("Erreur chargement des données de référence : " + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void OnLanguageChanged(SettingsChangedEvent evt) => Dispatcher.Invoke(() => { });
@@ -426,6 +441,7 @@ namespace GestionCoutureApp.Views
 
         // Debounce pour la recherche client (300 ms)
         private System.Windows.Threading.DispatcherTimer? _timerRechercheClient;
+        private CancellationTokenSource? _ctsRechercheClient;
 
         private void TxtRechercheClient_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -476,17 +492,21 @@ namespace GestionCoutureApp.Views
                 else
                 {
                     // Recherche base : top 20 par nom/prénom/téléphone
-                    await using var ctx = await contextFactory.CreateDbContextAsync();
-                    string recherche = saisie.ToLowerInvariant();
+                    _ctsRechercheClient?.Cancel();
+                    _ctsRechercheClient?.Dispose();
+                    _ctsRechercheClient = new CancellationTokenSource();
+                    var cancellationToken = _ctsRechercheClient.Token;
+                    await using var ctx = await contextFactory.CreateDbContextAsync(cancellationToken);
+                    string cle = TexteHelper.NormaliserPourRecherche(saisie);
                     filtres = await ctx.Clients
                         .AsNoTracking()
                         .Where(c =>
-                            c.Nom.ToLower().Contains(recherche) ||
-                            c.Prenom.ToLower().Contains(recherche) ||
-                            (c.Telephone != null && c.Telephone.Contains(saisie)))
-                        .OrderBy(c => c.Nom).ThenBy(c => c.Prenom)
+                            c.NomRecherche.StartsWith(cle) ||
+                            c.PrenomNomRecherche.StartsWith(cle) ||
+                            (c.Telephone != null && c.Telephone.StartsWith(saisie)))
+                        .OrderBy(c => c.NomRecherche)
                         .Take(20)
-                        .ToListAsync();
+                        .ToListAsync(cancellationToken);
                 }
 
                 CmbModalClient.ItemsSource    = filtres;
@@ -619,6 +639,10 @@ namespace GestionCoutureApp.Views
         private async Task ChargerCommandes()
         {
             if (_commandeService == null) return;
+            _ctsChargementCommandes?.Cancel();
+            var cts = new CancellationTokenSource();
+            _ctsChargementCommandes = cts;
+            var cancellationToken = cts.Token;
             using var t = GestionCoutureApp.Helpers.PerfLogger.Start("CommandesView.ChargerCommandes");
             try
             {
@@ -627,25 +651,15 @@ namespace GestionCoutureApp.Views
 
                 PagedResult<Commande> result;
 
-                // Si un filtre date est actif, on utilise la surcharge complète
-                // qui centralise tous les filtres (texte, statut, couturier, période).
-                bool avecDate = _filtreDate1.HasValue || _filtreDate2.HasValue;
-
-                if (avecDate || _filtreStatut != null || _filtreCouturierId != null
-                    || !string.IsNullOrWhiteSpace(_currentSearch))
-                {
-                    result = await _commandeService.ObtenirPageLightAsync(
-                        _currentPage, PAGE_SIZE,
-                        string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch,
-                        _filtreStatut,
-                        _filtreCouturierId,
-                        _filtreDate1,
-                        _filtreDate2);
-                }
-                else
-                {
-                    result = await _commandeService.ObtenirPageLightAsync(_currentPage, PAGE_SIZE);
-                }
+                result = await _commandeService.ObtenirPageLightAsync(
+                    _currentPage, PAGE_SIZE,
+                    string.IsNullOrWhiteSpace(_currentSearch) ? null : _currentSearch,
+                    _filtreStatut,
+                    _filtreCouturierId,
+                    _filtreDate1,
+                    _filtreDate2,
+                    cancellationToken: cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Filtrer les pièces vides (sans type) pour l'affichage
                 foreach (var c in result.Items)
@@ -672,6 +686,10 @@ namespace GestionCoutureApp.Views
 
                 _ = MettreAJourCompteurRetard();
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Une recherche plus récente a remplacé celle-ci.
+            }
             catch (Exception ex)
             {
                 MessageBox.Show("Erreur chargement commandes : " + ex.Message,
@@ -679,33 +697,37 @@ namespace GestionCoutureApp.Views
             }
             finally
             {
-                LoadingIndicator.Visibility = Visibility.Collapsed;
-                GridCommandes.IsEnabled     = true;
+                cts.Dispose();
+                if (ReferenceEquals(_ctsChargementCommandes, cts))
+                {
+                    _ctsChargementCommandes = null;
+                    LoadingIndicator.Visibility = Visibility.Collapsed;
+                    GridCommandes.IsEnabled     = true;
+                }
             }
         }
 
-        private async void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
+        private void TxtRecherche_TextChanged(object sender, TextChangedEventArgs e)
         {
             string saisie = TxtRecherche.Text.Trim();
             _currentSearch = saisie;
             _currentPage   = 1;
 
-            // Si la saisie est un nombre, filtrer directement par IdCommande côté client
-            // (plus rapide et plus intuitif que la recherche texte)
-            if (int.TryParse(saisie, out int idSaisi) && idSaisi > 0)
+            if (_timerRechercheCommandes == null)
             {
-                var tout = await _commandeService.ObtenirPageLightAsync(1, 999);
-                var match = tout.Items.Where(c => c.IdCommande == idSaisi).ToList();
-                GridCommandes.ItemsSource   = match;
-                BtnPagePrecedente.IsEnabled = false;
-                BtnPageSuivante.IsEnabled   = false;
-                TxtPaginationInfo.Text      = match.Count > 0
-                    ? $"1 commande trouvée (n°{idSaisi})"
-                    : $"Aucune commande n°{idSaisi}";
-                return;
+                _timerRechercheCommandes = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(200)
+                };
+                _timerRechercheCommandes.Tick += async (_, _) =>
+                {
+                    _timerRechercheCommandes.Stop();
+                    await ChargerCommandes();
+                };
             }
 
-            await ChargerCommandes();
+            _timerRechercheCommandes.Stop();
+            _timerRechercheCommandes.Start();
         }
 
         private async void BtnPagePrecedente_Click(object sender, RoutedEventArgs e)
@@ -813,20 +835,21 @@ namespace GestionCoutureApp.Views
 
         private async Task MettreAJourCompteurRetard()
         {
+            if (_chargementCompteurRetard || DateTime.UtcNow - _dernierComptageRetardUtc < TimeSpan.FromSeconds(30))
+                return;
+            _chargementCompteurRetard = true;
             try
             {
                 if (_commandeService == null) return;
-                var result = await _commandeService.ObtenirPageCommandesStatutAsync("Retard", 1, 999, null);
-                int nb = result.TotalCount;
-                Dispatcher.Invoke(() =>
-                {
-                    if (TxtCompteurRetard != null)
-                        TxtCompteurRetard.Text = nb == 0
-                            ? "✅ 0 retard"
-                            : $"🔴 {nb} retard{(nb > 1 ? "s" : "")}";
-                });
+                int nb = await _commandeService.CompterCommandesEnRetardAsync();
+                _dernierComptageRetardUtc = DateTime.UtcNow;
+                if (TxtCompteurRetard != null)
+                    TxtCompteurRetard.Text = nb == 0
+                        ? "✅ 0 retard"
+                        : $"🔴 {nb} retard{(nb > 1 ? "s" : "")}";
             }
             catch { /* silencieux */ }
+            finally { _chargementCompteurRetard = false; }
         }
 
 
@@ -2773,7 +2796,11 @@ namespace GestionCoutureApp.Views
                 catch (InvalidOperationException ex)
                 { MessageBox.Show(ex.Message, "Suppression impossible", MessageBoxButton.OK, MessageBoxImage.Warning); }
                 catch (Exception ex)
-                { MessageBox.Show("Erreur inattendue : " + ex.Message, "Erreur", MessageBoxButton.OK, MessageBoxImage.Error); }
+                {
+                    string detail = ex.GetBaseException().Message;
+                    MessageBox.Show("Erreur inattendue lors de la suppression : " + detail,
+                        "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
             // ── Secrétaire : annulation rapide (fenêtre limitée) ───────────
             else if (role == "Secretaire")

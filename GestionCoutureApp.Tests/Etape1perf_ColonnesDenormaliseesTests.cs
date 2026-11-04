@@ -90,6 +90,15 @@ namespace GestionCoutureApp.Tests
         }
 
         [Test]
+        public void DateRdvHelper_MiParcours_CalculAuMilieuExact()
+        {
+            var depot = new DateTime(2026, 11, 1, 8, 0, 0);
+            var rdv = new DateTime(2026, 11, 11, 18, 0, 0);
+            Assert.That(DateRdvHelper.CalculerDateMiParcours(depot, rdv),
+                Is.EqualTo(new DateTime(2026, 11, 6, 13, 0, 0)));
+        }
+
+        [Test]
         public void DateRdvHelper_CommandeActive_NonSupprimee_NonAnnulee()
         {
             Assert.That(DateRdvHelper.CalculerCommandeActive(false, false), Is.True);

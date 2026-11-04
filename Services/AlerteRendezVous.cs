@@ -180,20 +180,24 @@ namespace GestionCoutureApp.Services
         /// (Statuts : Signale, En reprise, Termine — pas encore Rendu ni Annulé).
         /// Même niveaux J-1 / Jour J / retard.
         /// </summary>
-        Task<List<AlerteRendezVous>> ObtenirAlertesRetours();
+        Task<List<AlerteRendezVous>> ObtenirAlertesRetours(int max = 50);
 
         // ════════════════════════════════════════════════════════════════════
         // ÉTAPE 2 PERF — Nouvelle API SQL (COUNT + pagination)
         // ════════════════════════════════════════════════════════════════════
 
         /// <summary>Compteurs SQL pour les badges (aucune ligne détaillée chargée).</summary>
-        Task<ResumeAlertesDto> ObtenirResumeAsync();
+        Task<ResumeAlertesDto> ObtenirResumeAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Page d'alertes pour une section donnée. Filtre + ORDER BY + LIMIT en SQL,
         /// regroupement par commande sur la seule page (≤ 50 cartes).
         /// </summary>
         Task<PagedResult<AlerteCommandeVm>> ObtenirSectionAsync(
-            SectionAlerte section, int page, int taille = 50);
+            SectionAlerte section, int page, int taille = 50,
+            CancellationToken cancellationToken = default);
+
+        Task<List<AlerteCommandeVm>> ObtenirAlertesUrgentesAsync(
+            CancellationToken cancellationToken = default);
     }
 }

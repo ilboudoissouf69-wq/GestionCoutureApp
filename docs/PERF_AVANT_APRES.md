@@ -1,130 +1,88 @@
-# Performance — Mesures AVANT / APRÈS
+# Performance — état vérifié (2026-11-04)
 
-> Base de stress : `bin\StressProfile-20261027` (120 000 clients, 120 000 commandes,
-> 180 000 pièces dont 89 000 en retard, 60 000 terminées).
-> Objectif final : chaque écran < 1 s avec **2 000 000 clients / 3 000 000 pièces**.
+Ce rapport sépare les changements présents des critères réellement validés. Les temps
+ci-dessous viennent des sorties de tests de ce checkout, pas d'une extrapolation.
 
-## Diagnostic établi (mesuré, ne pas refaire)
+## Corrections réalisées
 
-Le SQL brut n'est PAS le goulot (toutes les requêtes < 1,5 s). Le temps est perdu dans la
-**matérialisation de tables entières en mémoire** puis dans la **construction de dizaines
-de milliers d'éléments WPF**.
+- `App.cs` applique manuellement les migrations d'index et de colonnes denormalisées,
+  y compris `DateRdvEffective`, `CommandeActive`, `DateMiParcours` et les clés de
+  recherche client. Le backfill affiche un message, s'exécute par lots et met à jour les
+  diagnostics de schéma.
+- L'index unique `Paiements.RecuNumero` est filtré sur les reçus non vides. Une inspection
+  en lecture seule du profil qui affichait l'erreur a trouvé 90 000 lignes dont le reçu
+  vaut `''`; le schéma est maintenant migrable sans modifier ces lignes. Le test d'upgrade
+  valide plusieurs reçus vides et refuse deux reçus non vides identiques.
+- `GestionCoutureApp.Tests/MigrationReelleTests.cs` crée une base SQLite fichier avec un
+  ancien schéma explicite (sans `EnsureCreated`), exécute le chemin de migration réel et
+  vérifie 1 000 valeurs backfillées ainsi que les colonnes et index attendus. Ce test est
+  inclus dans la suite fonctionnelle passée. Le fixture n'exécute pas `CommandeService.Ajouter`
+  après l'upgrade; cette vérification reste à ajouter.
+- Les alertes ont des index date-first/couvrants et des pages SQL regroupées par commande.
+  Les retours sont présents dans les sections et les notifications urgentes, la règle
+  stagnante utilise `DateMiParcours`, la modale détaille les pièces, les sections disposent
+  de « Voir plus », le timer respecte visibilité/annulation et WhatsApp distingue prêts et
+  rappels.
+- La recherche client est normalisée et paginée par préfixe; Commandes et Paiements
+  chargent des pages. Le changement « contient » vers « commence par » demeure une
+  divergence fonctionnelle à confirmer avec l'utilisateur.
+- Les totaux de trésorerie utilisent une requête SQL condensée, un cache SQLite fixé à
+  32 Mo, le stockage temporaire en mémoire et des index couvrants sur pièces/paiements/
+  matériaux; les dates de Commission emploient
+  des bornes exclusives. Les statistiques Retours par couturier sont agrégées en SQL,
+  avec la reprise effective groupée sur `IdCouturierReprise ?? IdCouturier`.
+- Le générateur Perf fixe les clés étrangères des retours et construit des relations
+  pièce/commande valides pour les scénarios de pièces multiples.
 
-## Temps AVANT (base de stress 120k/120k/180k)
+## Mesures observées
 
-| Écran / Méthode                          | Avant         | Cause                                                                                       |
-|------------------------------------------|---------------|---------------------------------------------------------------------------------------------|
-| Alertes RDV — premier affichage          | 1 à 10 min    | `ObtenirPiecesActivesAsync` charge 150k pièces + 150k `AlerteRendezVous` créés en mémoire    |
-| Alertes RDV — section Risque de retard   | gel complet   | `ConstruireSectionRisqueRetard` : 89k Borders × 15 éléments = >1,3 M visuels sur thread UI   |
-| Alertes RDV — timer 60 s                  | 10 min / tick | Recharge tout (pièces + suivis) toutes les 60 s, sur thread UI                               |
-| Dashboard — échéances                     | ~150k objets  | `ChargerEcheancesAsync` : ObtenirRetards + ObtenirRendezVousSemaine (150k) pour Take(6)      |
-| Dashboard — stats couturiers (CA)         | 180k pièces   | `ChargerStatsCouturiersDtoAsync` : `.AsEnumerable().Sum()` sur toutes les pièces             |
-| Dashboard — stats retard                  | ~89k + table  | `ObtenirStatsDashboardAsync` : 89k candidats + toute la table `SuivisAlerteRetard` pour 1 int|
-| Dashboard — sommes CA / Dépenses           | .AsEnum().Sum | `ChargerCartesStatsDtoAsync` : `.AsEnumerable().Sum()` sur paiements et dépenses            |
-| Dashboard — graphique revenus             | 7j en mémoire | `ChargerGraphiqueRevenusDtoAsync` : `.AsEnumerable().GroupBy()`                              |
-| Dashboard — timer 60 s                    | refresh complet| Rafraîchissement complet toutes les 60 s                                                     |
-| Retours — `ChargerPerformanceQualite`     | synchrone UI  | `Include(p => p.Commande)` sur 90k pièces, `.Date` dans Where, comptage mémoire par couturier |
-| Retours — badges                          | faux + lent   | `MettreAJourBadges` : compte sur la page courante (20) en mémoire, pas sur le filtre total    |
-| Retours — `ObtenirPageAsync`              | `ToLower()`   | `ToLower().Contains()` sur 6 colonnes jointes → SCAN complet                                  |
-| Retours — repli erreur                     | toute la table | `catch → ObtenirTous()` recharge toute la table en cas d'erreur                              |
-| Retours — `_context` longue durée         | fuite         | DbContext créé dans le constructeur, gardé vie de la vue                                     |
-| Démarrage — BackupService                 | 7 × 105 Mo    | Copie la base entière à chaque lancement (716 Mo de sauvegardes)                             |
+| Opération | Base Perf de 130 000 clients / 200 000 pièces | Résultat |
+|---|---:|---|
+| `RetourService.ObtenirPageAsync` | 125 ms, 20 éléments | sous le budget de test de 300 ms |
+| `CommandeService.ObtenirPageLightAsync` | 158 ms, 20 éléments | sous le budget de test de 300 ms |
+| `ClientService.ObtenirPageAsync` | 43 ms, 50 éléments | sous le budget de test de 300 ms |
+| `PaiementService.ObtenirPageLightAsync` | 68 ms, 15 éléments | sous le budget de test de 300 ms |
+| `AlerteService.ObtenirToutesAlertesAsync` | 674 ms; 50 retraits, 50 retards, 50 retours | échec du budget de 300 ms |
+| `RetardAlerteService.ObtenirAlertesRisqueRetardAsync` | 1 589 ms, 50 alertes | échec du budget de 300 ms |
+| `RetardAlerteService.ObtenirStatsDashboardAsync` | 362 ms; 64 714 retards, 901 clients | échec du budget de 300 ms |
+| `AlerteService.ObtenirRetards` | 2 ms, 50 éléments | sous le budget de test de 300 ms |
+| `AlerteService.ObtenirRendezVousSemaine` | 3 ms, 50 éléments | sous le budget de test de 300 ms |
+| `TresorerieService.CalculerBilan` | test P04 isolé : 8 s sur 120 000 commandes après réglage du cache SQLite | sous le seuil historique de test de 10 000 ms; encore au-dessus du critère demandé de 300 ms |
+| `CommissionService.CalculerApercu` | 10 140 ms sur le jeu de charge 120k | échec du seuil de charge de 10 000 ms |
 
-## Temps APRÈS (à remplir au fur et à mesure)
+Les mesures de l'ancien audit sur la base 120k (2 ms, 75 ms et ~9 s) sont des valeurs
+rapportées par l'audit, non reproduites ici. Aucun plan `EXPLAIN QUERY PLAN` n'a été
+capturé pour ce rapport.
 
-### Étape 0 — Mesure et filet de sécurité
+## Validation exécutée
 
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| PerfLogger actif sur tous écrans | ✓     | ✓     | ✅     |
-| Générateur `StressDataGenerator` | —     | créé  | ✅ `--clients 2000000` |
-| Tests de charge ≥ 200k pièces    | —     | créé  | ✅ `Perf_BudgetTests` (Perf cat) |
-| Tests existants (356)             | verts | verts | ✅     |
+- `dotnet build GestionCoutureApp.Tests/GestionCoutureApp.Tests.csproj --no-restore -v:q`:
+  génération réussie, 0 erreur, 226 avertissements.
+- `dotnet test ... --filter "TestCategory!=Perf" --no-build`: **Réussi! - échec: 0,
+  réussite: 367, ignorée(s): 0, total: 367, durée: 30 s** (dernière exécution).
+- P04 isolé passe en 8 s sur 120k après le réglage SQLite (garde-fou <10 s; cible du brief
+  <300 ms toujours manquée). Dernier `dotnet test` complet : **Échoué! - échec: 3,
+  réussite: 396, ignorée(s): 0, total: 399, durée: 14 m 28 s**. Les contrôles de budget
+  affichent `ObtenirToutesAlertesAsync` à 674 ms, `ObtenirAlertesRisqueRetardAsync` à
+  1 589 ms et `ObtenirStatsDashboardAsync` à 362 ms, au-delà de 300 ms; le TearDown Perf
+  signale aussi `CommissionService.CalculerApercu` à 10 140 ms. Le scénario grand volume
+  de `CommandesEncaissablesService` n'a plus signalé l'ancienne exception de traduction.
+- `git diff --check`: aucune erreur de whitespace; seuls des avertissements de conversion
+  LF/CRLF restent affichés.
 
-### Étape 1 — Date de RDV effective persistée
+## Acceptation non établie
 
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| Colonnes DateRdvEffective + CommandeActive | —     | ajoutées | ✅ |
-| Migration + backfill SQL          | —     | créé  | ✅ |
-| Index (Statut, DateRdvEffective), (IdCouturier, Statut), Commandes(EstSupprimee, EstAnnulee, DateFin) | —     | créés | ✅ |
-| Formule unifiée (HeureFin ?? 17:00) | HeureFin ?? HeureDebut | HeureFin ?? 17:00 | ✅ |
-| Maintien dans Ajouter / ModifierInfosCommande / AjouterPiece / DupliquerPiece / Modifier / SupprimerAsync / AnnulerParSecretaireAsync / ReporterRendezVousAsync | — | ✅ | ✅ |
-| Tests existants (356)             | verts | verts | ✅ |
+- Le seuil visé par le brief (<300 ms bilan et <100 ms pour chaque page) n'est pas atteint
+  partout. Le bilan et l'API legacy risque retard restent trop lents.
+- Aucun test sur la sauvegarde 120k n'a été lancé. Le fichier de référence se trouve hors
+  des racines accessibles de ce checkout. Les dossiers `bin` et la sauvegarde n'ont pas
+  été modifiés.
+- La base 2M clients / 3M pièces, les temps de chaque écran, la mémoire après 10 minutes,
+  les gels UI, tous les plans EXPLAIN et la vérification manuelle des interactions n'ont
+  pas été produits.
+- Le test d'upgrade ne valide pas encore `CommandeService.Ajouter` sur le fichier migré,
+  ni la comparaison exhaustive avec `AncienAlerteCalcul`.
+- Les commits séparés par étape prescrits par le prompt n'ont pas été créés.
 
-### Étape 2 — Alertes RDV
-
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| ObtenirPiecesActivesAsync (150k pièces chargées) | 150k entités | supprimé | ✅ |
-| ObtenirResumeAsync (badges) | 150k pièces | COUNT SQL pur | ✅ |
-| ObtenirSectionAsync (pages de 50) | 89k alertes | ORDER BY LIMIT 50 | ✅ |
-| ObtenirAlertesRisqueRetardPageAsync | 89k + table Suivis | NOT EXISTS SQL | ✅ |
-| ObtenirStatsDashboardAsync | 89k + table Suivis | COUNT NOT EXISTS SQL | ✅ |
-| ConstruireSectionRisqueRetard/Ligne | >1M visuels | ListBox virtualisée DataTemplate | ✅ |
-| Timer 60s | refresh complet | badges only si vue non visible | ✅ |
-| CancellationToken | absent | annulation à Unloaded | ✅ |
-
-### Étape 3 — Dashboard
-
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| ChargerEcheancesAsync (150k → Take(6)) | 150k pièces | SQL LIMIT 6 sur DateRdvEffective | ✅ |
-| ChargerStatsCouturiersDtoAsync CA | .AsEnumerable().Sum() | GROUP BY + SUM SQL | ✅ |
-| ChargerCartesStatsDtoAsync sommes | .AsEnumerable().Sum() | SUM SQL (double) | ✅ |
-| ChargerGraphiqueRevenusDtoAsync | .AsEnumerable().GroupBy() | GROUP BY SQL | ✅ |
-
-### Étape 4 — Retours
-
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| ChargerPerformanceQualite (sync UI) | synchrone, Include 90k | async, GROUP BY SQL | ✅ |
-| MettreAJourBadges (faux) | page courante 20 items | COUNT SQL GROUP BY Statut | ✅ |
-| _context longue durée | fuite | DbContext par opération | ✅ |
-| catch → ObtenirTous() | recharge tout | supprimé | ✅ |
-
-### Étape 5 — TresorerieService
-
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| CalculerChiffreAffaires | .AsEnumerable().Sum() | SUM SQL double | ✅ |
-| CalculerTotalDepenses | .AsEnumerable().Sum() | SUM SQL double | ✅ |
-| .Date dans les Where (non-indexable) | partout | bornes >= / < AddDays(1) | ✅ |
-
-### Étape 6 — Recherche texte
-
-> Non implémentée (FTS5) — les colonnes `NomRecherche` et l'index préfixe
-> sont la prochaine étape prioritaire. Les `ToLower().Contains()` actuels
-> restent et font un SCAN — acceptable pour les volumes actuels (120k),
-> mais à corriger avant 2M de clients.
-
-### Étape 7 — Sauvegarde et maintenance
-
-| Méthode                          | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| BackupService (7 copies au démarrage) | immédiat, 4h, 15 max | 30s delay, 1x/jour, 7 max | ✅ |
-| PRAGMA optimize | absent | à la fermeture (Dispose) | ✅ |
-
-## Corrections détaillées (Étape 5 et suivantes)
-
-Sera rempli avec chaque occurrence corrigée (fichier, ligne, motif, correction).
-
-## Critères d'acceptation
-
-Sur une base **2 000 000 clients / 3 000 000 pièces** :
-
-- [x] Alertes RDV : section Risque de retard virtualisée (DataTemplate XAML, fini les 1M+ visuels)
-- [x] Alertes RDV : badges par COUNT SQL pur (~5ms)
-- [x] Alertes RDV : sections par ORDER BY LIMIT 50 SQL
-- [x] Dashboard : ChargerEcheancesAsync — SQL LIMIT 6 (fini les 150k pièces)
-- [x] Dashboard : sommes par SUM SQL (fini les .AsEnumerable().Sum())
-- [x] Retours : ChargerPerformanceQualite async GROUP BY (fini le sync UI + 90k Include)
-- [x] TresorerieService : SUM SQL, bornes indexables
-- [x] BackupService : 1 sauvegarde/jour max, 30s délai, 7 backups rétention
-- [x] PRAGMA optimize à la fermeture
-- [x] DateRdvEffective persistée et indexée — toutes les requêtes d'alertes l'utilisent
-- [x] CommandeActive persistée — filtrage sans jointure Commandes
-- [x] `dotnet build` sans erreur nouvelle
-- [x] `dotnet test` 100% vert (365 tests)
-- [ ] FTS5 / préfixe pour recherche 2M clients (Étape 6 à faire)
-- [ ] Mesure sur base 2M/3M pièces (StressDataGenerator prêt, à exécuter)
+Les critères finaux du chantier ne sont donc pas tous atteints; le rapport ne déclare pas
+le projet « 100 % vert ».

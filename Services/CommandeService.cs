@@ -122,6 +122,7 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
+                .AsSplitQuery()
                 .OrderByDescending(c => c.DateDebut);
             
             var totalCount = await query.CountAsync();
@@ -150,7 +151,8 @@ namespace GestionCoutureApp.Services
             int? idCouturier,
             DateTime? dateDebut,
             DateTime? dateFin,
-            bool inclureSupprimees = false)
+            bool inclureSupprimees = false,
+            CancellationToken cancellationToken = default)
         {
             using var context = _contextFactory.CreateDbContext();
             DateTime maintenant = DateTime.Now;
@@ -164,13 +166,23 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Paiements)
                 .Include(c => c.MaterielSupplements)
                 .Include(c => c.Pieces).ThenInclude(p => p.Couturier)
+                .AsSplitQuery()
                 .AsQueryable();
 
             // Filtre texte
             if (!string.IsNullOrWhiteSpace(motCle))
+            {
+                string cle = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche(motCle.Trim());
+                int? numeroCommande = int.TryParse(motCle.Trim(), out int idRecherche) && idRecherche > 0
+                    ? idRecherche
+                    : null;
                 query = query.Where(c =>
-                    (c.Client != null && (c.Client.Nom.Contains(motCle) || c.Client.Prenom.Contains(motCle))) ||
-                    c.Pieces.Any(p => p.TypeVetement.Contains(motCle)));
+                    (numeroCommande.HasValue && c.IdCommande == numeroCommande.Value) ||
+                    (c.Client != null && (c.Client.NomRecherche.StartsWith(cle)
+                        || c.Client.PrenomNomRecherche.StartsWith(cle)
+                        || (c.Client.Telephone != null && c.Client.Telephone.StartsWith(motCle.Trim())))) ||
+                    c.Pieces.Any(p => p.TypeVetement.StartsWith(motCle.Trim())));
+            }
 
             // Filtre statut — SQL EXACT équivalent à StatutGlobal (plus de pré-filtre large).
             // StatutGlobal est [NotMapped], mais sa logique est traduisible en SQL :
@@ -214,12 +226,12 @@ namespace GestionCoutureApp.Services
 
             // Perf-fix : Skip/Take en SQL, le filtre statut est maintenant EXACT en SQL.
             // Plus besoin d'affinage mémoire (sauf cas rare de commande sans pièce).
-            int totalCount = await query.CountAsync();
+            int totalCount = await query.CountAsync(cancellationToken);
             var items = await query
                 .OrderByDescending(c => c.DateDebut)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             // Affinage mémoire résiduel : couvre le cas rare d'une commande sans pièce
             // (StatutGlobal retourne le vieux champ Statut, non filtrable en SQL).
@@ -237,6 +249,19 @@ namespace GestionCoutureApp.Services
                 Page = page,
                 PageSize = pageSize
             };
+        }
+
+        /// <summary>Compte les commandes en retard directement en SQL.</summary>
+        public async Task<int> CompterCommandesEnRetardAsync(CancellationToken cancellationToken = default)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            DateTime maintenant = DateTime.Now;
+            return await context.Commandes
+                .AsNoTracking()
+                .Where(c => !c.EstSupprimee
+                    && c.DateFin < maintenant
+                    && c.Pieces.Any(p => p.Statut == "A faire" || p.Statut == "En cours"))
+                .CountAsync(cancellationToken);
         }
 
         public Commande? ObtenirParId(int id)
@@ -344,6 +369,8 @@ namespace GestionCoutureApp.Services
             {
                 p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
                     p.RendezVousException, commande.DateFin, commande.HeureFin);
+                p.DateMiParcours = DateRdvHelper.CalculerDateMiParcours(
+                    commande.DateDebut.Date + commande.HeureDebut, p.DateRdvEffective);
                 p.CommandeActive = true;
             }
 
@@ -799,11 +826,14 @@ namespace GestionCoutureApp.Services
                 // ÉTAPE 1 PERF — propager la désactivation aux pièces
                 foreach (var p in commande.Pieces)
                     p.CommandeActive = false;
-                context.SaveChanges();
-
                 await _auditService.EnregistrerActionAsync(
-                    idOperateur, nomOperateur, operateur.Role,
-                    ActionsAntiFraude.Annulation, "Commande", idCommande,
+                    context,
+                    idOperateur: idOperateur,
+                    nomOperateur: nomOperateur,
+                    roleOperateur: operateur.Role,
+                    typeAction: ActionsAntiFraude.Annulation,
+                    entite: "Commande",
+                    idEntite: idCommande,
                     valeursAvant: snapshot, valeursApres: null, motif: motifFinal);
 
                 transaction?.Commit();
@@ -1038,6 +1068,8 @@ namespace GestionCoutureApp.Services
                 // ÉTAPE 1 PERF — colonnes dénormalisées
                 piece.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
                     piece.RendezVousException, existante.DateFin, existante.HeureFin);
+                piece.DateMiParcours = DateRdvHelper.CalculerDateMiParcours(
+                    existante.DateDebut.Date + existante.HeureDebut, piece.DateRdvEffective);
                 piece.CommandeActive = true;
                 context.PiecesCommande.Add(piece);
 
@@ -1058,6 +1090,8 @@ namespace GestionCoutureApp.Services
             {
                 p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
                     p.RendezVousException, commande.DateFin, commande.HeureFin);
+                p.DateMiParcours = DateRdvHelper.CalculerDateMiParcours(
+                    commande.DateDebut.Date + commande.HeureDebut, p.DateRdvEffective);
             }
 
             context.SaveChanges();
@@ -1136,6 +1170,8 @@ namespace GestionCoutureApp.Services
             {
                 p.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
                     p.RendezVousException, dateFin, heureFin);
+                p.DateMiParcours = DateRdvHelper.CalculerDateMiParcours(
+                    existante.DateDebut.Date + existante.HeureDebut, p.DateRdvEffective);
             }
 
             context.SaveChanges();
@@ -1251,10 +1287,9 @@ namespace GestionCoutureApp.Services
                 foreach (var p in commande.Pieces)
                     p.CommandeActive = false;
 
-                context.SaveChanges();
-
-                // Audit dans le même commit (écrit via son propre DbContext mais avant Commit)
+                // L'audit partage le contexte et la transaction de suppression.
                 await _auditService.EnregistrerActionAsync(
+                    context,
                     idOperateur: idOperateur,
                     nomOperateur: nomOperateur,
                     roleOperateur: operateur.Role,
@@ -1453,6 +1488,8 @@ namespace GestionCoutureApp.Services
             // ÉTAPE 1 PERF — colonnes dénormalisées
             piece.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
                 piece.RendezVousException, commande.DateFin, commande.HeureFin);
+            piece.DateMiParcours = DateRdvHelper.CalculerDateMiParcours(
+                commande.DateDebut.Date + commande.HeureDebut, piece.DateRdvEffective);
             piece.CommandeActive = DateRdvHelper.CalculerCommandeActive(commande.EstSupprimee, commande.EstAnnulee);
             context.PiecesCommande.Add(piece);
             context.SaveChanges();
@@ -1723,6 +1760,9 @@ namespace GestionCoutureApp.Services
                 // ÉTAPE 1 PERF — colonnes dénormalisées
                 DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
                     null, commande.DateFin, commande.HeureFin),
+                DateMiParcours = DateRdvHelper.CalculerDateMiParcours(
+                    commande.DateDebut.Date + commande.HeureDebut,
+                    DateRdvHelper.CalculerDateRdvEffective(null, commande.DateFin, commande.HeureFin)),
                 CommandeActive = DateRdvHelper.CalculerCommandeActive(commande.EstSupprimee, commande.EstAnnulee)
             };
 
@@ -1909,10 +1949,13 @@ namespace GestionCoutureApp.Services
             // Filtre recherche (nom/prénom client ou type de vêtement d'une pièce)
             if (!string.IsNullOrWhiteSpace(recherche))
             {
+                string cle = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche(recherche.Trim());
                 query = query.Where(c =>
                     (c.Client != null &&
-                     (c.Client.Nom.Contains(recherche) || c.Client.Prenom.Contains(recherche))) ||
-                    c.Pieces.Any(p => p.TypeVetement.Contains(recherche)));
+                     (c.Client.NomRecherche.StartsWith(cle)
+                      || c.Client.PrenomNomRecherche.StartsWith(cle)
+                      || (c.Client.Telephone != null && c.Client.Telephone.StartsWith(recherche.Trim())))) ||
+                    c.Pieces.Any(p => p.TypeVetement.StartsWith(recherche.Trim())));
             }
 
             var totalCount = await query.CountAsync();
@@ -2029,7 +2072,7 @@ namespace GestionCoutureApp.Services
             return context.PiecesCommande
                 .Where(p => (p.Statut == "A faire" || p.Statut == "En cours")
                          && !p.IdCouturier.HasValue
-                         && p.Commande != null && !p.Commande.EstSupprimee)
+                         && p.CommandeActive)
                 .Count();
         }
 
@@ -2153,11 +2196,13 @@ namespace GestionCoutureApp.Services
             // Filtre recherche (nom client ou type vêtement)
             if (!string.IsNullOrWhiteSpace(recherche))
             {
+                string cle = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche(recherche.Trim());
                 query = query.Where(p =>
                     (p.Commande!.Client != null &&
-                     (p.Commande.Client.Nom.Contains(recherche) ||
-                      p.Commande.Client.Prenom.Contains(recherche))) ||
-                    p.TypeVetement.Contains(recherche));
+                     (p.Commande.Client.NomRecherche.StartsWith(cle) ||
+                      p.Commande.Client.PrenomNomRecherche.StartsWith(cle) ||
+                      (p.Commande.Client.Telephone != null && p.Commande.Client.Telephone.StartsWith(recherche.Trim())))) ||
+                    p.TypeVetement.StartsWith(recherche.Trim()));
             }
 
             var totalCount = await query.CountAsync();

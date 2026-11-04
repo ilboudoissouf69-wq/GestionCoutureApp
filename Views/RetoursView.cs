@@ -128,34 +128,18 @@ namespace GestionCoutureApp.Views
             if (TxtNbSignale == null) return;
             try
             {
-                var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-                await using var ctx = await factory.CreateDbContextAsync();
-
                 string? motCle = TxtRecherche?.Text?.Trim();
                 string? statut = (CmbFiltreStatut?.SelectedItem as ComboBoxItem)?.Content?.ToString();
                 if (statut == "Tous") statut = null;
-
-                // Construire le même filtre que ChargerRetoursAsync
-                var query = ctx.Retours.AsNoTracking().Where(r => !r.EstAnnule);
-                if (!string.IsNullOrWhiteSpace(motCle))
-                {
-                    // La recherche texte reste en SQL — pas de ToLower ici (voir Étape 6)
-                    query = query.Where(r => r.NumeroRetour.Contains(motCle)
-                        || (r.Commande != null && r.Commande.Client != null
-                            && (r.Commande.Client.Nom.Contains(motCle) || r.Commande.Client.Prenom.Contains(motCle))));
-                }
-
-                var counts = await query
-                    .GroupBy(r => r.Statut)
-                    .Select(g => new { Statut = g.Key, Count = g.Count() })
-                    .ToListAsync();
+                var counts = await _retourService.CompterParStatutAsync(
+                    motCle, statut, _filtreDate1, _filtreDate2);
 
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    int nbSignale   = counts.Where(c => c.Statut == "Signale").Sum(c => c.Count);
-                    int nbEnReprise = counts.Where(c => c.Statut == "En reprise").Sum(c => c.Count);
-                    int nbPret      = counts.Where(c => c.Statut is "Pret" or "Termine").Sum(c => c.Count);
-                    int nbRendu     = counts.Where(c => c.Statut == "Rendu").Sum(c => c.Count);
+                    int nbSignale   = counts.GetValueOrDefault("Signale");
+                    int nbEnReprise = counts.GetValueOrDefault("En reprise");
+                    int nbPret      = counts.GetValueOrDefault("Pret") + counts.GetValueOrDefault("Termine");
+                    int nbRendu     = counts.GetValueOrDefault("Rendu");
                     if (TxtNbSignale   != null) TxtNbSignale.Text   = nbSignale.ToString();
                     if (TxtNbEnReprise != null) TxtNbEnReprise.Text  = nbEnReprise.ToString();
                     if (TxtNbPret      != null) TxtNbPret.Text       = nbPret.ToString();
@@ -285,6 +269,7 @@ namespace GestionCoutureApp.Views
                 var piecesCounts = await ctx.PiecesCommande
                     .AsNoTracking()
                     .Where(p => p.IdCouturier.HasValue
+                             && p.CommandeActive
                              && (p.Statut == "Terminee" || p.Statut == "Livree")
                              && p.DateRdvEffective >= dateDebut
                              && p.DateRdvEffective < dateLendemain)
@@ -303,6 +288,14 @@ namespace GestionCoutureApp.Views
                     .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
                     .ToDictionaryAsync(x => x.IdCouturier, x => x.NbRetours);
 
+                var reprisesCounts = await ctx.Retours.AsNoTracking()
+                    .Where(r => !r.EstAnnule && r.DateResolution.HasValue
+                             && r.DateResolution.Value >= dateDebut
+                             && r.DateResolution.Value < dateLendemain)
+                    .GroupBy(r => r.IdCouturierReprise ?? r.IdCouturier)
+                    .Select(g => new { IdCouturier = g.Key, NbReprises = g.Count() })
+                    .ToDictionaryAsync(x => x.IdCouturier, x => x.NbReprises);
+
                 decimal primeZeroDefaut = 5000m;
                 var paramPrime = await ctx.Parametres.AsNoTracking().FirstOrDefaultAsync(p => p.Cle == "PrimeZeroDefaut");
                 if (paramPrime != null && decimal.TryParse(paramPrime.Valeur, out decimal pv))
@@ -313,6 +306,7 @@ namespace GestionCoutureApp.Views
                     {
                         int nbPieces  = piecesCounts.TryGetValue(emp.IdEmploye, out var np) ? np : 0;
                         int nbImputes = retoursCounts.TryGetValue(emp.IdEmploye, out var nr) ? nr : 0;
+                        int nbReprises = reprisesCounts.TryGetValue(emp.IdEmploye, out var nrep) ? nrep : 0;
                         double taux   = nbPieces > 0 ? Math.Round(100.0 * (nbPieces - nbImputes) / nbPieces, 1) : 100.0;
                         bool eligible = nbPieces >= 5 && taux >= 95.0;
                         return new PerformanceCouturier
@@ -321,6 +315,7 @@ namespace GestionCoutureApp.Views
                             NomCouturier     = emp.Prenom + " " + emp.Nom,
                             NbPieces         = nbPieces,
                             NbRetours        = nbImputes,
+                            NbReprises       = nbReprises,
                             TauxQualite      = taux,
                             EstEligiblePrime = eligible,
                             PrimeZeroDefaut  = primeZeroDefaut
@@ -1005,7 +1000,9 @@ namespace GestionCoutureApp.Views
             AjouterLabel(root, "Couturier pour la reprise");
             var factory2 = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             using var ctx2 = factory2.CreateDbContext();
-            var employes = ctx2.Employes.AsNoTracking().Where(e => e.Statut == "Actif").ToList();
+            var employes = ctx2.Employes.AsNoTracking()
+                .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
+                .OrderBy(e => e.Prenom).ThenBy(e => e.Nom).ToList();
             var cmbCouturierReprise = new ComboBox { Height = 32, FontSize = 12, Margin = new Thickness(0, 0, 0, 8) };
             cmbCouturierReprise.Items.Add(new ComboBoxItem { Content = "— Même couturier que l'initial —", Tag = -1 });
             foreach (var emp in employes)

@@ -15,6 +15,9 @@ namespace GestionCoutureApp.Services
             string? statut = null,
             DateTime? dateDebut = null,
             DateTime? dateFin = null);
+        Task<Dictionary<string, int>> CompterParStatutAsync(
+            string? motCle = null, string? statut = null,
+            DateTime? dateDebut = null, DateTime? dateFin = null);
 
         List<Retour> Rechercher(string motCle);
         List<Retour> FiltrerParStatut(string statut);

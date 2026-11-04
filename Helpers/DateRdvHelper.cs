@@ -35,6 +35,12 @@ namespace GestionCoutureApp.Helpers
             return dateFin.Date + heure;
         }
 
+        public static DateTime CalculerDateMiParcours(DateTime dateDepot, DateTime dateRdv)
+        {
+            long ticks = dateRdv.Ticks - dateDepot.Ticks;
+            return dateDepot.AddTicks(ticks / 2);
+        }
+
         /// <summary>
         /// Détermine si une commande est « active » (non supprimée, non annulée).
         /// </summary>

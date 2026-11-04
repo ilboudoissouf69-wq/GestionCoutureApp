@@ -21,6 +21,12 @@ namespace GestionCoutureApp.Models
             ErrorMessage = "Numéro de téléphone invalide (7 à 20 chiffres/espaces/+/- autorisés).")]
         public string Telephone { get; set; } = string.Empty;
 
+        /// <summary>Clé de recherche sans accents, maintenue à chaque écriture.</summary>
+        public string NomRecherche { get; set; } = string.Empty;
+
+        /// <summary>Clé inversée pour les recherches commençant par le prénom.</summary>
+        public string PrenomNomRecherche { get; set; } = string.Empty;
+
         public List<Commande> Commandes { get; set; } = new();
 
         // ── Propriétés [NotMapped] pour la vue Clients (aucune migration) ──

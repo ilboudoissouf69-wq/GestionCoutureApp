@@ -747,16 +747,16 @@
 
                             <StackPanel Grid.Column="2" Orientation="Horizontal"
                                         HorizontalAlignment="Right">
-                                <Button x:Name="BtnPagePrecedente" Content="←"
-                                        Width="36" Height="32" Margin="0,0,8,0"
+                                <Button x:Name="BtnPagePrecedente" Content="← Précédent"
+                                        MinWidth="104" Height="32" Padding="10,0" Margin="0,0,8,0"
                                         Click="BtnPagePrecedente_Click"
                                         Style="{StaticResource BtnGhost}"
-                                        IsEnabled="False" FontSize="14"/>
-                                <Button x:Name="BtnPageSuivante" Content="→"
-                                        Width="36" Height="32"
+                                        IsEnabled="False" FontSize="12"/>
+                                <Button x:Name="BtnPageSuivante" Content="Suivant →"
+                                        MinWidth="104" Height="32" Padding="10,0"
                                         Click="BtnPageSuivante_Click"
                                         Style="{StaticResource BtnGhost}"
-                                        IsEnabled="False" FontSize="14"/>
+                                        IsEnabled="False" FontSize="12"/>
                             </StackPanel>
                         </Grid>
                     </Border>

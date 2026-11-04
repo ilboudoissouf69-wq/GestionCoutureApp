@@ -29,6 +29,7 @@ namespace GestionCoutureApp.Views
         // ── Cache commandes encaissables (pour la recherche) ────────
         private sealed record CommandeItem(int IdCommande, string DisplayText);
         private List<CommandeItem> _toutesCommandesEncaissables = new();
+        private CancellationTokenSource? _ctsRechercheCommandes;
 
         // ── Pagination ──────────────────────────────────────────────
         private const int PAGE_SIZE  = 15;
@@ -306,12 +307,10 @@ namespace GestionCoutureApp.Views
                 if (CmbCommandesNonSoldees != null)
                     CmbCommandesNonSoldees.IsEnabled = false;
 
-                var encaissables = await Task.Run(() =>
-                    App.Services
-                        .GetRequiredService<CommandesEncaissablesService>()
-                        .ObtenirCommandesEncaissables());
+                var page = await App.Services.GetRequiredService<CommandesEncaissablesService>()
+                    .ObtenirPageAsync(1, 50);
 
-                _toutesCommandesEncaissables = encaissables.Select(c => new CommandeItem(
+                _toutesCommandesEncaissables = page.Items.Select(c => new CommandeItem(
                     c.IdCommande,
                     $"CMD #{c.IdCommande}  —  " + c.NomClient
                         + "  (" + c.MontantTotalAvecMateriaux.ToString("N0") + " FCFA"
@@ -338,28 +337,44 @@ namespace GestionCoutureApp.Views
         }
 
         // ── Recherche par numéro ou nom dans la liste des commandes ──
-        private void TxtRechercheCommande_TextChanged(object sender, TextChangedEventArgs e)
+        private async void TxtRechercheCommande_TextChanged(object sender, TextChangedEventArgs e)
         {
             string saisie = TxtRechercheCommande?.Text?.Trim() ?? "";
 
             if (string.IsNullOrEmpty(saisie))
             {
+                _ctsRechercheCommandes?.Cancel();
                 CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
                 return;
             }
 
-            string recherche = saisie.ToLowerInvariant();
-            var filtres = _toutesCommandesEncaissables
-                .Where(item => item.DisplayText.ToLowerInvariant().Contains(recherche))
-                .ToList();
-
-            CmbCommandesNonSoldees.ItemsSource = filtres;
-
-            // Si un seul résultat correspond → sélectionner automatiquement
-            if (filtres.Count == 1)
+            _ctsRechercheCommandes?.Cancel();
+            _ctsRechercheCommandes?.Dispose();
+            _ctsRechercheCommandes = new CancellationTokenSource();
+            var token = _ctsRechercheCommandes.Token;
+            try
             {
-                CmbCommandesNonSoldees.SelectedIndex = 0;
-                CmbCommande_SelectionChanged(CmbCommandesNonSoldees, null!);
+                var page = await App.Services.GetRequiredService<CommandesEncaissablesService>()
+                    .ObtenirPageAsync(1, 50, saisie, token);
+                var filtres = page.Items.Select(c => new CommandeItem(
+                    c.IdCommande,
+                    $"CMD #{c.IdCommande}  —  {c.NomClient}  ({c.MontantTotalAvecMateriaux:N0} FCFA · reste : {c.ResteAPayer:N0} FCFA)"
+                )).ToList();
+
+                CmbCommandesNonSoldees.ItemsSource = filtres;
+
+                // Si un seul résultat correspond → sélectionner automatiquement
+                if (filtres.Count == 1)
+                {
+                    CmbCommandesNonSoldees.SelectedIndex = 0;
+                    CmbCommande_SelectionChanged(CmbCommandesNonSoldees, null!);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erreur de recherche des commandes : " + ex.Message,
+                    "Erreur", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -367,6 +382,7 @@ namespace GestionCoutureApp.Views
         {
             if (TxtRechercheCommande != null)
                 TxtRechercheCommande.Text = "";
+            _ctsRechercheCommandes?.Cancel();
             CmbCommandesNonSoldees.ItemsSource = _toutesCommandesEncaissables;
             CmbCommandesNonSoldees.SelectedIndex = -1;
         }

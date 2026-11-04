@@ -570,6 +570,27 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BtnCouturierPagePrec"
+                                    Grid.Column="0" Content="‹" Width="28" Height="26"
+                                    Margin="0,0,6,0" IsEnabled="False"
+                                    Click="BtnCouturierPagePrec_Click"/>
+                            <TextBlock x:Name="TxtCouturierPaginationInfo"
+                                       Grid.Column="1" Text="Aucun couturier"
+                                       FontSize="10" Foreground="{StaticResource SlateMuted}"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="BtnCouturierPageSuiv"
+                                    Grid.Column="3" Content="›" Width="28" Height="26"
+                                    IsEnabled="False"
+                                    Click="BtnCouturierPageSuiv_Click"/>
+                        </Grid>
+
                         <!-- Badge pièces sans couturier (réintégré de l'ancien écran) -->
                         <Border CornerRadius="8" Padding="12,8" Margin="0,6,0,0"
                                 Background="#FEF3C7"

@@ -686,7 +686,7 @@ namespace GestionCoutureApp.Tests
         public void T_IDM04_CreerIndexSiAbsent_Idempotent()
         {
             const string sql = "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Paiements_RecuNumero\" " +
-                               "ON \"Paiements\" (\"RecuNumero\")";
+                               "ON \"Paiements\" (\"RecuNumero\") WHERE \"RecuNumero\" != ''";
 
             // Act : créer l'index deux fois
             Assert.DoesNotThrow(() =>

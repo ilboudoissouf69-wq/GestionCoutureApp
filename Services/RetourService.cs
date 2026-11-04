@@ -72,53 +72,15 @@ namespace GestionCoutureApp.Services
             DateTime? dateDebut = null,
             DateTime? dateFin   = null)
         {
-            using var ctx = _contextFactory.CreateDbContext();
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
 
-            var query = ctx.Retours
-                .Include(r => r.Commande).ThenInclude(c => c!.Client)
-                .Include(r => r.PieceCommande)
-                .Include(r => r.Couturier)
-                .AsQueryable();
-
-            // Filtre texte : NumeroRetour, nom client, téléphone, numéro de commande
-            if (!string.IsNullOrWhiteSpace(motCle))
-            {
-                string m = motCle.Trim().ToLower();
-                query = query.Where(r =>
-                    r.NumeroRetour.ToLower().Contains(m) ||
-                    (r.Commande != null && r.Commande.Client != null &&
-                     (r.Commande.Client.Nom.ToLower().Contains(m)    ||
-                      r.Commande.Client.Prenom.ToLower().Contains(m) ||
-                      (r.Commande.Client.Telephone != null && r.Commande.Client.Telephone.ToLower().Contains(m)))) ||
-                    (r.PieceCommande != null && r.PieceCommande.TypeVetement.ToLower().Contains(m)) ||
-                    r.DescriptionProbleme.ToLower().Contains(m) ||
-                    (r.Couturier != null && (r.Couturier.Nom + " " + r.Couturier.Prenom).ToLower().Contains(m)));
-            }
-
-            // Filtre statut (mappe les libellés affichés → valeurs DB)
-            if (!string.IsNullOrEmpty(statut) && statut != "Tous")
-            {
-                string statutDb = statut switch
-                {
-                    "Signalé"         => "Signale",
-                    "Terminé ✓"       => "Termine",
-                    "Rendu au client" => "Rendu",
-                    _                 => statut
-                };
-                // Compat. ancienne valeur "Pret"
-                if (statutDb == "Termine")
-                    query = query.Where(r => (r.Statut == "Termine" || r.Statut == "Pret") && !r.EstAnnule);
-                else
-                    query = query.Where(r => r.Statut == statutDb && !r.EstAnnule);
-            }
-
-            if (dateDebut.HasValue)
-                query = query.Where(r => r.DateSignalement.Date >= dateDebut.Value.Date);
-            if (dateFin.HasValue)
-                query = query.Where(r => r.DateSignalement.Date <= dateFin.Value.Date);
+            var query = ConstruireQueryRetours(ctx, motCle, statut, dateDebut, dateFin);
 
             var total = await query.CountAsync();
             var items = await query
+                .Include(r => r.Commande).ThenInclude(c => c!.Client)
+                .Include(r => r.PieceCommande)
+                .Include(r => r.Couturier)
                 .OrderByDescending(r => r.DateSignalement)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -133,22 +95,68 @@ namespace GestionCoutureApp.Services
             };
         }
 
+        public async Task<Dictionary<string, int>> CompterParStatutAsync(
+            string? motCle = null, string? statut = null,
+            DateTime? dateDebut = null, DateTime? dateFin = null)
+        {
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            return await ConstruireQueryRetours(ctx, motCle, statut, dateDebut, dateFin)
+                .GroupBy(r => r.Statut)
+                .Select(g => new { Statut = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Statut, x => x.Count);
+        }
+
+        private static IQueryable<Retour> ConstruireQueryRetours(
+            ApplicationDbContext ctx, string? motCle, string? statut,
+            DateTime? dateDebut, DateTime? dateFin)
+        {
+            var query = ctx.Retours.AsNoTracking().AsQueryable();
+            if (!string.IsNullOrWhiteSpace(motCle))
+            {
+                string cle = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche(motCle.Trim());
+                query = query.Where(r => r.NumeroRetour.Contains(motCle.Trim())
+                    || (r.Commande != null && r.Commande.Client != null
+                        && (r.Commande.Client.NomRecherche.StartsWith(cle)
+                            || r.Commande.Client.PrenomNomRecherche.StartsWith(cle)
+                            || r.Commande.Client.Telephone.StartsWith(motCle.Trim())))
+                    || (r.PieceCommande != null && r.PieceCommande.TypeVetement.StartsWith(motCle.Trim()))
+                    || r.DescriptionProbleme.StartsWith(motCle.Trim())
+                    || (r.Couturier != null && (r.Couturier.Nom.StartsWith(motCle.Trim())
+                                                || r.Couturier.Prenom.StartsWith(motCle.Trim()))));
+            }
+            if (!string.IsNullOrEmpty(statut) && statut != "Tous")
+            {
+                string db = statut switch
+                {
+                    "Signalé" => "Signale", "Terminé ✓" => "Termine",
+                    "Rendu au client" => "Rendu", _ => statut
+                };
+                query = db == "Termine"
+                    ? query.Where(r => !r.EstAnnule && (r.Statut == "Termine" || r.Statut == "Pret"))
+                    : query.Where(r => !r.EstAnnule && r.Statut == db);
+            }
+            if (dateDebut.HasValue) query = query.Where(r => r.DateSignalement >= dateDebut.Value.Date);
+            if (dateFin.HasValue) query = query.Where(r => r.DateSignalement < dateFin.Value.Date.AddDays(1));
+            return query;
+        }
+
         public List<Retour> Rechercher(string motCle)
         {
             using var ctx = _contextFactory.CreateDbContext();
-            string m = motCle.Trim().ToLower();
-            return AvecIncludes(ctx)
+            string m = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche(motCle.Trim());
+            return AvecIncludes(ctx).AsNoTracking()
                 .Where(r =>
-                    r.NumeroRetour.ToLower().Contains(m) ||
+                    r.NumeroRetour.Contains(m) ||
                     (r.Commande != null && r.Commande.Client != null &&
-                     (r.Commande.Client.Nom.ToLower().Contains(m) ||
-                      r.Commande.Client.Prenom.ToLower().Contains(m) ||
-                      (r.Commande.Client.Telephone != null && r.Commande.Client.Telephone.Contains(m)))) ||
-                    r.DescriptionProbleme.ToLower().Contains(m) ||
-                    r.Statut.ToLower().Contains(m) ||
-                    (r.Couturier != null && (r.Couturier.Nom.ToLower().Contains(m) || r.Couturier.Prenom.ToLower().Contains(m))) ||
-                    (r.PieceCommande != null && r.PieceCommande.TypeVetement.ToLower().Contains(m)))
+                     (r.Commande.Client.NomRecherche.StartsWith(m) ||
+                      r.Commande.Client.PrenomNomRecherche.StartsWith(m) ||
+                      (r.Commande.Client.Telephone != null && r.Commande.Client.Telephone.StartsWith(m)))) ||
+                    r.DescriptionProbleme.StartsWith(m) ||
+                    r.Statut.StartsWith(m) ||
+                    (r.Couturier != null && (r.Couturier.Nom.StartsWith(m) || r.Couturier.Prenom.StartsWith(m))) ||
+                    (r.PieceCommande != null && r.PieceCommande.TypeVetement.StartsWith(m)))
                 .OrderByDescending(r => r.DateSignalement)
+                .Take(50)
                 .ToList();
         }
 
@@ -450,81 +458,56 @@ namespace GestionCoutureApp.Services
         public List<StatistiqueRetourCouturier> StatistiquesParCouturier(DateTime dateDebut, DateTime dateFin)
         {
             using var ctx = _contextFactory.CreateDbContext();
+            var debut = dateDebut.Date;
+            var finExclusive = dateFin.Date.AddDays(1);
+            var retoursTermines = ctx.Retours.AsNoTracking()
+                .Where(r => !r.EstAnnule && r.DateResolution >= debut && r.DateResolution < finExclusive);
 
-            // Retours terminés sur la période (DateResolution dans la fenêtre)
-            // Non annulés uniquement
-            var retours = ctx.Retours
-                .Include(r => r.Couturier)
-                .Where(r => !r.EstAnnule)
-                .ToList();
+            var imputes = retoursTermines.GroupBy(r => r.IdCouturier)
+                .Select(g => new
+                {
+                    Id = g.Key,
+                    Count = g.Count(),
+                    Resolus = g.Count(r => r.Statut == "Termine" || r.Statut == "Rendu"),
+                    Derniere = g.Max(r => r.DateResolution)
+                }).ToDictionary(x => x.Id);
+            var reprises = retoursTermines.GroupBy(r => r.IdCouturierReprise ?? r.IdCouturier)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .ToDictionary(x => x.Id, x => x.Count);
+            var enCours = ctx.Retours.AsNoTracking()
+                .Where(r => !r.EstAnnule && r.Statut != "Termine" && r.Statut != "Pret" && r.Statut != "Rendu"
+                         && r.DateSignalement >= debut && r.DateSignalement < finExclusive)
+                .GroupBy(r => r.IdCouturier)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .ToDictionary(x => x.Id, x => x.Count);
+            var piecesLivrees = ctx.PiecesCommande.AsNoTracking()
+                .Where(p => p.IdCouturier.HasValue && (p.Statut == "Terminee" || p.Statut == "Livree")
+                         && ((p.DateTerminee >= debut && p.DateTerminee < finExclusive)
+                             || (!p.DateTerminee.HasValue && p.Commande != null
+                                 && p.Commande.DateFin >= debut && p.Commande.DateFin < finExclusive)))
+                .GroupBy(p => p.IdCouturier!.Value)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .ToDictionary(x => x.Id, x => x.Count);
 
-            // Retours imputés = ceux qui sont terminés dans la période (DateResolution non null et dans la fenêtre)
-            var retoursTerminesPeriode = retours
-                .Where(r => r.DateResolution.HasValue &&
-                            r.DateResolution.Value.Date >= dateDebut.Date &&
-                            r.DateResolution.Value.Date <= dateFin.Date)
-                .ToList();
-
-            // Retours en cours (non terminés, signalement dans la période)
-            var retoursEnCours = retours
-                .Where(r => !r.EstTermine &&
-                            r.DateSignalement.Date >= dateDebut.Date &&
-                            r.DateSignalement.Date <= dateFin.Date)
-                .ToList();
-
-            // Pièces livrées/terminées sur la période (pour le taux)
-            var pieces = ctx.PiecesCommande
-                .Include(p => p.Commande)
-                .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
-                             p.IdCouturier.HasValue)
-                .ToList()
-                .Where(p => {
-                    var dt = p.DateTerminee ?? p.Commande?.DateFin;
-                    return dt.HasValue &&
-                           dt.Value.Date >= dateDebut.Date &&
-                           dt.Value.Date <= dateFin.Date;
-                })
-                .ToList();
-
-            // Union des couturiers impliqués
-            var idsCouturiers = retoursTerminesPeriode.Select(r => r.IdCouturier)
-                .Concat(retoursTerminesPeriode.Select(r => r.IdCouturierRepriseEffectif))
-                .Concat(retoursEnCours.Select(r => r.IdCouturier))
-                .Concat(pieces.Where(p => p.IdCouturier.HasValue).Select(p => p.IdCouturier!.Value))
-                .Distinct()
-                .ToList();
-
-            var employes = ctx.Employes
-                .Where(e => idsCouturiers.Contains(e.IdEmploye))
+            var ids = imputes.Keys.Concat(reprises.Keys).Concat(enCours.Keys).Concat(piecesLivrees.Keys)
+                .Distinct().ToArray();
+            var employes = ctx.Employes.AsNoTracking().Where(e => ids.Contains(e.IdEmploye))
                 .ToDictionary(e => e.IdEmploye);
 
-            return idsCouturiers
-                .Select(idC =>
+            return ids.Select(id =>
                 {
-                    employes.TryGetValue(idC, out var emp);
-                    string nom = emp != null ? emp.Prenom + " " + emp.Nom : $"#{idC}";
-
-                    int imputes  = retoursTerminesPeriode.Count(r => r.IdCouturier == idC);
-                    int reprises = retoursTerminesPeriode.Count(r => r.IdCouturierRepriseEffectif == idC);
-                    int enCours  = retoursEnCours.Count(r => r.IdCouturier == idC);
-                    int resolus  = retoursTerminesPeriode.Count(r =>
-                        r.IdCouturier == idC && (r.Statut == "Termine" || r.Statut == "Rendu"));
-                    int livrees  = pieces.Count(p => p.IdCouturier == idC);
-                    var derniere = retoursTerminesPeriode
-                        .Where(r => r.IdCouturier == idC && r.DateResolution.HasValue)
-                        .Select(r => r.DateResolution)
-                        .Max();
-
+                    employes.TryGetValue(id, out var employe);
+                    imputes.TryGetValue(id, out var retour);
                     return new StatistiqueRetourCouturier
                     {
-                        IdCouturier             = idC,
-                        NomCouturier            = nom,
-                        RetoursImputes          = imputes,
-                        ReprisesEffectuees      = reprises,
-                        NombreResolus           = resolus,
-                        NombreEnCours           = enCours,
-                        PiecesLivrees           = livrees,
-                        DateDerniereResolution  = derniere
+                        IdCouturier = id,
+                        NomCouturier = employe != null ? employe.Prenom + " " + employe.Nom : $"#{id}",
+                        RetoursImputes = retour?.Count ?? 0,
+                        ReprisesEffectuees = reprises.GetValueOrDefault(id),
+                        NombreResolus = retour?.Resolus ?? 0,
+                        NombreEnCours = enCours.GetValueOrDefault(id),
+                        PiecesLivrees = piecesLivrees.GetValueOrDefault(id),
+                        DateDerniereResolution = retour?.Derniere
                     };
                 })
                 .OrderByDescending(s => s.RetoursImputes)
