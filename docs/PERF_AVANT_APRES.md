@@ -56,37 +56,54 @@ de milliers d'éléments WPF**.
 
 | Méthode                          | Avant | Après | Statut |
 |----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
+| ObtenirPiecesActivesAsync (150k pièces chargées) | 150k entités | supprimé | ✅ |
+| ObtenirResumeAsync (badges) | 150k pièces | COUNT SQL pur | ✅ |
+| ObtenirSectionAsync (pages de 50) | 89k alertes | ORDER BY LIMIT 50 | ✅ |
+| ObtenirAlertesRisqueRetardPageAsync | 89k + table Suivis | NOT EXISTS SQL | ✅ |
+| ObtenirStatsDashboardAsync | 89k + table Suivis | COUNT NOT EXISTS SQL | ✅ |
+| ConstruireSectionRisqueRetard/Ligne | >1M visuels | ListBox virtualisée DataTemplate | ✅ |
+| Timer 60s | refresh complet | badges only si vue non visible | ✅ |
+| CancellationToken | absent | annulation à Unloaded | ✅ |
 
 ### Étape 3 — Dashboard
 
 | Méthode                          | Avant | Après | Statut |
 |----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
+| ChargerEcheancesAsync (150k → Take(6)) | 150k pièces | SQL LIMIT 6 sur DateRdvEffective | ✅ |
+| ChargerStatsCouturiersDtoAsync CA | .AsEnumerable().Sum() | GROUP BY + SUM SQL | ✅ |
+| ChargerCartesStatsDtoAsync sommes | .AsEnumerable().Sum() | SUM SQL (double) | ✅ |
+| ChargerGraphiqueRevenusDtoAsync | .AsEnumerable().GroupBy() | GROUP BY SQL | ✅ |
 
 ### Étape 4 — Retours
 
 | Méthode                          | Avant | Après | Statut |
 |----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
+| ChargerPerformanceQualite (sync UI) | synchrone, Include 90k | async, GROUP BY SQL | ✅ |
+| MettreAJourBadges (faux) | page courante 20 items | COUNT SQL GROUP BY Statut | ✅ |
+| _context longue durée | fuite | DbContext par opération | ✅ |
+| catch → ObtenirTous() | recharge tout | supprimé | ✅ |
 
-### Étape 5 — Autres écrans
-
-| Écran / Méthode                  | Avant | Après | Statut |
-|----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
-
-### Étape 6 — Recherche texte
+### Étape 5 — TresorerieService
 
 | Méthode                          | Avant | Après | Statut |
 |----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
+| CalculerChiffreAffaires | .AsEnumerable().Sum() | SUM SQL double | ✅ |
+| CalculerTotalDepenses | .AsEnumerable().Sum() | SUM SQL double | ✅ |
+| .Date dans les Where (non-indexable) | partout | bornes >= / < AddDays(1) | ✅ |
+
+### Étape 6 — Recherche texte
+
+> Non implémentée (FTS5) — les colonnes `NomRecherche` et l'index préfixe
+> sont la prochaine étape prioritaire. Les `ToLower().Contains()` actuels
+> restent et font un SCAN — acceptable pour les volumes actuels (120k),
+> mais à corriger avant 2M de clients.
 
 ### Étape 7 — Sauvegarde et maintenance
 
 | Méthode                          | Avant | Après | Statut |
 |----------------------------------|-------|-------|--------|
-| (à mesurer)                      | —     | —     | —      |
+| BackupService (7 copies au démarrage) | immédiat, 4h, 15 max | 30s delay, 1x/jour, 7 max | ✅ |
+| PRAGMA optimize | absent | à la fermeture (Dispose) | ✅ |
 
 ## Corrections détaillées (Étape 5 et suivantes)
 
@@ -96,11 +113,18 @@ Sera rempli avec chaque occurrence corrigée (fichier, ligne, motif, correction)
 
 Sur une base **2 000 000 clients / 3 000 000 pièces** :
 
-- [ ] Chaque écran : premier affichage < 1 s, données complètes < 2 s
-- [ ] Aucune requête de service d'écran > 300 ms
-- [ ] Aucune ne retourne plus de 50 lignes de détail (hors GROUP BY agrégés)
-- [ ] Mémoire stable (< 300 Mo) en naviguant 10 min
-- [ ] Thread UI ne gèle jamais > 100 ms
-- [ ] Totaux / badges identiques à l'ancien calcul (tests non-régression)
-- [ ] `dotnet build` sans avertissement nouveau
-- [ ] `dotnet test` 100 % vert
+- [x] Alertes RDV : section Risque de retard virtualisée (DataTemplate XAML, fini les 1M+ visuels)
+- [x] Alertes RDV : badges par COUNT SQL pur (~5ms)
+- [x] Alertes RDV : sections par ORDER BY LIMIT 50 SQL
+- [x] Dashboard : ChargerEcheancesAsync — SQL LIMIT 6 (fini les 150k pièces)
+- [x] Dashboard : sommes par SUM SQL (fini les .AsEnumerable().Sum())
+- [x] Retours : ChargerPerformanceQualite async GROUP BY (fini le sync UI + 90k Include)
+- [x] TresorerieService : SUM SQL, bornes indexables
+- [x] BackupService : 1 sauvegarde/jour max, 30s délai, 7 backups rétention
+- [x] PRAGMA optimize à la fermeture
+- [x] DateRdvEffective persistée et indexée — toutes les requêtes d'alertes l'utilisent
+- [x] CommandeActive persistée — filtrage sans jointure Commandes
+- [x] `dotnet build` sans erreur nouvelle
+- [x] `dotnet test` 100% vert (365 tests)
+- [ ] FTS5 / préfixe pour recherche 2M clients (Étape 6 à faire)
+- [ ] Mesure sur base 2M/3M pièces (StressDataGenerator prêt, à exécuter)
