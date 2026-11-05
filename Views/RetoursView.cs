@@ -29,8 +29,11 @@ namespace GestionCoutureApp.Views
 
         // ── Pagination ────────────────────────────────────────────────────
         private const int PAGE_SIZE = 20;
+        private const int PAGE_PERFORMANCE_SIZE = 10;
         private int  _page      = 1;
         private int  _total     = 0;
+        private int _pagePerformance = 1;
+        private List<PerformanceCouturier> _performancesQualite = new();
 
         // ── Filtres date ──────────────────────────────────────────────────
         private DateTime? _filtreDate1;
@@ -246,98 +249,121 @@ namespace GestionCoutureApp.Views
 
             try
             {
-                var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
-                await using var ctx = await factory.CreateDbContextAsync();
-
-                var couturiers = await ctx.Employes
-                    .AsNoTracking()
-                    .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
-                    .Select(e => new { e.IdEmploye, e.Prenom, e.Nom })
-                    .ToListAsync();
-
-                if (couturiers.Count == 0)
+                var perfs = await Task.Run(async () =>
                 {
-                    await Dispatcher.InvokeAsync(() =>
+                    var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+                    await using var ctx = await factory.CreateDbContextAsync();
+
+                    var couturiers = await ctx.Employes
+                        .AsNoTracking()
+                        .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
+                        .Select(e => new { e.IdEmploye, e.Prenom, e.Nom })
+                        .ToListAsync();
+                    if (couturiers.Count == 0) return new List<PerformanceCouturier>();
+
+                    // GROUP BY SQL : pas d'Include, pas de .Date dans les filtres.
+                    var piecesCounts = await ctx.PiecesCommande
+                        .AsNoTracking()
+                        .Where(p => p.IdCouturier.HasValue && p.CommandeActive
+                                 && (p.Statut == "Terminee" || p.Statut == "Livree")
+                                 && p.DateRdvEffective >= dateDebut
+                                 && p.DateRdvEffective < dateLendemain)
+                        .GroupBy(p => p.IdCouturier!.Value)
+                        .Select(g => new { IdCouturier = g.Key, NbPieces = g.Count() })
+                        .ToDictionaryAsync(x => x.IdCouturier, x => x.NbPieces);
+
+                    var retoursCounts = await ctx.Retours
+                        .AsNoTracking()
+                        .Where(r => !r.EstAnnule && r.DateResolution.HasValue
+                                 && r.DateResolution.Value >= dateDebut
+                                 && r.DateResolution.Value < dateLendemain)
+                        .GroupBy(r => r.IdCouturier)
+                        .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
+                        .ToDictionaryAsync(x => x.IdCouturier, x => x.NbRetours);
+
+                    var reprisesCounts = await ctx.Retours.AsNoTracking()
+                        .Where(r => !r.EstAnnule && r.DateResolution.HasValue
+                                 && r.DateResolution.Value >= dateDebut
+                                 && r.DateResolution.Value < dateLendemain)
+                        .GroupBy(r => r.IdCouturierReprise ?? r.IdCouturier)
+                        .Select(g => new { IdCouturier = g.Key, NbReprises = g.Count() })
+                        .ToDictionaryAsync(x => x.IdCouturier, x => x.NbReprises);
+
+                    decimal primeZeroDefaut = 5000m;
+                    var paramPrime = await ctx.Parametres.AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.Cle == "PrimeZeroDefaut");
+                    if (paramPrime != null && decimal.TryParse(paramPrime.Valeur, out decimal pv))
+                        primeZeroDefaut = pv;
+
+                    var resultats = couturiers.Select(emp =>
                     {
-                        ListePerformance.ItemsSource = null;
-                        TxtAucunePerformance.Visibility = Visibility.Visible;
-                    });
-                    return;
-                }
-
-                // ÉTAPE 4 PERF — GROUP BY SQL : pas d'Include, pas de .Date dans Where
-                var piecesCounts = await ctx.PiecesCommande
-                    .AsNoTracking()
-                    .Where(p => p.IdCouturier.HasValue
-                             && p.CommandeActive
-                             && (p.Statut == "Terminee" || p.Statut == "Livree")
-                             && p.DateRdvEffective >= dateDebut
-                             && p.DateRdvEffective < dateLendemain)
-                    .GroupBy(p => p.IdCouturier!.Value)
-                    .Select(g => new { IdCouturier = g.Key, NbPieces = g.Count() })
-                    .ToDictionaryAsync(x => x.IdCouturier, x => x.NbPieces);
-
-                // Retours : GROUP BY SQL (sans Include)
-                var retoursCounts = await ctx.Retours
-                    .AsNoTracking()
-                    .Where(r => !r.EstAnnule
-                             && r.DateResolution.HasValue
-                             && r.DateResolution.Value >= dateDebut
-                             && r.DateResolution.Value < dateLendemain)
-                    .GroupBy(r => r.IdCouturier)
-                    .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
-                    .ToDictionaryAsync(x => x.IdCouturier, x => x.NbRetours);
-
-                var reprisesCounts = await ctx.Retours.AsNoTracking()
-                    .Where(r => !r.EstAnnule && r.DateResolution.HasValue
-                             && r.DateResolution.Value >= dateDebut
-                             && r.DateResolution.Value < dateLendemain)
-                    .GroupBy(r => r.IdCouturierReprise ?? r.IdCouturier)
-                    .Select(g => new { IdCouturier = g.Key, NbReprises = g.Count() })
-                    .ToDictionaryAsync(x => x.IdCouturier, x => x.NbReprises);
-
-                decimal primeZeroDefaut = 5000m;
-                var paramPrime = await ctx.Parametres.AsNoTracking().FirstOrDefaultAsync(p => p.Cle == "PrimeZeroDefaut");
-                if (paramPrime != null && decimal.TryParse(paramPrime.Valeur, out decimal pv))
-                    primeZeroDefaut = pv;
-
-                var perfs = couturiers
-                    .Select((emp, _) =>
-                    {
-                        int nbPieces  = piecesCounts.TryGetValue(emp.IdEmploye, out var np) ? np : 0;
-                        int nbImputes = retoursCounts.TryGetValue(emp.IdEmploye, out var nr) ? nr : 0;
-                        int nbReprises = reprisesCounts.TryGetValue(emp.IdEmploye, out var nrep) ? nrep : 0;
-                        double taux   = nbPieces > 0 ? Math.Round(100.0 * (nbPieces - nbImputes) / nbPieces, 1) : 100.0;
-                        bool eligible = nbPieces >= 5 && taux >= 95.0;
+                        int nbPieces = piecesCounts.GetValueOrDefault(emp.IdEmploye);
+                        int nbImputes = retoursCounts.GetValueOrDefault(emp.IdEmploye);
+                        int nbReprises = reprisesCounts.GetValueOrDefault(emp.IdEmploye);
+                        double taux = nbPieces > 0 ? Math.Round(100.0 * (nbPieces - nbImputes) / nbPieces, 1) : 100.0;
                         return new PerformanceCouturier
                         {
-                            IdCouturier      = emp.IdEmploye,
-                            NomCouturier     = emp.Prenom + " " + emp.Nom,
-                            NbPieces         = nbPieces,
-                            NbRetours        = nbImputes,
-                            NbReprises       = nbReprises,
-                            TauxQualite      = taux,
-                            EstEligiblePrime = eligible,
-                            PrimeZeroDefaut  = primeZeroDefaut
+                            IdCouturier = emp.IdEmploye,
+                            NomCouturier = emp.Prenom + " " + emp.Nom,
+                            NbPieces = nbPieces,
+                            NbRetours = nbImputes,
+                            NbReprises = nbReprises,
+                            TauxQualite = taux,
+                            EstEligiblePrime = nbPieces >= 5 && taux >= 95.0,
+                            PrimeZeroDefaut = primeZeroDefaut
                         };
                     })
-                    .Where(p => p.NbPieces > 0)
-                    .OrderByDescending(p => p.TauxQualite).ThenByDescending(p => p.NbPieces)
-                    .ToList();
+                        .Where(p => p.NbPieces > 0)
+                        .OrderByDescending(p => p.TauxQualite).ThenByDescending(p => p.NbPieces)
+                        .ToList();
 
-                for (int i = 0; i < perfs.Count; i++) perfs[i].Rang = i + 1;
+                    for (int i = 0; i < resultats.Count; i++) resultats[i].Rang = i + 1;
+                    return resultats;
+                });
 
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    ListePerformance.ItemsSource = perfs;
-                    TxtAucunePerformance.Visibility = perfs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                    _performancesQualite = perfs;
+                    _pagePerformance = 1;
+                    AfficherPagePerformance();
                 });
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("PerformanceQualite: " + ex.Message);
-                await Dispatcher.InvokeAsync(() => TxtAucunePerformance.Visibility = Visibility.Visible);
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    _performancesQualite = new();
+                    _pagePerformance = 1;
+                    AfficherPagePerformance();
+                });
             }
+        }
+
+        private void AfficherPagePerformance()
+        {
+            int totalPages = Math.Max(1,
+                (_performancesQualite.Count + PAGE_PERFORMANCE_SIZE - 1) / PAGE_PERFORMANCE_SIZE);
+            _pagePerformance = Math.Clamp(_pagePerformance, 1, totalPages);
+            ListePerformance.ItemsSource = _performancesQualite
+                .Skip((_pagePerformance - 1) * PAGE_PERFORMANCE_SIZE)
+                .Take(PAGE_PERFORMANCE_SIZE)
+                .ToList();
+            TxtAucunePerformance.Visibility = _performancesQualite.Count == 0
+                ? Visibility.Visible : Visibility.Collapsed;
+            TxtPerfPagination.Text = _performancesQualite.Count == 0
+                ? "Aucun couturier" : $"Page {_pagePerformance} / {totalPages} — {_performancesQualite.Count} couturier(s)";
+            BtnPerfPrecedent.IsEnabled = _pagePerformance > 1;
+            BtnPerfSuivant.IsEnabled = _pagePerformance < totalPages;
+        }
+
+        private void BtnPerformancePage_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button bouton || !int.TryParse(bouton.Tag?.ToString(), out int delta)) return;
+            int totalPages = Math.Max(1,
+                (_performancesQualite.Count + PAGE_PERFORMANCE_SIZE - 1) / PAGE_PERFORMANCE_SIZE);
+            _pagePerformance = Math.Clamp(_pagePerformance + delta, 1, totalPages);
+            AfficherPagePerformance();
         }
 
         // ═════════════════════════════════════════════════════════════════
@@ -546,15 +572,19 @@ namespace GestionCoutureApp.Views
             var amber      = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06));
             var borderClr  = new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0));
             var footerBg   = new SolidColorBrush(Color.FromRgb(0xF8, 0xFA, 0xFC));
+            var zoneTravail = SystemParameters.WorkArea;
+            double largeurFenetre = Math.Min(560, zoneTravail.Width * 0.92);
+            double hauteurFenetre = Math.Min(760, zoneTravail.Height * 0.88);
 
             var fenetre = new Window
             {
                 Title = modeEdition ? $"Retour {retourExistant!.NumeroRetour}" : "🔄  Nouveau retour",
-                Width = 560, MaxHeight = 760,
+                Width = largeurFenetre, MinWidth = Math.Min(440, largeurFenetre), MaxWidth = largeurFenetre,
+                Height = hauteurFenetre, MinHeight = Math.Min(480, hauteurFenetre), MaxHeight = hauteurFenetre,
                 WindowStyle = WindowStyle.None, AllowsTransparency = true,
                 Background = Brushes.Transparent,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize, SizeToContent = SizeToContent.Height,
+                ResizeMode = ResizeMode.NoResize, SizeToContent = SizeToContent.Manual,
                 Owner = Window.GetWindow(this)
             };
             fenetre.KeyDown += (_, ev) => { if (ev.Key == Key.Escape) fenetre.Close(); };
@@ -621,7 +651,7 @@ namespace GestionCoutureApp.Views
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                MaxHeight = 600
+                MaxHeight = Math.Max(180, hauteurFenetre - 150)
             };
             Grid.SetRow(scroll, 1);
 

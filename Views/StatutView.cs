@@ -56,7 +56,7 @@ namespace GestionCoutureApp.Views
             _authService     = App.Services.GetRequiredService<IAuthService>();
             _role            = _authService.UtilisateurConnecte?.Role ?? "";
 
-            _rechercheTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _rechercheTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             _rechercheTimer.Tick += async (s, e) =>
             {
                 _rechercheTimer.Stop();
@@ -98,13 +98,17 @@ namespace GestionCoutureApp.Views
                 {
                     using var ctx = ctxFactory.CreateDbContext();
                     return ctx.Employes.AsNoTracking()
-                        .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
+                        .Where(e => e.Role == "Couturier" || e.Role == "Boss")
                         .OrderBy(e => e.Prenom)
+                        .ThenBy(e => e.Nom)
+                        .ThenBy(e => e.IdEmploye)
                         .Select(e => new Employe
                         {
                             IdEmploye = e.IdEmploye,
                             Nom = e.Nom,
-                            Prenom = e.Role == "Boss" ? e.Prenom + " (Boss)" : e.Prenom,
+                            Prenom = e.Role == "Boss"
+                                ? e.Prenom + " (Boss)"
+                                : e.Statut == "Actif" ? e.Prenom : e.Prenom + " (" + e.Statut + ")",
                             Role = e.Role,
                             Statut = e.Statut
                         }).ToList();
@@ -227,10 +231,10 @@ namespace GestionCoutureApp.Views
                 ListeLivree.ItemsSource   = _itemsLivree;
 
                 bool fc = _filtreCouturierId.HasValue && _filtreCouturierId != 0;
-                TxtCompteurAfaire.Text   = fc ? _itemsAfaire.Count.ToString()   : tAfaire.ToString();
-                TxtCompteurEnCours.Text  = fc ? _itemsEnCours.Count.ToString()  : tEnCours.ToString();
-                TxtCompteurTerminee.Text = fc ? _itemsTerminee.Count.ToString() : tTerminee.ToString();
-                TxtCompteurLivree.Text   = fc ? _itemsLivree.Count.ToString()   : tLivree.ToString();
+                TxtCompteurAfaire.Text   = tAfaire.ToString();
+                TxtCompteurEnCours.Text  = tEnCours.ToString();
+                TxtCompteurTerminee.Text = tTerminee.ToString();
+                TxtCompteurLivree.Text   = tLivree.ToString();
 
                 TxtVideAfaire.Visibility   = _itemsAfaire.Count   == 0 ? Visibility.Visible : Visibility.Collapsed;
                 TxtVideEnCours.Visibility  = _itemsEnCours.Count  == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -266,10 +270,11 @@ namespace GestionCoutureApp.Views
             string? statut, string? recherche, CancellationToken cancellationToken)
         {
             int? prioritaire = _commandePrioritaireId;
+            int? couturier = _filtreCouturierId;
             int page = _currentPage;
             return Task.Run(
                 () => _commandeService.ObtenirPageCommandesStatutAsync(
-                    statut, page, PAGE_SIZE, recherche, cancellationToken, prioritaire),
+                    statut, page, PAGE_SIZE, recherche, cancellationToken, prioritaire, couturier),
                 cancellationToken);
         }
 

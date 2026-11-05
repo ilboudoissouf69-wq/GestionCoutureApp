@@ -562,7 +562,6 @@ namespace GestionCoutureApp.Services
                 .Where(p => idsCommandesPage.Contains(p.IdCommande))
                 .AsNoTracking()
                 .OrderBy(p => p.DateRdvEffective)
-                .Skip((page - 1) * taille)
                 .Select(p => new
                 {
                     p.IdCommande,

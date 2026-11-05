@@ -84,6 +84,49 @@
             </Setter>
         </Style>
 
+        <!-- Commandes de pagination larges et contrastées, y compris désactivées -->
+        <Style x:Key="PaginationButton" TargetType="Button">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="MinWidth" Value="118"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#1D4ED8"/>
+            <Setter Property="BorderBrush" Value="#1E40AF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="PaginationBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PaginationBorder" Property="Opacity" Value="0.88"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="PaginationBorder" Property="Opacity" Value="0.72"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="PaginationBorder" Property="Background" Value="#E2E8F0"/>
+                                <Setter TargetName="PaginationBorder" Property="BorderBrush" Value="#CBD5E1"/>
+                                <Setter Property="Foreground" Value="#475569"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                                <Setter TargetName="PaginationBorder" Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ==========================================================
              DATATEMPLATE UNIQUE — une carte par commande
              DataContext = Commande
@@ -549,15 +592,33 @@
                                    VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="2" Orientation="Horizontal">
                             <Button x:Name="BtnPagePrecedente"
-                                    Content="&#x2190;" Width="36" Height="32"
+                                    Width="126"
                                     Margin="0,0,8,0" Click="BtnPagePrecedente_Click"
-                                    Style="{StaticResource BtnGhost}"
-                                    IsEnabled="False" FontSize="14"/>
+                                    Style="{StaticResource PaginationButton}"
+                                    Background="#334155" BorderBrush="#1E293B"
+                                    ToolTip="Afficher la page précédente"
+                                    AutomationProperties.Name="Page précédente"
+                                    IsEnabled="False">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#x2190;" FontFamily="Segoe UI Symbol"
+                                               FontSize="16" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Précédent" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                             <Button x:Name="BtnPageSuivante"
-                                    Content="&#x2192;" Width="36" Height="32"
+                                    Width="126"
                                     Click="BtnPageSuivante_Click"
-                                    Style="{StaticResource BtnGhost}"
-                                    IsEnabled="False" FontSize="14"/>
+                                    Style="{StaticResource PaginationButton}"
+                                    ToolTip="Afficher la page suivante"
+                                    AutomationProperties.Name="Page suivante"
+                                    IsEnabled="False">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Suivant" VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <TextBlock Text="&#x2192;" FontFamily="Segoe UI Symbol"
+                                               FontSize="16"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Grid>
                 </Border>

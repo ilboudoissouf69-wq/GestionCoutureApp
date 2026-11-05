@@ -32,6 +32,7 @@ namespace GestionCoutureApp.Views
         private readonly Retour _retour;
         private readonly IRetourService _retourService;
         private readonly IReceiptService _receiptService;
+        private readonly IMesureClientService _mesureClientService;
         private readonly int _idOperateur;
         private readonly string _nomOperateur;
         private readonly string _roleOperateur;
@@ -55,6 +56,7 @@ namespace GestionCoutureApp.Views
             _retour          = retour;
             _retourService   = retourService;
             _receiptService  = receiptService;
+            _mesureClientService = App.Services.GetRequiredService<IMesureClientService>();
             _idOperateur     = idOperateur;
             _nomOperateur    = nomOperateur;
             _roleOperateur   = roleOperateur;
@@ -206,6 +208,24 @@ namespace GestionCoutureApp.Views
             // ── Pièce ─────────────────────────────────────────────────────
             Ligne(p, "PIÈCE",       10, TextAlignment.Left, Noir, FontWeights.Bold);
             LignePad(p, "Type",     typeVetement);
+            Espace(p, 4);
+
+            // Les mesures à jour sont réservées à l'étiquette interne du colis.
+            // Le reçu remis au client ne les affiche pas.
+            int? idClient = r.Commande?.IdClient;
+            var mesures = idClient.HasValue && !string.IsNullOrWhiteSpace(r.PieceCommande?.TypeVetement)
+                ? _mesureClientService.ObtenirMesuresPourType(idClient.Value, r.PieceCommande.TypeVetement)
+                : new List<MesureClient>();
+            Ligne(p, "MESURES CLIENT", 10, TextAlignment.Left, Noir, FontWeights.Bold);
+            if (mesures.Count == 0)
+            {
+                Ligne(p, "  Aucune mesure enregistrée", 9, TextAlignment.Left, Gris);
+            }
+            else
+            {
+                foreach (var mesure in mesures.OrderBy(m => m.NomMesure))
+                    LignePad(p, mesure.NomMesure, mesure.Valeur);
+            }
             Espace(p, 4);
 
             // ── Problème ──────────────────────────────────────────────────

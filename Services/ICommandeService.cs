@@ -240,7 +240,8 @@ namespace GestionCoutureApp.Services
         Task<PagedResult<Commande>> ObtenirPageCommandesStatutAsync(
             string? statut, int page, int pageSize, string? recherche = null,
             CancellationToken cancellationToken = default,
-            int? idCommandePrioritaire = null);
+            int? idCommandePrioritaire = null,
+            int? idCouturier = null);
 
         /// <summary>
         /// Change le statut d'une seule pièce sans toucher aux mesures ni au prix.

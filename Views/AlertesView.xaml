@@ -4,6 +4,44 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{StaticResource BackgroundBrush}">
 
+    <Page.Resources>
+        <Style x:Key="AlertePageButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="104"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Margin" Value="5,0"/>
+            <Setter Property="Background" Value="#1D4ED8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#1E40AF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="FondPage" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="FondPage" Property="Opacity" Value="0.86"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="FondPage" Property="Background" Value="#E2E8F0"/>
+                                <Setter TargetName="FondPage" Property="BorderBrush" Value="#CBD5E1"/>
+                                <Setter Property="Foreground" Value="#475569"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -262,10 +300,14 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ListBox>
-                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
-                            <TextBlock x:Name="TxtTotalPrets" VerticalAlignment="Center" Foreground="#6B7280"/>
-                            <Button x:Name="BtnPlusPrets" Content="Voir plus" Tag="Prets" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
-                        </StackPanel>
+                        <DockPanel Margin="20,0,20,12" LastChildFill="False">
+                            <TextBlock x:Name="TxtTotalPrets" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnPrecedentPrets" Content="&#x2190; Précédent" Tag="Prets:-1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                                <TextBlock x:Name="TxtPagePrets" Text="Page 1 / 1" VerticalAlignment="Center" Foreground="#334155" FontWeight="SemiBold" Margin="8,0"/>
+                                <Button x:Name="BtnSuivantPrets" Content="Suivant &#x2192;" Tag="Prets:1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                            </StackPanel>
+                        </DockPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroPrets"
@@ -405,10 +447,14 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ListBox>
-                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
-                            <TextBlock x:Name="TxtTotalRetards" VerticalAlignment="Center" Foreground="#6B7280"/>
-                            <Button x:Name="BtnPlusRetards" Content="Voir plus" Tag="Retards" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
-                        </StackPanel>
+                        <DockPanel Margin="20,0,20,12" LastChildFill="False">
+                            <TextBlock x:Name="TxtTotalRetards" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnPrecedentRetards" Content="&#x2190; Précédent" Tag="Retards:-1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                                <TextBlock x:Name="TxtPageRetards" Text="Page 1 / 1" VerticalAlignment="Center" Foreground="#334155" FontWeight="SemiBold" Margin="8,0"/>
+                                <Button x:Name="BtnSuivantRetards" Content="Suivant &#x2192;" Tag="Retards:1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                            </StackPanel>
+                        </DockPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroRetard"
@@ -549,10 +595,14 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ListBox>
-                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
-                            <TextBlock x:Name="TxtTotalAujourdhui" VerticalAlignment="Center" Foreground="#6B7280"/>
-                            <Button x:Name="BtnPlusAujourdhui" Content="Voir plus" Tag="Aujourdhui" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
-                        </StackPanel>
+                        <DockPanel Margin="20,0,20,12" LastChildFill="False">
+                            <TextBlock x:Name="TxtTotalAujourdhui" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnPrecedentAujourdhui" Content="&#x2190; Précédent" Tag="Aujourdhui:-1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                                <TextBlock x:Name="TxtPageAujourdhui" Text="Page 1 / 1" VerticalAlignment="Center" Foreground="#334155" FontWeight="SemiBold" Margin="8,0"/>
+                                <Button x:Name="BtnSuivantAujourdhui" Content="Suivant &#x2192;" Tag="Aujourdhui:1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                            </StackPanel>
+                        </DockPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroAujourdhui"
@@ -677,10 +727,14 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ListBox>
-                        <StackPanel Orientation="Horizontal" Margin="20,0,20,12">
-                            <TextBlock x:Name="TxtTotalImminentes" VerticalAlignment="Center" Foreground="#6B7280"/>
-                            <Button x:Name="BtnPlusImminentes" Content="Voir plus" Tag="Imminentes" Click="BtnVoirPlus_Click" Margin="12,0,0,0" Padding="12,4"/>
-                        </StackPanel>
+                        <DockPanel Margin="20,0,20,12" LastChildFill="False">
+                            <TextBlock x:Name="TxtTotalImminentes" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#6B7280"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnPrecedentImminentes" Content="&#x2190; Précédent" Tag="Imminentes:-1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                                <TextBlock x:Name="TxtPageImminentes" Text="Page 1 / 1" VerticalAlignment="Center" Foreground="#334155" FontWeight="SemiBold" Margin="8,0"/>
+                                <Button x:Name="BtnSuivantImminentes" Content="Suivant &#x2192;" Tag="Imminentes:1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                            </StackPanel>
+                        </DockPanel>
 
                         <!-- Message vide -->
                         <TextBlock x:Name="TxtZeroImminentes"
@@ -819,6 +873,14 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
 
+                                <DockPanel Margin="20,0,20,12" LastChildFill="False">
+                                    <TextBlock x:Name="TxtTotalRisqueRetard" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#6B7280"/>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="BtnPrecedentRisque" Content="&#x2190; Précédent" Tag="RisqueRetard:-1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                                        <TextBlock x:Name="TxtPageRisque" Text="Page 1 / 1" VerticalAlignment="Center" Foreground="#334155" FontWeight="SemiBold" Margin="8,0"/>
+                                        <Button x:Name="BtnSuivantRisque" Content="Suivant &#x2192;" Tag="RisqueRetard:1" Click="BtnPaginationAlerte_Click" Style="{StaticResource AlertePageButton}" IsEnabled="False"/>
+                                    </StackPanel>
+                                </DockPanel>
                                 <TextBlock x:Name="TxtZeroRisqueRetard"
                                            Text="✅  Aucun RDV en risque de retard."
                                            FontSize="12" FontStyle="Italic" Foreground="#059669"

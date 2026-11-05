@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using GestionCoutureApp.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,6 +12,12 @@ namespace GestionCoutureApp.Views
         private readonly Models.Employe _employeConnecte;
         private readonly ILanguageService _languageService;
         private readonly IEventAggregator _eventAggregator;
+        private readonly IAlerteService _alerteService;
+        private readonly DispatcherTimer _timerBadgeAlertes;
+        private int? _dernierTotalAlertes;
+        private int _alertesNonLues;
+        private int _versionAcquittementBadge;
+        private bool _actualisationBadgeEnCours;
 
         // Garde la référence du bouton actuellement actif
         private Button? _boutonActif;
@@ -23,6 +30,9 @@ namespace GestionCoutureApp.Views
             // ✅ CORRECTIF AUDIT #15 : Injection des services pour propagation dynamique
             _languageService = App.Services.GetRequiredService<ILanguageService>();
             _eventAggregator = App.Services.GetRequiredService<IEventAggregator>();
+            _alerteService = App.Services.GetRequiredService<IAlerteService>();
+            _timerBadgeAlertes = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+            _timerBadgeAlertes.Tick += async (_, _) => await ActualiserBadgeAlertesAsync();
             
             // Nom affiché (prénom + nom, sans le rôle — le badge s'en charge)
             TxtUtilisateur.Text = $"{employe.Prenom} {employe.Nom}";
@@ -84,6 +94,12 @@ namespace GestionCoutureApp.Views
                     BtnDeconnexion.Visibility   = Visibility.Visible;
                     ContentFrame.Navigate(new CouturierDashboardView(employe));
                 }
+
+                if (role is "Boss" or "Secretaire")
+                {
+                    _timerBadgeAlertes.Start();
+                    _ = ActualiserBadgeAlertesAsync();
+                }
             };
             
             // Se désabonner à la fermeture
@@ -91,6 +107,7 @@ namespace GestionCoutureApp.Views
             {
                 _eventAggregator.Unsubscribe(SettingsChangedType.Language, OnLanguageChanged);
                 _eventAggregator.Unsubscribe(SettingsChangedType.AccentColor, OnThemeChanged);
+                _timerBadgeAlertes.Stop();
             };
         }
         
@@ -311,6 +328,47 @@ namespace GestionCoutureApp.Views
             }
             if (FindName("BadgeAlertesBorder") is Border borderBadge)
                 borderBadge.Visibility = nbUrgentes > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Acquitte les alertes visibles lors de l'ouverture de leur écran.</summary>
+        public void AcquitterBadgeAlertes(int totalActuel)
+        {
+            _versionAcquittementBadge++;
+            _dernierTotalAlertes = totalActuel;
+            _alertesNonLues = 0;
+            MettreAJourBadgeAlertes(0);
+        }
+
+        private async Task ActualiserBadgeAlertesAsync()
+        {
+            if (_actualisationBadgeEnCours || ContentFrame.Content is AlertesView) return;
+            _actualisationBadgeEnCours = true;
+            int version = _versionAcquittementBadge;
+            try
+            {
+                var resume = await Task.Run(async () => await _alerteService.ObtenirResumeAsync());
+                if (version != _versionAcquittementBadge) return;
+
+                if (!_dernierTotalAlertes.HasValue)
+                {
+                    // Au démarrage, établir le point de départ sans notifier
+                    // pour les alertes anciennes déjà présentes dans la base.
+                    _dernierTotalAlertes = resume.NbBadgeMenu;
+                    return;
+                }
+
+                _alertesNonLues += Math.Max(0, resume.NbBadgeMenu - _dernierTotalAlertes.Value);
+                _dernierTotalAlertes = resume.NbBadgeMenu;
+                MettreAJourBadgeAlertes(_alertesNonLues);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MainWindow] Erreur actualisation badge alertes : {ex.Message}");
+            }
+            finally
+            {
+                _actualisationBadgeEnCours = false;
+            }
         }
 
         private void BtnDepenses_Click(object sender, RoutedEventArgs e)

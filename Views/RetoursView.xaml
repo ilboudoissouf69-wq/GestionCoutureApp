@@ -123,6 +123,39 @@
             <Setter Property="Cursor"           Value="Arrow"/>
         </Style>
 
+        <Style x:Key="RetPerfPageButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="104"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Background" Value="#334155"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="RetPerfPageBg" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RetPerfPageBg" Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="RetPerfPageBg" Property="Background" Value="#475569"/>
+                                <Setter Property="Foreground" Value="#CBD5E1"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Style ligne DataGrid local -->
         <Style x:Key="RetRowStyle" TargetType="DataGridRow">
             <Setter Property="Height"   Value="62"/>
@@ -163,14 +196,18 @@
          Row 3 = Panneau Performance Qualité
          Row 4 = Tableau (ligne *, défilement interne)
     ═══════════════════════════════════════════════════════════════════════ -->
-    <Grid Margin="28,22,28,22">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer x:Name="ScrollRetoursPage"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  CanContentScroll="False">
+        <Grid Margin="28,22,28,22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
         <!-- ══════════════════════════════════════════════════════════════
              LIGNE 0 — EN-TÊTE : pastille ambre + titre + bouton
@@ -577,6 +614,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- ── EN-TÊTE : titre ambre + sélecteur période ──────── -->
@@ -915,6 +953,20 @@
                            HorizontalAlignment="Center"
                            Margin="0,10,0,4"
                            Visibility="Collapsed"/>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,8,0,0">
+                    <Button x:Name="BtnPerfPrecedent" Content="&#x2190; Précédent"
+                            Tag="-1" Click="BtnPerformancePage_Click"
+                            Style="{StaticResource RetPerfPageButton}" IsEnabled="False"/>
+                    <TextBlock x:Name="TxtPerfPagination" Text="Page 1 / 1"
+                               Foreground="#E2E8F0" FontSize="10" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="8,0"/>
+                    <Button x:Name="BtnPerfSuivant" Content="Suivant &#x2192;"
+                            Tag="1" Click="BtnPerformancePage_Click"
+                            Style="{StaticResource RetPerfPageButton}" IsEnabled="False"/>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -931,6 +983,7 @@
             <Grid>
                 <!-- DataGrid principal -->
                 <DataGrid x:Name="GridRetours"
+                          Height="460" MinHeight="280"
                           AutoGenerateColumns="False"
                           CanUserAddRows="False"
                           IsReadOnly="True"
@@ -941,7 +994,7 @@
                           AlternatingRowBackground="#FAFBFC"
                           BorderThickness="0"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
 
                     <DataGrid.Resources>
                         <Style TargetType="DataGridColumnHeader"
@@ -956,7 +1009,7 @@
 
                         <!-- ── N° RETOUR ──────────────────────────────── -->
                         <DataGridTemplateColumn Header="N° RETOUR"
-                                                Width="Auto" MinWidth="120">
+                                                Width="120" MinWidth="110">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="8,4" VerticalAlignment="Center">
@@ -977,7 +1030,7 @@
                         <!-- ── DATE SIGNALEMENT ───────────────────────── -->
                         <DataGridTextColumn Header="DATE"
                                             Binding="{Binding DateSignalementAffichee}"
-                                            Width="Auto" MinWidth="78">
+                                            Width="88" MinWidth="82">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="FontSize"           Value="11"/>
@@ -1041,7 +1094,7 @@
 
                         <!-- ── COUTURIERS (origine / reprise) ────────── -->
                         <DataGridTemplateColumn Header="COUTURIERS"
-                                                Width="Auto" MinWidth="140">
+                                                Width="*" MinWidth="150">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="8,4" VerticalAlignment="Center">
@@ -1072,7 +1125,7 @@
                         <!-- ── RDV REPRISE ────────────────────────────── -->
                         <DataGridTextColumn Header="RDV REPRISE"
                                             Binding="{Binding DateRdvAffichee}"
-                                            Width="Auto" MinWidth="90">
+                                            Width="115" MinWidth="108">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="FontSize"          Value="11"/>
@@ -1162,24 +1215,24 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- ── ACTIONS (4 boutons compacts) ──────────── -->
+                        <!-- ── ACTIONS : barre d'icônes compacte ───────── -->
                         <DataGridTemplateColumn Header="ACTIONS"
-                                                Width="200" MinWidth="200">
+                                                Width="160" MinWidth="160">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <WrapPanel Margin="4,2"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Margin="1,2"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
 
                                         <!-- Modifier -->
                                         <Button Content="✏️"
-                                                Width="30" Height="30"
-                                                FontSize="13"
+                                                Width="26" Height="26"
+                                                FontSize="12"
                                                 ToolTip="Modifier ce retour"
                                                 Background="Transparent"
                                                 BorderThickness="0"
                                                 Cursor="Hand"
-                                                Margin="1,1"
+                                                Margin="1,0"
                                                 Click="BtnEditerRetour_Click">
                                             <Button.Style>
                                                 <Style TargetType="Button">
@@ -1194,16 +1247,16 @@
                                         </Button>
 
                                         <!-- Avancer le statut (texte contextuel) -->
-                                        <Button Height="30"
-                                                FontSize="9" FontWeight="SemiBold"
+                                        <Button Width="26" Height="26"
+                                                FontSize="12" FontWeight="SemiBold"
                                                 Foreground="White"
                                                 Cursor="Hand"
-                                                Margin="1,1"
-                                                Padding="6,0"
+                                                Margin="1,0"
+                                                Padding="0"
                                                 Click="BtnAvancerStatut_Click">
                                             <Button.Style>
                                                 <Style TargetType="Button">
-                                                    <Setter Property="Content"     Value="▶ Avancer"/>
+                                                    <Setter Property="Content"     Value="▶"/>
                                                     <Setter Property="Background"  Value="{StaticResource RetAmber}"/>
                                                     <Setter Property="BorderThickness" Value="0"/>
                                                     <Setter Property="Template">
@@ -1230,34 +1283,34 @@
                                                     <Style.Triggers>
                                                         <!-- Textes selon statut -->
                                                         <DataTrigger Binding="{Binding Statut}" Value="Signale">
-                                                            <Setter Property="Content"     Value="🔧 En reprise"/>
+                                                            <Setter Property="Content"     Value="🔧"/>
                                                             <Setter Property="Background"  Value="#D97706"/>
                                                             <Setter Property="ToolTip"     Value="Passer à En reprise"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="En reprise">
-                                                            <Setter Property="Content"     Value="✓ Terminé"/>
+                                                            <Setter Property="Content"     Value="✓"/>
                                                             <Setter Property="Background"  Value="#1D4ED8"/>
                                                             <Setter Property="ToolTip"     Value="Marquer comme Terminé"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="Termine">
-                                                            <Setter Property="Content"     Value="📦 Rendu client"/>
+                                                            <Setter Property="Content"     Value="📦"/>
                                                             <Setter Property="Background"  Value="#059669"/>
                                                             <Setter Property="ToolTip"     Value="Marquer comme Rendu au client"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="Pret">
-                                                            <Setter Property="Content"     Value="📦 Rendu client"/>
+                                                            <Setter Property="Content"     Value="📦"/>
                                                             <Setter Property="Background"  Value="#059669"/>
                                                             <Setter Property="ToolTip"     Value="Marquer comme Rendu au client"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Statut}" Value="Rendu">
-                                                            <Setter Property="Content"     Value="✅ Clôturé"/>
+                                                            <Setter Property="Content"     Value="✓"/>
                                                             <Setter Property="Background"  Value="#6B7280"/>
                                                             <Setter Property="IsEnabled"   Value="False"/>
                                                             <Setter Property="ToolTip"     Value="Ce retour est clôturé"/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding EstAnnule}" Value="True">
                                                             <Setter Property="IsEnabled"   Value="False"/>
-                                                            <Setter Property="Content"     Value="Annulé"/>
+                                                            <Setter Property="Content"     Value="×"/>
                                                             <Setter Property="Background"  Value="#9CA3AF"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
@@ -1266,12 +1319,12 @@
                                         </Button>
 
                                         <!-- WhatsApp (actif uniquement si Prêt) -->
-                                        <Button Height="30"
-                                                FontSize="9" FontWeight="SemiBold"
+                                        <Button Width="26" Height="26"
+                                                FontSize="12" FontWeight="SemiBold"
                                                 Foreground="White"
                                                 Cursor="Hand"
-                                                Margin="1,1"
-                                                Padding="6,0"
+                                                Margin="1,0"
+                                                Padding="0"
                                                 ToolTip="Notifier le client via WhatsApp (disponible quand Prêt)"
                                                 Click="BtnWhatsAppRetour_Click">
                                             <Button.Style>
@@ -1304,7 +1357,6 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding Statut}" Value="Pret">
                                                             <Setter Property="Background" Value="#25D366"/>
-                                                            <Setter Property="Content"    Value="💬 Prêt!"/>
                                                             <Setter Property="IsEnabled"  Value="True"/>
                                                             <Setter Property="ToolTip"    Value="Envoyer le message WhatsApp au client"/>
                                                         </DataTrigger>
@@ -1317,13 +1369,13 @@
                                         </Button>
 
                                         <!-- Imprimer ticket -->
-                                        <Button Width="30" Height="30"
-                                                FontSize="13"
+                                        <Button Width="26" Height="26"
+                                                FontSize="12"
                                                 ToolTip="Imprimer étiquette colis et reçu client"
-                                                Background="Transparent"
+                                                Background="#F1F5F9"
                                                 BorderThickness="0"
                                                 Cursor="Hand"
-                                                Margin="1,1"
+                                                Margin="1,0"
                                                 Click="BtnImprimerRetour_Click">
                                             <Button.Style>
                                                 <Style TargetType="Button">
@@ -1335,17 +1387,17 @@
                                                     </Style.Triggers>
                                                 </Style>
                                             </Button.Style>
-                                            <TextBlock Text="🖨️" FontSize="13"/>
+                                            <TextBlock Text="🖨" FontSize="14"/>
                                         </Button>
 
                                         <!-- Retour arrière statut (Boss uniquement) -->
-                                        <Button Width="30" Height="30"
-                                                FontSize="13"
+                                        <Button Width="26" Height="26"
+                                                FontSize="12"
                                                 ToolTip="Reculer le statut (Boss uniquement — motif obligatoire)"
                                                 Background="Transparent"
                                                 BorderThickness="0"
                                                 Cursor="Hand"
-                                                Margin="1,1"
+                                                Margin="1,0"
                                                 Click="BtnReculerStatut_Click">
                                             <Button.Style>
                                                 <Style TargetType="Button">
@@ -1366,13 +1418,13 @@
 
                                         <!-- Annuler -->
                                         <Button Content="🚫"
-                                                Width="30" Height="30"
-                                                FontSize="13"
+                                                Width="26" Height="26"
+                                                FontSize="12"
                                                 ToolTip="Annuler ce retour — Boss uniquement (motif obligatoire)"
                                                 Background="Transparent"
                                                 BorderThickness="0"
                                                 Cursor="Hand"
-                                                Margin="1,1"
+                                                Margin="1,0"
                                                 Click="BtnAnnulerRetour_Click">
                                             <Button.Style>
                                                 <Style TargetType="Button">
@@ -1386,7 +1438,7 @@
                                             </Button.Style>
                                         </Button>
 
-                                    </WrapPanel>
+                                    </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
@@ -1429,5 +1481,6 @@
             </Grid>
         </Border>
 
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </Page>

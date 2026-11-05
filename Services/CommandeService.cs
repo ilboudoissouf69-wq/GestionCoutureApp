@@ -1910,7 +1910,8 @@ namespace GestionCoutureApp.Services
         public async Task<PagedResult<Commande>> ObtenirPageCommandesStatutAsync(
             string? statut, int page, int pageSize, string? recherche = null,
             CancellationToken cancellationToken = default,
-            int? idCommandePrioritaire = null)
+            int? idCommandePrioritaire = null,
+            int? idCouturier = null)
         {
             using var context = _contextFactory.CreateDbContext();
             using var perf = GestionCoutureApp.Helpers.PerfLogger.Start(
@@ -1926,8 +1927,13 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Client)
                 .Include(c => c.Pieces)
                     .ThenInclude(p => p.Couturier)
-                .AsSplitQuery()
                 .AsQueryable();
+
+            // Une seule collection est incluse (Pieces) : une requête unique évite
+            // les allers-retours supplémentaires d'AsSplitQuery sans créer de
+            // produit cartésien. Le filtre couturier est appliqué avant Count/Skip.
+            if (idCouturier.HasValue)
+                query = query.Where(c => c.Pieces.Any(p => p.IdCouturier == idCouturier.Value));
 
             // Filtre par statut — SQL EXACT équivalent à StatutGlobal (même logique que ObtenirPageLightAsync)
             if (!string.IsNullOrEmpty(statut))
