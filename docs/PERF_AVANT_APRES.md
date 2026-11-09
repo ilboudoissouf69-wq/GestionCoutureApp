@@ -89,6 +89,36 @@ le projet « 100 % vert ».
 
 ## Reprise V3 — mesures du 09/11/2026
 
+### Dernière reprise — suite finale
+
+`dotnet build GestionCoutureApp.Tests/GestionCoutureApp.Tests.csproj --no-restore
+-p:BaseOutputPath=C:/Users/USER/AppData/Local/Temp/gca_build/ -v:q` réussit avec **0 erreur**
+(2 avertissements NU1603 sur la résolution d'OpenCvSharp). `git diff --check` est propre.
+La suite complète a ensuite réussi : **Réussi! — échec : 0, réussite : 403, ignorée(s) : 0,
+total : 403, durée : 7 min 27 s** (TRX temporaire `full-suite-final.trx`). Les premiers
+essais VSTest bloquaient parce que le bac à sable refusait le socket local; le test a passé
+une fois le loopback autorisé.
+
+Le calcul d'aperçu des commissions a été réécrit sans `Include`, avec des agrégats SQL par
+commande et une projection des pièces candidates. Sur le jeu synthétique de charge (120 000
+clients, 120 000 commandes, 180 000 pièces, 90 000 paiements), `P05_CommissionService` passe
+en **1 009 ms**, au-dessus du critère V3 de 300 ms. Les scénarios métier existants sont verts,
+mais le projet ne contient pas encore le test de comparaison ancien/nouveau demandé par V3.
+
+`P04_TresorerieService_CalculerBilan` passe en **5 368 ms** sur ce même jeu synthétique, très
+au-dessus du critère de 300 ms. Les contrôles de calcul métier restent verts; le coût de
+performance reste bloquant. Les budgets d'alerte et de recherche passent dans le jeu de
+charge : `ObtenirAlertesRisqueRetardAsync` environ **10–25 ms**, statistiques dashboard
+**4–5 ms** (avec limite d'affichage 999+), recherche client **9–12 ms**; le plan B06 utilise
+`IX_PiecesCommande_Active_DateRdv_Risque` et `IX_SuivisAlerteRetard_TypeCible_IdCible`, sans
+scan de ces tables.
+
+Les critères finaux d'acceptation restent ouverts : aucune exécution sur la sauvegarde de
+référence 120k (indisponible dans les racines accessibles), aucune base 2M clients / 3M
+pièces mesurée, aucun parcours UI manuel, aucune mesure mémoire après 10 minutes, pas de
+preuve ancienne/nouvelle du calcul commission et le bilan dépasse sa cible de latence. Ces
+mesures ne permettent pas de certifier le déploiement comme pleinement accepté.
+
 La suite complète a été relancée après les changements en cours avec le répertoire de
 sortie temporaire demandé. Résumé réel : **399 réussites, 3 échecs, 402 tests, 10 min
 32 s**. Les échecs Perf observés sont : `ObtenirToutesAlertesAsync` 427 ms, risque retard
@@ -131,3 +161,33 @@ base fraîche créée par les migrations; aucune mesure 120k réelle n'est dispo
 La pagination des sections a aussi été corrigée pour appliquer `Take(taille)` après le
 décalage de page, au lieu de faire croître la taille retournée à chaque page. La correction
 n'a pas encore de test spécifique page 1/2/3 ni de validation complète distincte.
+
+### Résultats définitifs de cette reprise (09/11/2026)
+
+Les chiffres plus anciens de la section « Reprise V3 » ci-dessus sont historiques et sont
+remplacés par le dernier run complet : **Réussi! — échec : 0, réussite : 403, ignorée(s) :
+0, total : 403, durée : 7 min 27 s**. Après correction du chemin de repli InMemory des
+statistiques dashboard, les tests `E7_18`, `E7_19` et `E7_20` passent également (3/3).
+
+Le rapport TRX final (`%TEMP%\gca_testresults-final\full-suite-final.trx`) donne les durées
+des appels de charge :
+
+| Test | Résultat | Durée | Critère V3 |
+|---|---:|---:|---:|
+| `P04_TresorerieService_CalculerBilan` | réussi | 5 368 ms | < 300 ms — non atteint |
+| `P05_CommissionService_CalculerApercu` | réussi | 1 009 ms | < 300 ms — non atteint |
+| `B06_RetardAlerteService_ObtenirAlertesRisqueRetard_Budget` | réussi | 25 ms | < 300 ms — atteint |
+| `B07_RetardAlerteService_ObtenirStatsDashboard_Budget` | réussi | 5 ms | < 300 ms — atteint |
+| `B10_ClientService_RecherchePrefixe_BudgetEtNomsAccentes` | réussi | 10 ms | < 100 ms — atteint |
+
+Le `dotnet build` après la correction InMemory réussit aussi avec **0 erreur** (2
+avertissements NU1603). La réussite fonctionnelle complète n'efface pas les seuils de
+performance non atteints ni l'absence de validation sur la base réelle et la base 2M; le
+chantier V3 ne peut donc pas être certifié comme entièrement accepté.
+
+Pour préparer la 2.1, les métadonnées projet, assembly et script Inno ont été alignées sur
+`2.1.0`. Une publication autonome Release win-x64 a été produite et son exe vérifié à
+`ProductVersion=2.1.0` / `FileVersion=2.1.0` dans `%TEMP%\gca_release_publish\` (113 MB).
+Le compilateur Inno Setup (`ISCC.exe`) n'est pas installé sur cet environnement; le Setup
+installable n'a donc pas été recompilé. Le dossier `publish` et le Setup existants du dépôt
+n'ont pas été remplacés.

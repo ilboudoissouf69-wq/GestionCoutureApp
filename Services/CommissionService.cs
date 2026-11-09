@@ -36,109 +36,75 @@ namespace GestionCoutureApp.Services
         {
             using var t = PerfLogger.Start("CommissionService.CalculerApercu", _logger);
             using var context = _contextFactory.CreateDbContext();
-
-            // ⚠️ Étape 9 — AsNoTracking retiré ici car EF Core refuse les Includes
-            // cycliques (PieceCommande → Commande → Pieces) en mode no-tracking.
-            // Le calcul d'aperçu est une lecture courte (pas d'accumulation de tracking
-            // dans une boucle longue) : la version tracking reste acceptable.
-            var query = context.PiecesCommande
-                // Plusieurs collections liées seraient jointes en un seul
-                // résultat très volumineux : séparer les requêtes évite ces doublons.
-                .AsSplitQuery()
-                .Include(p => p.MaterielSupplements)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.Paiements)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.Pieces)
-                .Include(p => p.Commande)
-                    .ThenInclude(c => c!.MaterielSupplements)
-                // Filtre sur DateTerminee (date réelle de terminaison), pas sur Commande.DateFin
-                // (date de RDV). Une pièce sans DateTerminee n'est pas encore terminée.
-                .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree") &&
-                            p.DateTerminee.HasValue &&
-                            p.DateTerminee.Value >= dateDebut.Date &&
-                            p.DateTerminee.Value < dateFin.Date.AddDays(1) &&
-                            p.Commande != null &&
-                            p.IdCouturier.HasValue &&
-                            p.IdCommission == null);
-
+            var debut = dateDebut.Date;
+            var finExclusive = dateFin.Date.AddDays(1);
+            var query = context.PiecesCommande.AsNoTracking()
+                .Where(p => (p.Statut == "Terminee" || p.Statut == "Livree")
+                    && p.DateTerminee.HasValue && p.DateTerminee.Value >= debut
+                    && p.DateTerminee.Value < finExclusive && p.Commande != null
+                    && p.IdCouturier.HasValue && p.IdCommission == null
+                    && !context.Retours.Any(r => r.IdPieceCommande == p.IdPieceCommande
+                        && !r.EstAnnule && (r.Statut == "Signale" || r.Statut == "En reprise"))
+                    && p.Couturier != null && p.Couturier.Statut == "Actif"
+                    && (p.Couturier.Role == "Couturier" || p.Couturier.Role == "Boss"));
             if (idCouturierFiltre.HasValue)
                 query = query.Where(p => p.IdCouturier == idCouturierFiltre.Value);
 
-            var pieces = query.ToList();
+            // Garde les identifiants de commandes comme sous-requête SQL et agrège
+            // chaque table côté base, sans Include ni produit cartésien.
+            var commandesCibles = query.Select(p => p.IdCommande).Distinct();
+            var coutureParCommande = context.PiecesCommande.AsNoTracking()
+                .Where(p => commandesCibles.Contains(p.IdCommande))
+                .GroupBy(p => p.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(p => (double)p.MontantCouture) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var materiauxParCommande = context.MaterielsSupplements.AsNoTracking()
+                .Where(m => commandesCibles.Contains(m.IdCommande))
+                .GroupBy(m => m.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(m => (double)(m.Quantite * m.PrixUnitaire)) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
+            var encaisseParCommande = context.Paiements.AsNoTracking()
+                .Where(p => !p.EstAnnule && commandesCibles.Contains(p.IdCommande))
+                .GroupBy(p => p.IdCommande)
+                .Select(g => new { Id = g.Key, Total = g.Sum(p => (double)p.MontantPaye) })
+                .ToDictionary(x => x.Id, x => (decimal)x.Total);
 
-        // Charger les retours non résolus pour exclure les pièces défectueuses.
-        var retoursNonResolus = context.Retours
-                .AsNoTracking()
-                .Where(r => !r.EstAnnule &&
-                            (r.Statut == "Signale" || r.Statut == "En reprise"))
-                .Select(r => r.IdPieceCommande)
-                .ToHashSet();
-
-            // Exclure les pièces avec retours non résolus
-            if (retoursNonResolus.Any())
+            var pieces = query.Select(p => new
             {
-                pieces = pieces.Where(p => !retoursNonResolus.Contains(p.IdPieceCommande)).ToList();
-                _logger.LogInformation(
-                    "Aperçu commission — {NbExclus} pièce(s) exclue(s) (retours non résolus)",
-                    retoursNonResolus.Count);
-            }
-
-            var couturiers = context.Employes
-                .AsNoTracking()
-                .Where(e => e.Statut == "Actif" && (e.Role == "Couturier" || e.Role == "Boss"))
-                .ToList();
-
+                p.IdPieceCommande, p.IdCommande, p.IdCouturier, p.MontantCouture,
+                CouturierPrenom = p.Couturier!.Prenom, CouturierNom = p.Couturier.Nom
+            }).ToList();
             var resultat = new List<ApercuCommission>();
-
-            foreach (var couturier in couturiers)
+            foreach (var groupe in pieces.GroupBy(p => p.IdCouturier!.Value))
             {
-                var piecesCouturier = pieces
-                    .Where(p => p.IdCouturier == couturier.IdEmploye)
-                    .ToList();
+                var lignes = groupe.ToList();
+                decimal caTotal = lignes.Sum(p => p.MontantCouture);
+                decimal caEncaisse = 0m;
+                foreach (var piece in lignes)
+                {
+                    decimal totalCouture = coutureParCommande.GetValueOrDefault(piece.IdCommande);
+                    if (totalCouture <= 0m) continue;
+                    decimal encaisse = Math.Max(0m,
+                        encaisseParCommande.GetValueOrDefault(piece.IdCommande)
+                        - materiauxParCommande.GetValueOrDefault(piece.IdCommande));
+                    encaisse = Math.Min(encaisse, totalCouture);
+                    caEncaisse += Math.Round(encaisse * (piece.MontantCouture / totalCouture),
+                        0, MidpointRounding.AwayFromZero);
+                }
 
-                if (piecesCouturier.Count == 0) continue;
-
-                // CA couture uniquement — les matériaux sont exclus de la commission
-                decimal caTotal = piecesCouturier.Sum(p => p.MontantCouture);
-
-                // L'encaissé couture est la part des paiements attribuable à la couture
-                // seule, répartie proportionnellement entre les pièces de la commande.
-                decimal caEncaisse = piecesCouturier.Sum(p => PartEncaisseeDeLaPiece(p));
-
-                decimal base_ = surMontantEncaisse ? caEncaisse : caTotal;
-                decimal commission = Math.Round(base_ * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero);
-
-                // Matériaux rattachés aux COMMANDES de ce couturier (exclus de la commission).
-                // Les MaterielSupplement sont rattachés à la Commande (pas aux PieceCommande),
-                // donc on remonte aux commandes parentes pour obtenir le vrai total matériaux.
-                // Ce montant est affiché en KPI "dont matériaux" pour la transparence —
-                // il n'entre JAMAIS dans le calcul de la commission ni dans ResteAtelier.
-                decimal totalMateriaux = piecesCouturier
-                    .Select(p => p.Commande)
-                    .Where(c => c != null)
-                    .Distinct()
-                    .SelectMany(c => c!.MaterielSupplements ?? new List<MaterielSupplement>())
-                    .Sum(m => m.Montant);
-
-                // TotalEncaisse représente l'encaissé couture uniquement (hors matériaux).
-                // Les matériaux sont un flux distinct refacturé au client et n'entrent
-                // jamais dans la base de calcul des commissions ni dans le bénéfice atelier.
-        decimal totalEncaisse = caEncaisse;
-
+                decimal baseCalcul = surMontantEncaisse ? caEncaisse : caTotal;
+                decimal totalMateriaux = lignes.Select(p => p.IdCommande).Distinct()
+                    .Sum(id => materiauxParCommande.GetValueOrDefault(id));
                 resultat.Add(new ApercuCommission
                 {
-                    IdEmploye = couturier.IdEmploye,
-                    Nom = couturier.Prenom + " " + couturier.Nom,
-                    NbCommandes = piecesCouturier.Select(p => p.IdCommande).Distinct().Count(),
-                    CaTotal = caTotal,
-                    CaEncaisse = caEncaisse,
-                    BaseCalcul = base_,
-                    Commission = commission,
-                    TotalMateriaux = totalMateriaux,
-                    TotalEncaisse  = totalEncaisse,
-                    IdsCommandes = piecesCouturier.Select(p => p.IdCommande).Distinct().ToList(),
-                    IdsPieces = piecesCouturier.Select(p => p.IdPieceCommande).ToList()
+                    IdEmploye = groupe.Key,
+                    Nom = (lignes[0].CouturierPrenom + " " + lignes[0].CouturierNom).Trim(),
+                    NbCommandes = lignes.Select(p => p.IdCommande).Distinct().Count(),
+                    CaTotal = caTotal, CaEncaisse = caEncaisse, BaseCalcul = baseCalcul,
+                    Commission = Math.Round(baseCalcul * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero),
+                    TotalMateriaux = totalMateriaux, TotalEncaisse = caEncaisse,
+                    IdsCommandes = lignes.Select(p => p.IdCommande).Distinct().ToList(),
+                    IdsPieces = lignes.Select(p => p.IdPieceCommande).ToList()
                 });
             }
 
@@ -154,14 +120,12 @@ namespace GestionCoutureApp.Services
             // Phase 1.2b : compter uniquement les retours sur la période ET pour les pièces
             // de la période (DateSignalement dans la fenêtre et IdPieceCommande appartenant
             // à une pièce de cette période). Avant : on comptait TOUS les retours de toujours.
-            var idsPiecesPeriode = pieces.Select(p => p.IdPieceCommande).ToHashSet();
-
             var retoursParCouturier = context.Retours
                 .AsNoTracking()
                 .Where(r => !r.EstAnnule &&
                             r.DateSignalement >= dateDebut.Date &&
                             r.DateSignalement < dateFin.Date.AddDays(1) &&
-                            idsPiecesPeriode.Contains(r.IdPieceCommande))
+                            query.Any(p => p.IdPieceCommande == r.IdPieceCommande))
                 .GroupBy(r => r.IdCouturier)
                 .Select(g => new { IdCouturier = g.Key, NbRetours = g.Count() })
                 .ToDictionary(x => x.IdCouturier, x => x.NbRetours);

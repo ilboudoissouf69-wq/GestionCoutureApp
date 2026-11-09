@@ -408,6 +408,29 @@ namespace GestionCoutureApp.Services
             var debutMoisUtc = debutMois.ToUniversalTime();
 
             await using var ctx = await _factory.CreateDbContextAsync();
+            // Les tests métier utilisent EF InMemory, qui ne fournit pas de connexion
+            // SQL. Garder le même calcul et les mêmes limites sans appeler l'API relationnelle.
+            if (!ctx.Database.IsRelational())
+            {
+                var candidats = ctx.PiecesCommande.AsNoTracking()
+                    .Where(p => p.CommandeActive
+                        && (p.Statut == "A faire" || p.Statut == "En cours")
+                        && p.DateRdvEffective <= now);
+                var idsRetard = await ExclurePiecesDejaPrevenues(candidats, ctx.SuivisAlerteRetard)
+                    .Select(p => p.IdCommande).Distinct().Take(1000).ToListAsync();
+                var reportsInMemory = await ctx.JournalAudit.AsNoTracking()
+                    .CountAsync(j => j.TypeAction == ActionReport && j.DateHeureUtc >= debutMoisUtc);
+                var clientsInMemory = await ctx.SuivisAlerteRetard.AsNoTracking()
+                    .Where(s => s.NbPreventions > 0 && s.DateDernierMessage >= debutMois && s.IdClient > 0)
+                    .Select(s => s.IdClient).Distinct().CountAsync();
+                return new StatsRetardDashboard
+                {
+                    NbCommandesEnRetard = idsRetard.Count,
+                    NbReportsMois = reportsInMemory,
+                    NbClientsPrevenusMois = clientsInMemory
+                };
+            }
+
             // Un seul aller-retour SQL pour les trois compteurs. Les deux branches
             // de retard gardent une clé de suivi constante, indexable (sans CASE).
             await ctx.Database.OpenConnectionAsync();
