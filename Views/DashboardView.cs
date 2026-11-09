@@ -759,7 +759,8 @@ namespace GestionCoutureApp.Views
             {
                 CarteStatsRetard.Visibility = Visibility.Visible;
                 if (TxtStatRetardsEnCours != null)
-                    TxtStatRetardsEnCours.Text = stats.NbCommandesEnRetard.ToString();
+                    TxtStatRetardsEnCours.Text = stats.NbCommandesEnRetard >= 1000
+                        ? "999+" : stats.NbCommandesEnRetard.ToString();
                 if (TxtStatReportsMois != null)
                     TxtStatReportsMois.Text = stats.NbReportsMois.ToString();
                 if (TxtStatClientsPrevenusMois != null)

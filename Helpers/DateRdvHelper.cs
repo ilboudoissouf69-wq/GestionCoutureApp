@@ -29,11 +29,15 @@ namespace GestionCoutureApp.Helpers
             TimeSpan? heureFin)
         {
             if (rendezVousException.HasValue)
-                return rendezVousException.Value;
+                return TronquerMinute(rendezVousException.Value);
 
             var heure = heureFin ?? HeureFinDefaut;
-            return dateFin.Date + heure;
+            return TronquerMinute(dateFin.Date + heure);
         }
+
+        /// <summary>Normalise les échéances au niveau de précision utilisé par l'interface (minute).</summary>
+        public static DateTime TronquerMinute(DateTime valeur) =>
+            new(valeur.Year, valeur.Month, valeur.Day, valeur.Hour, valeur.Minute, 0, valeur.Kind);
 
         public static DateTime CalculerDateMiParcours(DateTime dateDepot, DateTime dateRdv)
         {

@@ -77,6 +77,18 @@ VALUES (1, 1, '0', '2026-11-02 00:00:00', 'Especes', ''),
         using var context = new ApplicationDbContext(options);
         GestionCoutureApp.App.AppliquerMigrationsManquantes(context, new JournalMuet(), connectionString);
 
+        // Simuler une échéance historique enregistrée avec les secondes, puis
+        // rejouer uniquement le backfill de normalisation ajouté le 09/11.
+        using (var seedPrecision = connection.CreateCommand())
+        {
+            seedPrecision.CommandText = @"UPDATE PiecesCommande
+                SET DateRdvEffective='2026-12-01 16:30:47' WHERE IdPieceCommande=1;
+                DELETE FROM __EFMigrationsHistory
+                WHERE MigrationId='20261109000000_NormaliserDateRdvEffectiveMinute';";
+            seedPrecision.ExecuteNonQuery();
+        }
+        GestionCoutureApp.App.AppliquerMigrationsManquantes(context, new JournalMuet(), connectionString);
+
         using var verify = connection.CreateCommand();
         verify.CommandText = @"SELECT COUNT(*) FROM PiecesCommande
             WHERE DateRdvEffective='2026-12-01 16:30:00'

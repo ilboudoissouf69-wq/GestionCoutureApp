@@ -6,16 +6,17 @@
 
     <Page.Resources>
 
-        <!-- ── Bouton nav horizontal inactif ── -->
+        <!-- Navigation latérale : repères lisibles et état actif évident -->
         <Style x:Key="NavTopBtn" TargetType="Button">
-            <Setter Property="Background"     Value="Transparent"/>
+            <Setter Property="Background"     Value="#F8FAFC"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush"    Value="Transparent"/>
+            <Setter Property="BorderBrush"    Value="#E2E8F0"/>
             <Setter Property="Foreground"     Value="#475569"/>
             <Setter Property="FontSize"       Value="12"/>
             <Setter Property="FontWeight"     Value="SemiBold"/>
             <Setter Property="Padding"        Value="13,9"/>
-            <Setter Property="Margin"         Value="3,5"/>
+            <Setter Property="Margin"         Value="4,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="Cursor"         Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -33,12 +34,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background"
-                                        Value="#F8FAFC"/>
-                                <Setter Property="Foreground"
-                                        Value="#0F172A"/>
+                                        Value="#FFF7ED"/>
+                                <Setter Property="Foreground" Value="#9A3412"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#F1F5F9"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#FFEDD5"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -49,12 +49,12 @@
             </Setter>
         </Style>
 
-        <!-- ── Bouton nav horizontal actif ── -->
+        <!-- Onglet sélectionné -->
         <Style x:Key="NavTopBtnActif" TargetType="Button"
                BasedOn="{StaticResource NavTopBtn}">
-            <Setter Property="Background"  Value="#FFF7ED"/>
-            <Setter Property="BorderBrush"  Value="#FED7AA"/>
-            <Setter Property="Foreground"   Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Background"  Value="#D97706"/>
+            <Setter Property="BorderBrush"  Value="#D97706"/>
+            <Setter Property="Foreground"   Value="White"/>
             <Setter Property="FontWeight"   Value="SemiBold"/>
         </Style>
 
@@ -63,86 +63,55 @@
             <Setter Property="Background"       Value="White"/>
             <Setter Property="BorderBrush"      Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness"  Value="1"/>
-            <Setter Property="CornerRadius"     Value="14"/>
-            <Setter Property="Padding"          Value="26,22"/>
-            <Setter Property="Margin"           Value="0,0,0,18"/>
+            <Setter Property="CornerRadius"     Value="12"/>
+            <Setter Property="Padding"          Value="28,24"/>
+            <Setter Property="Margin"           Value="0,0,0,20"/>
         </Style>
 
     </Page.Resources>
 
-    <Grid>
+    <Grid Background="#F3F6FA">
         <Grid.RowDefinitions>
-            <!-- En-tête page -->
             <RowDefinition Height="Auto"/>
-            <!-- Barre nav horizontale -->
             <RowDefinition Height="Auto"/>
-            <!-- Contenu scrollable -->
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- ══ EN-TÊTE ═══════════════════════════════════════════════════ -->
+        <!-- En-tête de la section sélectionnée -->
         <Border Grid.Row="0" Background="White"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,0,0,1"
-                Padding="30,18,30,16">
+                BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="30,19">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="46" Height="46" CornerRadius="13"
-                                Background="#FFF7ED" BorderBrush="#FED7AA"
-                                BorderThickness="1" Margin="0,0,14,0">
-                            <TextBlock Text="⚙" FontSize="23" FontWeight="SemiBold"
-                                       Foreground="{StaticResource AccentBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel>
-                            <TextBlock x:Name="TxtPageTitre"
-                                       Text="Paramètres"
-                                       FontSize="23" FontWeight="Bold"
-                                       Foreground="{StaticResource PrimaryBrush}"/>
-                            <TextBlock x:Name="TxtPageDesc"
-                                       Text="Configuration système"
-                                       FontSize="12"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,4,0,0"/>
-                        </StackPanel>
-                    </StackPanel>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="PARAMÈTRES" FontSize="9" FontWeight="Bold"
+                               Foreground="#D97706" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="TxtPageTitre" Text="Paramètres" FontSize="23" FontWeight="Bold"
+                               Foreground="#172033"/>
+                    <TextBlock x:Name="TxtPageDesc" Text="Configuration système" FontSize="12"
+                               Foreground="#64748B" Margin="0,4,0,0"/>
                 </StackPanel>
-                <!-- Badge langue + version -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0"
-                            BorderThickness="1" CornerRadius="8"
-                            Padding="11,7" Margin="0,0,10,0">
-                        <TextBlock x:Name="TxtBadgeFR" Text="🇫🇷 Français"
-                                   FontSize="11" FontWeight="SemiBold" Foreground="#475569"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1"
+                            CornerRadius="8" Padding="11,7" Margin="0,0,9,0">
+                        <TextBlock x:Name="TxtBadgeFR" Text="🇫🇷 Français" FontSize="11"
+                                   FontWeight="SemiBold" Foreground="#475569"/>
                     </Border>
-                    <Border Background="#FFF7ED" BorderBrush="#FED7AA"
-                            BorderThickness="1" CornerRadius="8" Padding="11,7">
-                        <TextBlock Text="ESPACE ADMINISTRATEUR"
-                                   FontSize="9" FontWeight="Bold"
+                    <Border Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1"
+                            CornerRadius="8" Padding="11,7">
+                        <TextBlock Text="ADMINISTRATEUR" FontSize="9" FontWeight="Bold"
                                    Foreground="#C2410C" VerticalAlignment="Center"/>
                     </Border>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- ══ BARRE DE NAVIGATION HORIZONTALE ═══════════════════════════ -->
-        <Border Grid.Row="1" Background="White"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,0,0,1" Padding="0,2">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Hidden">
-                <StackPanel Orientation="Horizontal" Margin="24,0">
-
-                    <!-- Groupe gestion -->
-                    <TextBlock Text="GESTION"
-                               FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
-                               VerticalAlignment="Center" Margin="8,0,4,0"/>
+        <!-- Navigation secondaire compacte : la navigation principale reste celle de l'application -->
+        <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0"
+                BorderThickness="0,0,0,1" Padding="18,2">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="GESTION" FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
+                               VerticalAlignment="Center" Margin="6,0,3,0"/>
 
                     <Button x:Name="BtnNavComptabilite"
                             Style="{StaticResource NavTopBtnActif}"
@@ -177,13 +146,9 @@
                         </StackPanel>
                     </Button>
 
-                    <!-- Séparateur -->
-                    <Border Width="1" Height="26" Background="#E2E8F0" Margin="12,8"/>
-
-                    <!-- Groupe système -->
-                    <TextBlock Text="SYSTÈME"
-                               FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
-                               VerticalAlignment="Center" Margin="4,0,4,0"/>
+                    <Border Width="1" Height="25" Background="#E2E8F0" Margin="10,0"/>
+                    <TextBlock Text="SYSTÈME" FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
+                               VerticalAlignment="Center" Margin="3,0"/>
 
                     <Button x:Name="BtnNavSauvegarde"
                             Style="{StaticResource NavTopBtn}"
@@ -218,13 +183,9 @@
                         </StackPanel>
                     </Button>
 
-                    <!-- Séparateur -->
-                    <Border Width="1" Height="26" Background="#E2E8F0" Margin="12,8"/>
-
-                    <!-- Groupe personnalisation -->
-                    <TextBlock Text="PERSONNALISATION"
-                               FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
-                               VerticalAlignment="Center" Margin="4,0,4,0"/>
+                    <Border Width="1" Height="25" Background="#E2E8F0" Margin="10,0"/>
+                    <TextBlock Text="PERSONNALISATION" FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
+                               VerticalAlignment="Center" Margin="3,0"/>
 
                     <Button x:Name="BtnNavApparence"
                             Style="{StaticResource NavTopBtn}"
@@ -255,8 +216,8 @@
         <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
-                      Padding="28,24,28,32">
-            <StackPanel MaxWidth="1480" HorizontalAlignment="Center">
+                      Padding="34,28,34,36">
+            <StackPanel MaxWidth="1420" HorizontalAlignment="Stretch">
 
                 <!-- ════════════════════════════════════════════
                      PANNEAU 1 — COMPTABILITÉ

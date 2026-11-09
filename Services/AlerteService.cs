@@ -15,6 +15,9 @@ namespace GestionCoutureApp.Services
         private List<PieceAlerteDto>? _cachePieces;
         private DateTime _cacheExpire = DateTime.MinValue;
         private static readonly TimeSpan _cacheDuree = TimeSpan.FromSeconds(5);
+        private ResumeAlertesDto? _resumeCache;
+        private DateTime _resumeExpire = DateTime.MinValue;
+        private readonly SemaphoreSlim _resumeVerrou = new(1, 1);
 
         // DTO projeté : colonnes utiles uniquement, pas de MotDePasse, pas de Include
         private sealed class PieceAlerteDto
@@ -109,7 +112,12 @@ namespace GestionCoutureApp.Services
             return _cachePieces;
         }
 
-        public void InvaliderCache() => _cachePieces = null;
+        public void InvaliderCache()
+        {
+            _cachePieces = null;
+            _resumeCache = null;
+            _resumeExpire = DateTime.MinValue;
+        }
 
         public async Task<List<AlerteRendezVous>> ObtenirAlertesActuelles()
         {
@@ -403,6 +411,13 @@ namespace GestionCoutureApp.Services
         public async Task<ResumeAlertesDto> ObtenirResumeAsync(CancellationToken cancellationToken = default)
         {
             using var t = PerfLogger.Start("AlerteService.ObtenirResumeAsync", _logger);
+            if (_resumeCache != null && DateTime.UtcNow < _resumeExpire)
+                return _resumeCache;
+            await _resumeVerrou.WaitAsync(cancellationToken);
+            try
+            {
+            if (_resumeCache != null && DateTime.UtcNow < _resumeExpire)
+                return _resumeCache;
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var maintenant = DateTime.Now;
             var debutJour  = maintenant.Date;
@@ -419,12 +434,14 @@ namespace GestionCoutureApp.Services
                          && p.DateRdvEffective < maintenant)
                 .Select(p => p.IdCommande)
                 .Distinct()
+                .Take(1000)
                 .CountAsync(cancellationToken);
 
             var nbPrets = await ctx.PiecesCommande
                 .Where(p => p.CommandeActive && p.Statut == "Terminee" && p.DateRdvEffective >= maintenant)
                 .Select(p => p.IdCommande)
                 .Distinct()
+                .Take(1000)
                 .CountAsync(cancellationToken);
 
             var nbAujourdhui = await ctx.PiecesCommande
@@ -434,6 +451,7 @@ namespace GestionCoutureApp.Services
                          && p.DateRdvEffective < debutDemain)
                 .Select(p => p.IdCommande)
                 .Distinct()
+                .Take(1000)
                 .CountAsync(cancellationToken);
 
             var nbImminentes = await ctx.PiecesCommande
@@ -444,23 +462,19 @@ namespace GestionCoutureApp.Services
                                  && p.DateRdvEffective > dans7j)))
                 .Select(p => p.IdCommande)
                 .Distinct()
+                .Take(1000)
                 .CountAsync(cancellationToken);
 
             // Risque de retard : pièces non terminées avec DateRdvEffective <= seuilImminent,
             // excluant celles dont le suivi existe avec NbPreventions > 0 pour ce RDV.
             // NOT EXISTS via LEFT JOIN sur SuivisAlerteRetard
-            var nbRisque = await ctx.PiecesCommande
+            var piecesRisque = ctx.PiecesCommande
                 .Where(p => p.CommandeActive
                          && p.Statut != "Terminee" && p.Statut != "Livree"
-                         && p.DateRdvEffective <= seuilImminent
-                         && !ctx.SuivisAlerteRetard.Any(s =>
-                             s.TypeCible == (p.RendezVousException.HasValue ? "Piece" : "Commande")
-                             && s.IdCible == (p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande)
-                             && s.NbPreventions > 0
-                             && s.DateRdvTraite >= p.DateRdvEffective.AddMinutes(-1)
-                             && s.DateRdvTraite < p.DateRdvEffective.AddMinutes(1)))
-                .Select(p => new { p.IdCommande, p.IdPieceCommande, p.DateRdvEffective })
-                .Distinct()
+                         && p.DateRdvEffective <= seuilImminent);
+            int nbRisque = await RetardAlerteService.ExclurePiecesDejaPrevenues(
+                    piecesRisque, ctx.SuivisAlerteRetard)
+                .Take(1000)
                 .CountAsync(cancellationToken);
             int nbRisqueRetours = await ctx.Retours.CountAsync(r => !r.EstAnnule
                 && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
@@ -487,7 +501,7 @@ namespace GestionCoutureApp.Services
                 && r.DateRdvReprise >= debutDemain && r.DateRdvReprise <= dans7j
                 && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee, cancellationToken);
 
-            return new ResumeAlertesDto
+            _resumeCache = new ResumeAlertesDto
             {
                 NbRetards     = nbRetards + nbRetardsRetours,
                 NbPrets       = nbPrets + nbPretsRetours,
@@ -496,6 +510,13 @@ namespace GestionCoutureApp.Services
                 NbRisqueRetard = nbRisque + nbRisqueRetours,
                 NbBadgeMenu   = nbRetards + nbAujourdhui
             };
+            _resumeExpire = DateTime.UtcNow.AddSeconds(60);
+            return _resumeCache;
+            }
+            finally
+            {
+                _resumeVerrou.Release();
+            }
         }
 
         public async Task<PagedResult<AlerteCommandeVm>> ObtenirSectionAsync(
@@ -553,7 +574,7 @@ namespace GestionCoutureApp.Services
                 .Select(g => new { IdCommande = g.Key, Date = g.Min(p => p.DateRdvEffective) })
                 .OrderBy(x => x.Date)
                 .Skip((page - 1) * taille)
-                .Take(page * taille)
+                .Take(taille)
                 .Select(x => x.IdCommande)
                 .ToListAsync(cancellationToken);
 

@@ -175,11 +175,11 @@ namespace GestionCoutureApp.Views
                 if (ct.IsCancellationRequested) return;
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    if (TxtBadgeNbPrets      != null) TxtBadgeNbPrets.Text      = resume.NbPrets.ToString();
-                    if (TxtBadgeNbRetards    != null) TxtBadgeNbRetards.Text    = resume.NbRetards.ToString();
-                    if (TxtBadgeNbAujourdhui != null) TxtBadgeNbAujourdhui.Text = resume.NbAujourdhui.ToString();
-                    if (TxtBadgeNbImminentes != null) TxtBadgeNbImminentes.Text = resume.NbImminentes.ToString();
-                    if (TxtBadgeNbRisqueRetard != null) TxtBadgeNbRisqueRetard.Text = resume.NbRisqueRetard.ToString();
+                    if (TxtBadgeNbPrets      != null) TxtBadgeNbPrets.Text      = FormaterBadge(resume.NbPrets);
+                    if (TxtBadgeNbRetards    != null) TxtBadgeNbRetards.Text    = FormaterBadge(resume.NbRetards);
+                    if (TxtBadgeNbAujourdhui != null) TxtBadgeNbAujourdhui.Text = FormaterBadge(resume.NbAujourdhui);
+                    if (TxtBadgeNbImminentes != null) TxtBadgeNbImminentes.Text = FormaterBadge(resume.NbImminentes);
+                    if (TxtBadgeNbRisqueRetard != null) TxtBadgeNbRisqueRetard.Text = FormaterBadge(resume.NbRisqueRetard);
 
                     if (Window.GetWindow(this) is MainWindow mw)
                         mw.AcquitterBadgeAlertes(resume.NbBadgeMenu);
@@ -190,6 +190,8 @@ namespace GestionCoutureApp.Views
                 System.Diagnostics.Debug.WriteLine($"[AlertesView] Erreur badges : {ex.Message}");
             }
         }
+
+        private static string FormaterBadge(int nombre) => nombre >= 1000 ? "999+" : nombre.ToString();
 
         // ── Sections (ORDER BY + LIMIT SQL) ──────────────────────────────
         private async Task ChargerToutesSectionsAsync(CancellationToken ct = default)

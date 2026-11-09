@@ -356,16 +356,19 @@ commandes_periode AS (
   WHERE EstSupprimee = 0 AND DateFin >= @debut AND DateFin < @fin
 ),
 pieces AS (
-  SELECT IdCommande, SUM(CAST(MontantCouture AS REAL)) AS total
-  FROM PiecesCommande GROUP BY IdCommande
+  SELECT p.IdCommande, SUM(CAST(p.MontantCouture AS REAL)) AS total
+  FROM commandes_periode cp JOIN PiecesCommande p ON p.IdCommande=cp.IdCommande
+  GROUP BY p.IdCommande
 ),
 materiaux AS (
-  SELECT IdCommande, SUM(Quantite * CAST(PrixUnitaire AS REAL)) AS total
-  FROM MaterielsSupplements GROUP BY IdCommande
+  SELECT m.IdCommande, SUM(m.Quantite * CAST(m.PrixUnitaire AS REAL)) AS total
+  FROM commandes_periode cp JOIN MaterielsSupplements m ON m.IdCommande=cp.IdCommande
+  GROUP BY m.IdCommande
 ),
 paiements AS (
-  SELECT IdCommande, SUM(CAST(MontantPaye AS REAL)) AS total
-  FROM Paiements WHERE EstAnnule = 0 GROUP BY IdCommande
+  SELECT p.IdCommande, SUM(CAST(p.MontantPaye AS REAL)) AS total
+  FROM commandes_periode cp JOIN Paiements p ON p.IdCommande=cp.IdCommande
+  WHERE p.EstAnnule = 0 GROUP BY p.IdCommande
 ),
 resume AS (
   SELECT c.IdCommande, COALESCE(pi.total, 0) AS couture,

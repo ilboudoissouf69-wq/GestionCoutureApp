@@ -7,6 +7,39 @@ namespace GestionCoutureApp.Services
 {
     public class RetardAlerteService : IRetardAlerteService
     {
+        private sealed class RisquePieceDto
+        {
+            public int IdPieceCommande { get; set; }
+            public int IdCommande { get; set; }
+            public string TypeVetement { get; set; } = "";
+            public string Statut { get; set; } = "";
+            public DateTime? RendezVousException { get; set; }
+            public DateTime DateRdvEffective { get; set; }
+            public int CmdIdClient { get; set; }
+            public string? ClientPrenom { get; set; }
+            public string? ClientNom { get; set; }
+            public string? ClientTel { get; set; }
+            public string? CoutPrenom { get; set; }
+            public string? CoutNom { get; set; }
+        }
+
+        private sealed class RisqueRetourDto
+        {
+            public int IdRetour { get; set; }
+            public int IdCommande { get; set; }
+            public int IdPieceCommande { get; set; }
+            public string? NumeroRetour { get; set; }
+            public string Statut { get; set; } = "";
+            public DateTime? DateRdvReprise { get; set; }
+            public TimeSpan? HeureDebutReprise { get; set; }
+            public TimeSpan? HeureFinReprise { get; set; }
+            public int IdClient { get; set; }
+            public string? Nom { get; set; }
+            public string? Telephone { get; set; }
+            public string? Vetement { get; set; }
+            public string? Couturier { get; set; }
+        }
+
         public const string CibleCommande = "Commande";
         public const string CiblePiece    = "Piece";
         public const string CibleRetour   = "Retour";
@@ -52,6 +85,31 @@ namespace GestionCoutureApp.Services
             piece.RendezVousException.HasValue
                 ? (CiblePiece, piece.IdPieceCommande)
                 : (CibleCommande, piece.IdCommande);
+
+        /// <summary>
+        /// Exclut les pièces dont le client a déjà été prévenu pour le RDV courant.
+        /// Les deux branches distinctes évitent un CASE corrélé sur les colonnes de
+        /// clé et la comparaison exacte est possible car DateRdvEffective et
+        /// DateRdvTraite sont normalisées à la minute.
+        /// </summary>
+        public static IQueryable<PieceCommande> ExclurePiecesDejaPrevenues(
+            IQueryable<PieceCommande> pieces,
+            IQueryable<SuiviAlerteRetard> suivis)
+        {
+            var commandes = pieces.Where(p => !p.RendezVousException.HasValue
+                && !suivis.Any(s => s.TypeCible == CibleCommande
+                    && s.IdCible == p.IdCommande
+                    && s.NbPreventions > 0
+                    && s.DateRdvTraite == p.DateRdvEffective));
+
+            var piecesException = pieces.Where(p => p.RendezVousException.HasValue
+                && !suivis.Any(s => s.TypeCible == CiblePiece
+                    && s.IdCible == p.IdPieceCommande
+                    && s.NbPreventions > 0
+                    && s.DateRdvTraite == p.DateRdvEffective));
+
+            return commandes.Concat(piecesException);
+        }
 
         public string GenererMessageExcuse(
             string modele,
@@ -350,40 +408,40 @@ namespace GestionCoutureApp.Services
             var debutMoisUtc = debutMois.ToUniversalTime();
 
             await using var ctx = await _factory.CreateDbContextAsync();
-
-            // ── ÉTAPE 2 PERF : COUNT SQL avec NOT EXISTS (plus de chargement en mémoire) ──
-            // NbCommandesEnRetard = nombre distinct de commandes qui ont au moins une pièce
-            // en retard (DateRdvEffective <= maintenant, CommandeActive, non terminée/livrée)
-            // ET qui n'ont pas de suivi valide (NbPreventions > 0 pour le même RDV).
-            //
-            // Note : MemeRdv compare à la minute près. En SQL on compare à la seconde :
-            // si DateRdvTraite est dans le même créneau d'1 minute que DateRdvEffective,
-            // la pièce est exclue. C'est suffisamment proche pour la sémantique métier.
-            var nbCommandesEnRetard = await ctx.PiecesCommande
-                .Where(p => p.CommandeActive
-                         && (p.Statut == "A faire" || p.Statut == "En cours")
-                         && p.DateRdvEffective <= now
-                         && !ctx.SuivisAlerteRetard.Any(s =>
-                             s.IdCible == p.IdCommande
-                             && s.TypeCible == CibleCommande
-                             && s.NbPreventions > 0
-                             && s.DateRdvTraite >= p.DateRdvEffective.AddMinutes(-1)
-                             && s.DateRdvTraite <  p.DateRdvEffective.AddMinutes(1)))
-                .Select(p => p.IdCommande)
-                .Distinct()
-                .CountAsync();
-
-            int reports = await ctx.JournalAudit.CountAsync(j =>
-                j.TypeAction == ActionReport && j.DateHeureUtc >= debutMoisUtc);
-
-            int clients = await ctx.SuivisAlerteRetard
-                .Where(s => s.NbPreventions > 0
-                         && s.DateDernierMessage != null
-                         && s.DateDernierMessage >= debutMois
-                         && s.IdClient > 0)
-                .Select(s => s.IdClient)
-                .Distinct()
-                .CountAsync();
+            // Un seul aller-retour SQL pour les trois compteurs. Les deux branches
+            // de retard gardent une clé de suivi constante, indexable (sans CASE).
+            await ctx.Database.OpenConnectionAsync();
+            await using var cmd = ctx.Database.GetDbConnection().CreateCommand();
+            cmd.CommandText = @"
+WITH retards AS (
+  SELECT p.IdCommande FROM PiecesCommande p
+  WHERE p.CommandeActive=1 AND p.Statut IN ('A faire','En cours')
+    AND p.DateRdvEffective <= @maintenant AND p.RendezVousException IS NULL
+    AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+      WHERE s.TypeCible='Commande' AND s.IdCible=p.IdCommande
+        AND s.NbPreventions>0 AND s.DateRdvTraite=p.DateRdvEffective)
+  UNION ALL
+  SELECT p.IdCommande FROM PiecesCommande p
+  WHERE p.CommandeActive=1 AND p.Statut IN ('A faire','En cours')
+    AND p.DateRdvEffective <= @maintenant AND p.RendezVousException IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+      WHERE s.TypeCible='Piece' AND s.IdCible=p.IdPieceCommande
+        AND s.NbPreventions>0 AND s.DateRdvTraite=p.DateRdvEffective)
+)
+SELECT
+  (SELECT COUNT(*) FROM (SELECT DISTINCT IdCommande FROM retards LIMIT 1000)),
+  (SELECT COUNT(*) FROM JournalAudit WHERE TypeAction=@actionReport AND DateHeureUtc>=@debutUtc),
+  (SELECT COUNT(DISTINCT IdClient) FROM SuivisAlerteRetard
+    WHERE NbPreventions>0 AND DateDernierMessage>=@debutMois AND IdClient>0);";
+            AjouterParam(cmd, "@maintenant", now.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+            AjouterParam(cmd, "@actionReport", ActionReport);
+            AjouterParam(cmd, "@debutUtc", debutMoisUtc.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+            AjouterParam(cmd, "@debutMois", debutMois.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            int nbCommandesEnRetard = reader.GetInt32(0);
+            int reports = reader.GetInt32(1);
+            int clients = reader.GetInt32(2);
 
             return new StatsRetardDashboard
             {
@@ -393,9 +451,13 @@ namespace GestionCoutureApp.Services
             };
         }
 
-        private static SuiviAlerteRetard? TrouverSuivi(
-            List<SuiviAlerteRetard> suivis, string type, int id) =>
-            suivis.FirstOrDefault(s => s.TypeCible == type && s.IdCible == id);
+        private static void AjouterParam(System.Data.Common.DbCommand command, string nom, object valeur)
+        {
+            var param = command.CreateParameter();
+            param.ParameterName = nom;
+            param.Value = valeur;
+            command.Parameters.Add(param);
+        }
 
         // ════════════════════════════════════════════════════════════════════
         // ÉTAPE 2 PERF — Version paginée de ObtenirAlertesRisqueRetardAsync
@@ -418,57 +480,152 @@ namespace GestionCoutureApp.Services
             await using var ctx = await _factory.CreateDbContextAsync(cancellationToken);
 
             // ── COUNT SQL avec NOT EXISTS ─────────────────────────────────
-            var baseQuery = ctx.PiecesCommande
+            var candidats = ctx.PiecesCommande
                 .Where(p => p.CommandeActive
                          && p.Statut != "Terminee" && p.Statut != "Livree"
-                         && p.DateRdvEffective <= seuil
-                         && !ctx.SuivisAlerteRetard.Any(s =>
-                             s.TypeCible == (p.RendezVousException.HasValue ? CiblePiece : CibleCommande)
-                             && s.IdCible == (p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande)
-                             && s.NbPreventions > 0
-                             && s.DateRdvTraite >= p.DateRdvEffective.AddMinutes(-1)
-                             && s.DateRdvTraite <  p.DateRdvEffective.AddMinutes(1)));
+                         && p.DateRdvEffective <= seuil);
+            var baseQuery = ExclurePiecesDejaPrevenues(candidats, ctx.SuivisAlerteRetard);
 
             int total = compterTotal ? await baseQuery.AsNoTracking().CountAsync(cancellationToken) : 0;
 
-            var piecesData = await baseQuery
-                .AsNoTracking()
-                .OrderBy(p => p.DateRdvEffective)
-                .Take(page * taille)
-                .Select(p => new
+            // Sélectionner d'abord uniquement les identifiants en SQL brut : EF ajoutait
+            // une projection d'entités complète au UNION et SQLite relisait toute la
+            // section avant de rendre une page bornée.
+            var idsPage = new List<int>(taille);
+            List<RisquePieceDto> piecesData;
+            if (ctx.Database.IsRelational())
+            {
+                await ctx.Database.OpenConnectionAsync(cancellationToken);
+                await using (var command = ctx.Database.GetDbConnection().CreateCommand())
                 {
-                    p.IdPieceCommande, p.IdCommande,
-                    p.TypeVetement, p.Statut, p.RendezVousException,
-                    p.DateRdvEffective,
-                    CmdIdClient  = p.Commande != null ? p.Commande.IdClient : 0,
-                    ClientPrenom = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Prenom : null,
-                    ClientNom    = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Nom : null,
-                    ClientTel    = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Telephone : null,
-                    CoutPrenom   = p.Couturier != null ? p.Couturier.Prenom : null,
-                    CoutNom      = p.Couturier != null ? p.Couturier.Nom : null
-                })
-                .ToListAsync(cancellationToken);
+                command.CommandText = @"
+SELECT x.IdPieceCommande FROM (
+  SELECT p.IdPieceCommande, p.DateRdvEffective FROM (
+    SELECT p.IdPieceCommande, p.DateRdvEffective FROM PiecesCommande p
+    WHERE p.CommandeActive=1 AND p.Statut NOT IN ('Terminee','Livree')
+      AND p.DateRdvEffective <= @seuil AND p.RendezVousException IS NULL
+      AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+        WHERE s.TypeCible='Commande' AND s.IdCible=p.IdCommande
+          AND s.NbPreventions>0 AND s.DateRdvTraite=p.DateRdvEffective)
+    ORDER BY p.DateRdvEffective, p.IdPieceCommande LIMIT @limiteBranche
+  ) p
+  UNION ALL
+  SELECT p.IdPieceCommande, p.DateRdvEffective FROM (
+    SELECT p.IdPieceCommande, p.DateRdvEffective FROM PiecesCommande p
+    WHERE p.CommandeActive=1 AND p.Statut NOT IN ('Terminee','Livree')
+      AND p.DateRdvEffective <= @seuil AND p.RendezVousException IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+        WHERE s.TypeCible='Piece' AND s.IdCible=p.IdPieceCommande
+          AND s.NbPreventions>0 AND s.DateRdvTraite=p.DateRdvEffective)
+    ORDER BY p.DateRdvEffective, p.IdPieceCommande LIMIT @limiteBranche
+  ) p
+) x ORDER BY x.DateRdvEffective, x.IdPieceCommande LIMIT @taille OFFSET @offset;";
+                var seuilParameter = command.CreateParameter();
+                seuilParameter.ParameterName = "@seuil";
+                seuilParameter.Value = seuil.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+                command.Parameters.Add(seuilParameter);
+                var brancheParameter = command.CreateParameter();
+                brancheParameter.ParameterName = "@limiteBranche";
+                brancheParameter.Value = page * taille;
+                command.Parameters.Add(brancheParameter);
+                var tailleParameter = command.CreateParameter();
+                tailleParameter.ParameterName = "@taille";
+                tailleParameter.Value = taille;
+                command.Parameters.Add(tailleParameter);
+                var offsetParameter = command.CreateParameter();
+                offsetParameter.ParameterName = "@offset";
+                offsetParameter.Value = (page - 1) * taille;
+                command.Parameters.Add(offsetParameter);
+                    await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                    while (await reader.ReadAsync(cancellationToken))
+                        idsPage.Add(reader.GetInt32(0));
+                }
 
-            var idsCibles = piecesData.Select(p => p.RendezVousException.HasValue
-                    ? p.IdPieceCommande : p.IdCommande)
-                .Distinct().ToArray();
-            var suivisPage = idsCibles.Length == 0
-                ? new List<SuiviAlerteRetard>()
-                : await ctx.SuivisAlerteRetard.AsNoTracking()
-                    .Where(s => idsCibles.Contains(s.IdCible)
-                             && (s.TypeCible == CiblePiece || s.TypeCible == CibleCommande))
+                piecesData = new List<RisquePieceDto>(idsPage.Count);
+                if (idsPage.Count > 0)
+                {
+                    await using var detailsCommand = ctx.Database.GetDbConnection().CreateCommand();
+                    var placeholders = new string[idsPage.Count];
+                    for (int i = 0; i < idsPage.Count; i++)
+                    {
+                        placeholders[i] = $"@id{i}";
+                        var idParam = detailsCommand.CreateParameter();
+                        idParam.ParameterName = placeholders[i];
+                        idParam.Value = idsPage[i];
+                        detailsCommand.Parameters.Add(idParam);
+                    }
+                    detailsCommand.CommandText = $@"
+SELECT p.IdPieceCommande, p.IdCommande, p.TypeVetement, p.Statut, p.RendezVousException,
+       p.DateRdvEffective, c.IdClient, cl.Prenom, cl.Nom, cl.Telephone, e.Prenom, e.Nom
+FROM PiecesCommande p
+LEFT JOIN Commandes c ON c.IdCommande=p.IdCommande
+LEFT JOIN Clients cl ON cl.IdClient=c.IdClient
+LEFT JOIN Employes e ON e.IdEmploye=p.IdCouturier
+WHERE p.IdPieceCommande IN ({string.Join(",", placeholders)})
+ORDER BY p.DateRdvEffective, p.IdPieceCommande;";
+                    await using var detailsReader = await detailsCommand.ExecuteReaderAsync(cancellationToken);
+                    while (await detailsReader.ReadAsync(cancellationToken))
+                    {
+                        piecesData.Add(new RisquePieceDto
+                        {
+                            IdPieceCommande = detailsReader.GetInt32(0), IdCommande = detailsReader.GetInt32(1),
+                            TypeVetement = detailsReader.GetString(2), Statut = detailsReader.GetString(3),
+                            RendezVousException = detailsReader.IsDBNull(4) ? null : DateTime.Parse(detailsReader.GetString(4), System.Globalization.CultureInfo.InvariantCulture),
+                            DateRdvEffective = DateTime.Parse(detailsReader.GetString(5), System.Globalization.CultureInfo.InvariantCulture),
+                            CmdIdClient = detailsReader.IsDBNull(6) ? 0 : detailsReader.GetInt32(6),
+                            ClientPrenom = detailsReader.IsDBNull(7) ? null : detailsReader.GetString(7),
+                            ClientNom = detailsReader.IsDBNull(8) ? null : detailsReader.GetString(8),
+                            ClientTel = detailsReader.IsDBNull(9) ? null : detailsReader.GetString(9),
+                            CoutPrenom = detailsReader.IsDBNull(10) ? null : detailsReader.GetString(10),
+                            CoutNom = detailsReader.IsDBNull(11) ? null : detailsReader.GetString(11)
+                        });
+                    }
+                }
+            }
+            else
+            {
+                piecesData = await baseQuery
+                    .AsNoTracking()
+                    .OrderBy(p => p.DateRdvEffective)
+                    .Skip((page - 1) * taille)
+                    .Take(taille)
+                    .Select(p => new RisquePieceDto
+                {
+                    IdPieceCommande = p.IdPieceCommande, IdCommande = p.IdCommande,
+                    TypeVetement = p.TypeVetement, Statut = p.Statut, RendezVousException = p.RendezVousException,
+                    DateRdvEffective = p.DateRdvEffective,
+                    CmdIdClient = p.Commande != null ? p.Commande.IdClient : 0,
+                    ClientPrenom = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Prenom : null,
+                    ClientNom = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Nom : null,
+                    ClientTel = p.Commande != null && p.Commande.Client != null ? p.Commande.Client.Telephone : null,
+                    CoutPrenom = p.Couturier != null ? p.Couturier.Prenom : null,
+                    CoutNom = p.Couturier != null ? p.Couturier.Nom : null
+                })
                     .ToListAsync(cancellationToken);
+            }
+
+            var idsCommandes = piecesData.Where(p => !p.RendezVousException.HasValue)
+                .Select(p => p.IdCommande).Distinct().ToArray();
+            var idsPiecesException = piecesData.Where(p => p.RendezVousException.HasValue)
+                .Select(p => p.IdPieceCommande).Distinct().ToArray();
+            var suivisPage = new List<SuiviAlerteRetard>(idsCommandes.Length + idsPiecesException.Length);
+            if (idsCommandes.Length > 0)
+                suivisPage.AddRange(await ctx.SuivisAlerteRetard.AsNoTracking()
+                    .Where(s => s.TypeCible == CibleCommande && idsCommandes.Contains(s.IdCible))
+                    .ToListAsync(cancellationToken));
+            if (idsPiecesException.Length > 0)
+                suivisPage.AddRange(await ctx.SuivisAlerteRetard.AsNoTracking()
+                    .Where(s => s.TypeCible == CiblePiece && idsPiecesException.Contains(s.IdCible))
+                    .ToListAsync(cancellationToken));
             var suivisParCle = suivisPage.ToDictionary(s => (s.TypeCible, s.IdCible));
 
             var alertes = new List<AlerteRendezVous>();
             foreach (var p in piecesData)
             {
+                var cible = p.RendezVousException.HasValue
+                    ? (CiblePiece, p.IdPieceCommande) : (CibleCommande, p.IdCommande);
+                suivisParCle.TryGetValue(cible, out var suivi);
                 var echeance = p.DateRdvEffective;
-                string type = p.RendezVousException.HasValue ? CiblePiece : CibleCommande;
-                int id = p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande;
-
-                suivisParCle.TryGetValue((type, id), out var suivi);
-
                 string nomCouturier = !string.IsNullOrEmpty(p.CoutPrenom) || !string.IsNullOrEmpty(p.CoutNom)
                     ? $"{p.CoutPrenom} {p.CoutNom}".Trim() : "(non assigné)";
                 string nomClient = !string.IsNullOrEmpty(p.ClientPrenom) || !string.IsNullOrEmpty(p.ClientNom)
@@ -488,13 +645,15 @@ namespace GestionCoutureApp.Services
                     HeureRendezVous = echeance.ToString("HH:mm"), Statut = statutAffiche,
                     TempsRestant = FormaterTemps(temps), NomCouturier = nomCouturier,
                     EstUrgent = true, TypeAlerte = echeance <= now ? "Retard" : "RisqueRetard",
-                    TypeCibleRetard = type, IdCibleRetard = id, IdClientRetard = p.CmdIdClient,
+                    TypeCibleRetard = p.RendezVousException.HasValue ? CiblePiece : CibleCommande,
+                    IdCibleRetard = p.RendezVousException.HasValue ? p.IdPieceCommande : p.IdCommande,
+                    IdClientRetard = p.CmdIdClient,
                     NbFoisPrevenu = suivi?.NbPreventions ?? 0, AlerteTraiteePourCeRdv = false
                 });
             }
 
             var retoursQuery = ctx.Retours.AsNoTracking()
-                .Where(r => !r.EstAnnule && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
+                .Where(r => r.EstAnnule == false && r.Statut != "Rendu" && r.Statut != "Termine" && r.Statut != "Pret"
                          && r.DateRdvReprise.HasValue && r.DateRdvReprise < seuil.Date.AddDays(1)
                          && r.Commande != null && !r.Commande.EstSupprimee && !r.Commande.EstAnnulee
                          && !ctx.SuivisAlerteRetard.Any(s => s.TypeCible == CibleRetour && s.IdCible == r.IdRetour
@@ -502,18 +661,67 @@ namespace GestionCoutureApp.Services
                              && s.DateRdvTraite >= r.DateRdvReprise!.Value.AddMinutes(-1)
                              && s.DateRdvTraite < r.DateRdvReprise.Value.AddMinutes(1)));
             int totalRetours = compterTotal ? await retoursQuery.CountAsync(cancellationToken) : 0;
-            var retoursData = await retoursQuery.OrderBy(r => r.DateRdvReprise).Take(page * taille)
-                .Select(r => new
+            List<RisqueRetourDto> retoursData;
+            if (ctx.Database.IsRelational())
+            {
+                await using var retourCommand = ctx.Database.GetDbConnection().CreateCommand();
+                retourCommand.CommandText = @"
+SELECT r.IdRetour, r.IdCommande, r.IdPieceCommande, r.NumeroRetour, r.Statut,
+       r.DateRdvReprise, r.HeureDebutReprise, r.HeureFinReprise, c.IdClient,
+       CASE WHEN cl.IdClient IS NULL THEN '(client inconnu)' ELSE cl.Prenom || ' ' || cl.Nom END,
+       COALESCE(cl.Telephone, ''), COALESCE(pc.TypeVetement, 'Retour'),
+       CASE WHEN er.IdEmploye IS NOT NULL THEN er.Prenom || ' ' || er.Nom
+            WHEN ei.IdEmploye IS NOT NULL THEN ei.Prenom || ' ' || ei.Nom ELSE '(non assigné)' END
+FROM Retours r
+JOIN Commandes c ON c.IdCommande=r.IdCommande
+LEFT JOIN Clients cl ON cl.IdClient=c.IdClient
+LEFT JOIN PiecesCommande pc ON pc.IdPieceCommande=r.IdPieceCommande
+LEFT JOIN Employes er ON er.IdEmploye=r.IdCouturierReprise
+LEFT JOIN Employes ei ON ei.IdEmploye=r.IdCouturier
+WHERE r.EstAnnule=0 AND r.Statut NOT IN ('Rendu','Termine','Pret')
+  AND r.DateRdvReprise IS NOT NULL AND r.DateRdvReprise < @finJour
+  AND c.EstSupprimee=0 AND c.EstAnnulee=0
+  AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+    WHERE s.TypeCible='Retour' AND s.IdCible=r.IdRetour AND s.NbPreventions>0
+      AND s.DateRdvTraite >= rtrim(rtrim(strftime('%Y-%m-%d %H:%M:%f',r.DateRdvReprise,'-1 minutes'),'0'),'.')
+      AND s.DateRdvTraite < rtrim(rtrim(strftime('%Y-%m-%d %H:%M:%f',r.DateRdvReprise,'+1 minutes'),'0'),'.'))
+ORDER BY r.DateRdvReprise LIMIT @limite;";
+                AjouterParam(retourCommand, "@finJour", seuil.Date.AddDays(1).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+                AjouterParam(retourCommand, "@limite", page * taille);
+                retoursData = new List<RisqueRetourDto>(page * taille);
+                await using var retourReader = await retourCommand.ExecuteReaderAsync(cancellationToken);
+                while (await retourReader.ReadAsync(cancellationToken))
                 {
-                    r.IdRetour, r.IdCommande, r.IdPieceCommande, r.NumeroRetour, r.Statut,
-                    r.DateRdvReprise, r.HeureDebutReprise, r.HeureFinReprise,
-                    IdClient = r.Commande!.IdClient,
-                    Nom = r.Commande!.Client != null ? r.Commande.Client.Prenom + " " + r.Commande.Client.Nom : "(client inconnu)",
-                    Telephone = r.Commande!.Client != null ? r.Commande.Client.Telephone : "",
-                    Vetement = r.PieceCommande != null ? r.PieceCommande.TypeVetement : "Retour",
-                    Couturier = r.CouturierReprise != null ? r.CouturierReprise.Prenom + " " + r.CouturierReprise.Nom
-                        : r.Couturier != null ? r.Couturier.Prenom + " " + r.Couturier.Nom : "(non assigné)"
-                }).ToListAsync(cancellationToken);
+                    retoursData.Add(new RisqueRetourDto
+                    {
+                        IdRetour = retourReader.GetInt32(0), IdCommande = retourReader.GetInt32(1),
+                        IdPieceCommande = retourReader.GetInt32(2), NumeroRetour = retourReader.IsDBNull(3) ? null : retourReader.GetString(3),
+                        Statut = retourReader.GetString(4),
+                        DateRdvReprise = retourReader.IsDBNull(5) ? null : DateTime.Parse(retourReader.GetString(5), System.Globalization.CultureInfo.InvariantCulture),
+                        HeureDebutReprise = retourReader.IsDBNull(6) ? null : TimeSpan.Parse(retourReader.GetString(6), System.Globalization.CultureInfo.InvariantCulture),
+                        HeureFinReprise = retourReader.IsDBNull(7) ? null : TimeSpan.Parse(retourReader.GetString(7), System.Globalization.CultureInfo.InvariantCulture),
+                        IdClient = retourReader.GetInt32(8), Nom = retourReader.GetString(9),
+                        Telephone = retourReader.GetString(10), Vetement = retourReader.GetString(11),
+                        Couturier = retourReader.GetString(12)
+                    });
+                }
+            }
+            else
+            {
+                retoursData = await retoursQuery.OrderBy(r => r.DateRdvReprise).Take(page * taille)
+                    .Select(r => new RisqueRetourDto
+                    {
+                        IdRetour = r.IdRetour, IdCommande = r.IdCommande, IdPieceCommande = r.IdPieceCommande,
+                        NumeroRetour = r.NumeroRetour, Statut = r.Statut, DateRdvReprise = r.DateRdvReprise,
+                        HeureDebutReprise = r.HeureDebutReprise, HeureFinReprise = r.HeureFinReprise,
+                        IdClient = r.Commande!.IdClient,
+                        Nom = r.Commande!.Client != null ? r.Commande.Client.Prenom + " " + r.Commande.Client.Nom : "(client inconnu)",
+                        Telephone = r.Commande!.Client != null ? r.Commande.Client.Telephone : "",
+                        Vetement = r.PieceCommande != null ? r.PieceCommande.TypeVetement : "Retour",
+                        Couturier = r.CouturierReprise != null ? r.CouturierReprise.Prenom + " " + r.CouturierReprise.Nom
+                            : r.Couturier != null ? r.Couturier.Prenom + " " + r.Couturier.Nom : "(non assigné)"
+                    }).ToListAsync(cancellationToken);
+            }
             foreach (var r in retoursData)
             {
                 var dateBase = r.DateRdvReprise!.Value;

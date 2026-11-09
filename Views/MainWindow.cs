@@ -328,7 +328,7 @@ namespace GestionCoutureApp.Views
         {
             if (FindName("BadgeAlertes") is TextBlock badge)
             {
-                badge.Text       = nbUrgentes > 0 ? nbUrgentes.ToString() : "";
+                badge.Text       = nbUrgentes >= 1000 ? "999+" : nbUrgentes > 0 ? nbUrgentes.ToString() : "";
                 badge.Visibility = nbUrgentes > 0 ? Visibility.Visible : Visibility.Collapsed;
             }
             if (FindName("BadgeAlertesBorder") is Border borderBadge)
@@ -346,7 +346,8 @@ namespace GestionCoutureApp.Views
 
         private async Task ActualiserBadgeAlertesAsync()
         {
-            if (_actualisationBadgeEnCours || ContentFrame.Content is AlertesView) return;
+            if (_actualisationBadgeEnCours || WindowState == WindowState.Minimized
+                || ContentFrame.Content is AlertesView) return;
             _actualisationBadgeEnCours = true;
             int version = _versionAcquittementBadge;
             try

@@ -373,6 +373,18 @@ namespace GestionCoutureApp.Data
                 .HasDatabaseName("IX_PiecesCommande_Active_DateRdv_Statut");
 
             modelBuilder.Entity<PieceCommande>()
+                .HasIndex(p => new { p.CommandeActive, p.DateRdvEffective, p.RendezVousException, p.Statut, p.IdCommande, p.IdPieceCommande })
+                .HasDatabaseName("IX_PiecesCommande_Active_DateRdv_Risque");
+
+            modelBuilder.Entity<Retour>()
+                .HasIndex(r => new { r.EstAnnule, r.DateRdvReprise, r.IdRetour })
+                .HasDatabaseName("IX_Retours_Actif_DateRdv_Id");
+
+            modelBuilder.Entity<Client>().Property(c => c.NomRecherche).UseCollation("NOCASE");
+            modelBuilder.Entity<Client>().Property(c => c.PrenomNomRecherche).UseCollation("NOCASE");
+            modelBuilder.Entity<Client>().Property(c => c.Telephone).UseCollation("NOCASE");
+
+            modelBuilder.Entity<PieceCommande>()
                 .HasIndex(p => new { p.CommandeActive, p.Statut, p.DateRdvEffective, p.IdCommande })
                 .HasDatabaseName("IX_PiecesCommande_Active_Statut_DateRdv_IdCommande");
 

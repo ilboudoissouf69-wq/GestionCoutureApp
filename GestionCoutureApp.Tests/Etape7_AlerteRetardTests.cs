@@ -571,6 +571,43 @@ namespace GestionCoutureApp.Tests
             Assert.That(stats.NbClientsPrevenusMois, Is.EqualTo(1),
                 "Deux préventions du même client ce mois = 1 client prévenu distinct");
         }
+
+        [Test]
+        public void E7_21_DateRdvEffective_NormaliseeALaMinute()
+        {
+            var date = new DateTime(2026, 11, 9, 14, 35, 48);
+
+            Assert.That(DateRdvHelper.CalculerDateRdvEffective(date, date, null),
+                Is.EqualTo(new DateTime(2026, 11, 9, 14, 35, 0)));
+            Assert.That(DateRdvHelper.CalculerDateRdvEffective(null, date.Date, date.TimeOfDay),
+                Is.EqualTo(new DateTime(2026, 11, 9, 14, 35, 0)));
+        }
+
+        [Test]
+        public async Task E7_22_AntiDoublon_RdvException_UtiliseClePieceEtMinuteExacte()
+        {
+            _params.RetardAlerteMinutes = 120;
+            using var ctx = _factory.CreateDbContext();
+            var (cmd, piece) = CreerCommandeAvecEcheance(ctx, 30);
+            var dateAvecSecondes = piece.DateRdvEffective.AddSeconds(42);
+            piece.RendezVousException = dateAvecSecondes;
+            piece.DateRdvEffective = DateRdvHelper.CalculerDateRdvEffective(
+                piece.RendezVousException, cmd.DateFin, cmd.HeureFin);
+            ctx.SuivisAlerteRetard.Add(new SuiviAlerteRetard
+            {
+                TypeCible = RetardAlerteService.CiblePiece,
+                IdCible = piece.IdPieceCommande,
+                IdClient = IdClient,
+                DateRdvTraite = RetardAlerteService.TronquerMinute(dateAvecSecondes),
+                NbPreventions = 1
+            });
+            await ctx.SaveChangesAsync();
+
+            var alertes = await _service.ObtenirAlertesRisqueRetardAsync(DateTime.Now);
+
+            Assert.That(alertes.Any(a => a.IdPieceCommande == piece.IdPieceCommande), Is.False,
+                "Un suivi de pièce pour la même échéance normalisée doit supprimer l'alerte.");
+        }
     }
 
     // ── Stubs & helpers pour Étape 7 ──────────────────────────────────────

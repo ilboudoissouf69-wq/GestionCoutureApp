@@ -53,7 +53,10 @@ namespace GestionCoutureApp.Tests
         public void Setup()
         {
             // Base SQLite sur disque (les volumes ne tiennent pas en mémoire)
-            string dbPath = Path.Combine(Path.GetTempPath(), $"perf_budget_{Guid.NewGuid():N}.db");
+            string? dbReuse = Environment.GetEnvironmentVariable("GCA_PERF_DB_PATH");
+            string dbPath = string.IsNullOrWhiteSpace(dbReuse)
+                ? Path.Combine(Path.GetTempPath(), $"perf_budget_{Guid.NewGuid():N}.db")
+                : Path.GetFullPath(dbReuse);
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             var opts = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseSqlite($"Data Source={dbPath}")
@@ -64,16 +67,19 @@ namespace GestionCoutureApp.Tests
             using var ctx = _factory.CreateDbContext();
             ctx.Database.EnsureCreated();
 
-            var sw = Stopwatch.StartNew();
-            ctx.ChangeTracker.AutoDetectChangesEnabled = false;
-            StressDataHelper.Generer(ctx, NB_CLIENTS, NB_COMMANDES, NB_PIECES,
-                NB_PAIEMENTS, NB_RETOURS, NB_AUDIT);
-            sw.Stop();
-            TestContext.WriteLine($"[PERF] Génération : {sw.ElapsedMilliseconds} ms " +
-                $"({NB_CLIENTS} clients, {NB_PIECES} pièces)");
+            if (string.IsNullOrWhiteSpace(dbReuse))
+            {
+                var sw = Stopwatch.StartNew();
+                ctx.ChangeTracker.AutoDetectChangesEnabled = false;
+                StressDataHelper.Generer(ctx, NB_CLIENTS, NB_COMMANDES, NB_PIECES,
+                    NB_PAIEMENTS, NB_RETOURS, NB_AUDIT);
+                sw.Stop();
+                TestContext.WriteLine($"[PERF] Génération : {sw.ElapsedMilliseconds} ms " +
+                    $"({NB_CLIENTS} clients, {NB_PIECES} pièces)");
 
-            // ANALYZE pour que le query planner ait des statistiques
-            ctx.Database.ExecuteSqlRaw("ANALYZE;");
+                // ANALYZE pour que le query planner ait des statistiques
+                ctx.Database.ExecuteSqlRaw("ANALYZE;");
+            }
 
             var mockParam = new MockParametresService();
             _alerteService = new AlerteService(_factory, mockParam,
@@ -98,6 +104,15 @@ namespace GestionCoutureApp.Tests
         // ================================================================
         // MÉTHODES PAGINÉES (devraient déjà respecter le budget)
         // ================================================================
+
+        [Test]
+        public void B00_StressData_ContientAuMoins5000SuivisAlerte()
+        {
+            using var ctx = _factory.CreateDbContext();
+            int count = ctx.SuivisAlerteRetard.Count();
+            TestContext.WriteLine($"[PERF] SuivisAlerteRetard : {count} lignes");
+            Assert.That(count, Is.GreaterThanOrEqualTo(5_000));
+        }
 
         [Test]
         public void B01_RetourService_ObtenirPage_Budget()
@@ -167,6 +182,21 @@ namespace GestionCoutureApp.Tests
             });
         }
 
+        [Test]
+        public void B10_ClientService_RecherchePrefixe_BudgetEtNomsAccentes()
+        {
+            var sw = Stopwatch.StartNew();
+            var result = _clientService.RechercherPageAsync("aissata", 1, 50).GetAwaiter().GetResult();
+            sw.Stop();
+            TestContext.WriteLine($"[PERF] ClientService.RechercherPageAsync : {sw.ElapsedMilliseconds} ms, {result.Items.Count} résultats");
+            Assert.Multiple(() =>
+            {
+                Assert.That(result.Items, Is.Not.Empty, "Les noms accentués normalisés doivent rester trouvables.");
+                Assert.That(result.Items.Count, Is.LessThanOrEqualTo(50));
+                Assert.That(sw.ElapsedMilliseconds, Is.LessThan(100), $"Recherche client : {sw.ElapsedMilliseconds} ms > 100 ms");
+            });
+        }
+
         // ================================================================
         // MÉTHODES NON BORNÉES (doivent être optimisées — actuellement hors budget)
         // Ces tests mesurent l'état actuel et échouent jusqu'à l'optimisation.
@@ -199,6 +229,43 @@ namespace GestionCoutureApp.Tests
         [Test]
         public void B06_RetardAlerteService_ObtenirAlertesRisqueRetard_Budget()
         {
+            using (var ctx = _factory.CreateDbContext())
+            {
+                var candidats = ctx.PiecesCommande.AsNoTracking().Where(p => p.CommandeActive
+                    && p.Statut != "Terminee" && p.Statut != "Livree"
+                    && p.DateRdvEffective <= DateTime.Now.AddHours(2));
+                var sqlPage = RetardAlerteService.ExclurePiecesDejaPrevenues(
+                        candidats, ctx.SuivisAlerteRetard.AsNoTracking())
+                    .OrderBy(p => p.DateRdvEffective).Take(50);
+                TestContext.WriteLine("[SQL B06] " + sqlPage.ToQueryString());
+
+                ctx.Database.OpenConnection();
+                using var cmd = ctx.Database.GetDbConnection().CreateCommand();
+                cmd.CommandText = @"EXPLAIN QUERY PLAN
+                    SELECT p.IdPieceCommande, p.DateRdvEffective FROM PiecesCommande p
+                    WHERE p.CommandeActive=1 AND p.Statut NOT IN ('Terminee','Livree')
+                      AND p.DateRdvEffective <= $seuil AND p.RendezVousException IS NULL
+                      AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+                          WHERE s.TypeCible='Commande' AND s.IdCible=p.IdCommande
+                            AND s.NbPreventions>0 AND s.DateRdvTraite=p.DateRdvEffective)
+                    UNION ALL
+                    SELECT p.IdPieceCommande, p.DateRdvEffective FROM PiecesCommande p
+                    WHERE p.CommandeActive=1 AND p.Statut NOT IN ('Terminee','Livree')
+                      AND p.DateRdvEffective <= $seuil AND p.RendezVousException IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard s
+                          WHERE s.TypeCible='Piece' AND s.IdCible=p.IdPieceCommande
+                            AND s.NbPreventions>0 AND s.DateRdvTraite=p.DateRdvEffective)
+                    ORDER BY 2 LIMIT 50;";
+                var param = cmd.CreateParameter();
+                param.ParameterName = "$seuil";
+                param.Value = DateTime.Now.AddHours(2).ToString("yyyy-MM-dd HH:mm:ss",
+                    System.Globalization.CultureInfo.InvariantCulture);
+                cmd.Parameters.Add(param);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    TestContext.WriteLine("[PLAN B06] " + reader.GetString(3));
+            }
+
             var sw = Stopwatch.StartNew();
             var alertes = _retardAlerteService.ObtenirAlertesRisqueRetardAsync().GetAwaiter().GetResult();
             sw.Stop();

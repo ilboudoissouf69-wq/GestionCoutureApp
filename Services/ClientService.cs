@@ -213,7 +213,7 @@ namespace GestionCoutureApp.Services
             return context.Clients.AsNoTracking()
                 .Where(c => c.NomRecherche.StartsWith(cle)
                          || c.PrenomNomRecherche.StartsWith(cle)
-                         || (c.Telephone ?? "").StartsWith(motCle))
+                         || (c.Telephone != null && c.Telephone.StartsWith(motCle)))
                 .OrderBy(c => c.NomRecherche)
                 .Take(50)
                 .ToList();
@@ -225,21 +225,59 @@ namespace GestionCoutureApp.Services
         {
             await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
             pageSize = Math.Clamp(pageSize, 1, 50);
-            
-            // ✅ OPTIMISATION : Filtrer côté base de données quand possible
+            page = Math.Max(1, page);
             string cle = Helpers.TexteHelper.NormaliserPourRecherche(motCle);
-            
-            var query = context.Clients.AsNoTracking().Where(c =>
-                c.NomRecherche.StartsWith(cle)
-                || c.PrenomNomRecherche.StartsWith(cle)
-                || (c.Telephone ?? "").StartsWith(motCle));
+            string cleFin = cle + '\uffff';
+            string telephoneFin = motCle + '\uffff';
 
-            var totalCount = await query.CountAsync(cancellationToken);
-            var items = await query
-                .OrderBy(c => c.NomRecherche)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync(cancellationToken);
+            await context.Database.OpenConnectionAsync(cancellationToken);
+            var candidats = new List<Client>();
+            var db = context.Database.GetDbConnection();
+            foreach (var (colonne, debut, fin) in new[]
+            {
+                ("NomRecherche", cle, cleFin),
+                ("PrenomNomRecherche", cle, cleFin),
+                ("Telephone", motCle, telephoneFin)
+            })
+            {
+                await using var cmd = db.CreateCommand();
+                string telephoneNullFilter = colonne == "Telephone" ? " AND Telephone IS NOT NULL" : "";
+                cmd.CommandText = $@"SELECT IdClient, Nom, Prenom, Telephone, NomRecherche, PrenomNomRecherche FROM Clients
+WHERE {colonne} COLLATE NOCASE >= @debut AND {colonne} COLLATE NOCASE < @fin{telephoneNullFilter}
+ORDER BY NomRecherche COLLATE NOCASE, IdClient LIMIT @limite;";
+                AjouterParametre(cmd, "@debut", debut);
+                AjouterParametre(cmd, "@fin", fin);
+                AjouterParametre(cmd, "@limite", page * pageSize);
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                    candidats.Add(new Client
+                    {
+                        IdClient = reader.GetInt32(0), Nom = reader.GetString(1), Prenom = reader.GetString(2),
+                        Telephone = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                        NomRecherche = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                        PrenomNomRecherche = reader.IsDBNull(5) ? "" : reader.GetString(5)
+                    });
+            }
+
+            await using var countCommand = db.CreateCommand();
+            countCommand.CommandText = @"
+SELECT COUNT(*) FROM (
+  SELECT IdClient FROM Clients WHERE NomRecherche COLLATE NOCASE>=@nom AND NomRecherche COLLATE NOCASE<@nomFin
+  UNION
+  SELECT IdClient FROM Clients WHERE PrenomNomRecherche COLLATE NOCASE>=@prenom AND PrenomNomRecherche COLLATE NOCASE<@prenomFin
+  UNION
+  SELECT IdClient FROM Clients WHERE Telephone IS NOT NULL AND Telephone COLLATE NOCASE>=@tel AND Telephone COLLATE NOCASE<@telFin
+);";
+            AjouterParametre(countCommand, "@nom", cle); AjouterParametre(countCommand, "@nomFin", cleFin);
+            AjouterParametre(countCommand, "@prenom", cle); AjouterParametre(countCommand, "@prenomFin", cleFin);
+            AjouterParametre(countCommand, "@tel", motCle); AjouterParametre(countCommand, "@telFin", telephoneFin);
+            int totalCount = Convert.ToInt32(await countCommand.ExecuteScalarAsync(cancellationToken));
+
+            var pageCandidats = candidats
+                .GroupBy(c => c.IdClient).Select(g => g.First())
+                .OrderBy(c => c.NomRecherche, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.IdClient)
+                .Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var items = pageCandidats;
             
             return new PagedResult<Client>
             {
@@ -248,6 +286,14 @@ namespace GestionCoutureApp.Services
                 Page = page,
                 PageSize = pageSize
             };
+        }
+
+        private static void AjouterParametre(System.Data.Common.DbCommand command, string nom, object valeur)
+        {
+            var param = command.CreateParameter();
+            param.ParameterName = nom;
+            param.Value = valeur;
+            command.Parameters.Add(param);
         }
 
         private static string NormaliserNom(Client client) =>

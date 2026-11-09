@@ -71,13 +71,24 @@ namespace GestionCoutureApp.Tests
                 for (int i = 0; i < TAILLE_LOT; i++)
                 {
                     int id = lot * TAILLE_LOT + i + 1;
-                    // Cas extrême : homonymes (recherche)
-                    string nom = (id % 1000 == 0) ? "Diop" : (id % 500 == 0) ? "Ndiaye" : $"NomClient{id}";
-                    string prenom = (id % 1000 == 0) ? "Mamadou" : (id % 500 == 0) ? "Awa" : $"Prenom{id}";
+                    // Mélange de noms synthétiques et de noms courants accentués
+                    // avec préfixes partagés pour exercer les index de recherche.
+                    string nom = (id % 100) switch
+                    {
+                        0 => "Diop", 1 => "Ndiaye", 2 => "Traoré", 3 => "Ouédraogo",
+                        4 => "Diallo", 5 => "Sawadogo", _ => $"NomClient{id}"
+                    };
+                    string prenom = (id % 100) switch
+                    {
+                        0 => "Mamadou", 1 => "Awa", 2 => "Aïssata", 3 => "Édouard",
+                        4 => "Mariam", 5 => "Issa", _ => $"Prenom{id}"
+                    };
                     batch.Add(new Client
                     {
                         IdClient = id, Nom = nom, Prenom = prenom,
-                        Telephone = $"7{id:D8}"
+                        Telephone = $"7{id:D8}",
+                        NomRecherche = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche($"{nom} {prenom}"),
+                        PrenomNomRecherche = GestionCoutureApp.Helpers.TexteHelper.NormaliserPourRecherche($"{prenom} {nom}")
                     });
                 }
                 ctx.Clients.AddRange(batch);

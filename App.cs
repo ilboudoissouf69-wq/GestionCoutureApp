@@ -1321,6 +1321,9 @@ namespace GestionCoutureApp
                     drop.ExecuteNonQuery();
                 }
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_DateRdv_Statut ON PiecesCommande (CommandeActive, DateRdvEffective, Statut);");
+                // Index couvrant pour le comptage et la page des alertes de retard.
+                // Il conserve l'ordre par date tout en évitant de relire la table PiecesCommande.
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_DateRdv_Risque ON PiecesCommande (CommandeActive, DateRdvEffective, RendezVousException, Statut, IdCommande, IdPieceCommande);");
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_Statut_DateRdv_IdCommande ON PiecesCommande (CommandeActive, Statut, DateRdvEffective, IdCommande);");
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCouturier_Statut_DateRdv ON PiecesCommande (IdCouturier, Statut, DateRdvEffective);");
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Commandes_EstSupprimee_EstAnnulee_DateFin ON Commandes (EstSupprimee, EstAnnulee, DateFin);");
@@ -1421,6 +1424,34 @@ namespace GestionCoutureApp
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_IdCommande_MontantCouture ON PiecesCommande (IdCommande, MontantCouture);");
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Paiements_IdCommande_EstAnnule_MontantPaye ON Paiements (IdCommande, EstAnnule, MontantPaye);");
                 CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_MaterielsSupplements_IdCommande_Totaux ON MaterielsSupplements (IdCommande, Quantite, PrixUnitaire);");
+            });
+            AppliquerSi("20261109000000_NormaliserDateRdvEffectiveMinute", c =>
+            {
+                // DateRdvTraite est déjà tronquée à la minute. Aligner la colonne
+                // indexée pour permettre une égalité directe dans le NOT EXISTS.
+                using var normaliser = c.CreateCommand();
+                normaliser.CommandText = @"
+                    UPDATE PiecesCommande
+                    SET DateRdvEffective = substr(DateRdvEffective, 1, 16) || ':00'
+                    WHERE length(DateRdvEffective) > 19
+                       OR (length(DateRdvEffective) > 16 AND substr(DateRdvEffective, 18, 2) <> '00');";
+                normaliser.ExecuteNonQuery();
+            });
+
+            AppliquerSi("20261109000100_IndexCouvrantAlerteRisque", c =>
+            {
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_PiecesCommande_Active_DateRdv_Risque ON PiecesCommande (CommandeActive, DateRdvEffective, RendezVousException, Statut, IdCommande, IdPieceCommande);");
+            });
+
+            AppliquerSi("20261109000200_IndexRetoursDateRdv", c =>
+            {
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Retours_Actif_DateRdv_Id ON Retours (EstAnnule, DateRdvReprise, IdRetour);");
+            });
+
+            AppliquerSi("20261109000300_IndexRechercheClientNoCase", c =>
+            {
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Clients_NomRecherche_NoCase ON Clients (NomRecherche COLLATE NOCASE);");
+                CreerIndex(c, "CREATE INDEX IF NOT EXISTS IX_Clients_PrenomNomRecherche_NoCase ON Clients (PrenomNomRecherche COLLATE NOCASE);");
             });
 
 

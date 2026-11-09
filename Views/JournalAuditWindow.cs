@@ -59,8 +59,16 @@ namespace GestionCoutureApp.Views
             _auditService = App.Services.GetRequiredService<IAuditService>();
 
             Title = "Journal d'audit — Contrôle des actions";
-            Width = 1200;
-            Height = 700;
+            // Adapter la fenêtre à la zone de travail réelle (écrans réduits,
+            // mise à l'échelle Windows et barre des tâches comprises).
+            var zoneTravail = SystemParameters.WorkArea;
+            Width = Math.Min(1200, zoneTravail.Width * 0.94);
+            Height = Math.Min(700, zoneTravail.Height * 0.90);
+            MinWidth = Math.Min(850, Width);
+            MinHeight = Math.Min(480, Height);
+            MaxWidth = zoneTravail.Width;
+            MaxHeight = zoneTravail.Height;
+            ResizeMode = ResizeMode.CanResizeWithGrip;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = new SolidColorBrush(Color.FromRgb(0xF9, 0xFA, 0xFB));
 

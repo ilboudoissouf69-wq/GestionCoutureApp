@@ -86,3 +86,48 @@ capturé pour ce rapport.
 
 Les critères finaux du chantier ne sont donc pas tous atteints; le rapport ne déclare pas
 le projet « 100 % vert ».
+
+## Reprise V3 — mesures du 09/11/2026
+
+La suite complète a été relancée après les changements en cours avec le répertoire de
+sortie temporaire demandé. Résumé réel : **399 réussites, 3 échecs, 402 tests, 10 min
+32 s**. Les échecs Perf observés sont : `ObtenirToutesAlertesAsync` 427 ms, risque retard
+2 132 ms et statistiques retard 487 ms (budget de chacun : 300 ms). Ce passage confirme
+que ces points ne sont pas encore acceptés.
+
+Pour le prédicat « déjà prévenu », le SQL EF a maintenant deux branches `UNION ALL`, sans
+`CASE`, avec égalité sur `DateRdvTraite = DateRdvEffective` et la clé indexée de la cible :
+
+```sql
+SELECT t0.IdPieceCommande, t0.DateRdvEffective, t0.IdCommande,
+       t0.RendezVousException, t0.Statut, t0.TypeVetement
+FROM (
+  SELECT t.* FROM (
+    SELECT p.IdPieceCommande, p.DateRdvEffective, p.IdCommande,
+           p.RendezVousException, p.Statut, p.TypeVetement
+    FROM PiecesCommande AS p
+    WHERE p.CommandeActive AND p.Statut <> 'Terminee' AND p.Statut <> 'Livree'
+      AND p.DateRdvEffective <= @seuil AND p.RendezVousException IS NULL
+      AND NOT EXISTS (SELECT 1 FROM SuivisAlerteRetard AS s
+        WHERE s.TypeCible = 'Commande' AND s.IdCible = p.IdCommande
+          AND s.NbPreventions > 0 AND s.DateRdvTraite = p.DateRdvEffective)
+    ORDER BY p.DateRdvEffective LIMIT @taille
+  ) AS t
+  UNION ALL
+  -- seconde branche : RendezVousException IS NOT NULL, TypeCible='Piece', IdCible=IdPieceCommande
+) AS t0
+```
+
+Le plan du `UNION ALL` diagnostique donne `SEARCH PiecesCommande USING INDEX
+IX_PiecesCommande_Active_DateRdv_Statut` et, dans chaque branche, `SEARCH SuivisAlerteRetard
+USING INDEX IX_SuivisAlerteRetard_TypeCible_IdCible (TypeCible=? AND IdCible=?)`; aucun
+`SCAN` de ces tables n'a été observé. La requête de comptage simple est passée de 559 ms à
+145 ms après ajout d'un index couvrant sur la base synthétique. Cependant, l'appel complet
+EF B06 a encore pris 1 063 ms dans son diagnostic ciblé et 2 132 ms dans la suite complète.
+Ce résultat montre que le plan SQL simplifié ne suffit pas à expliquer la latence de la
+requête exécutée. L'index couvrant et la requête par branche restent à valider sur une
+base fraîche créée par les migrations; aucune mesure 120k réelle n'est disponible.
+
+La pagination des sections a aussi été corrigée pour appliquer `Take(taille)` après le
+décalage de page, au lieu de faire croître la taille retournée à chaque page. La correction
+n'a pas encore de test spécifique page 1/2/3 ni de validation complète distincte.
