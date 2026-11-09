@@ -16,6 +16,11 @@ namespace GestionCoutureApp.Views
         private readonly IDepenseService _depenseService;
         private readonly IAuthService _authService;
         private bool _initialise = false;
+        private int _versionKpi;
+        private int _versionHistorique;
+        private const int TAILLE_PAGE_HISTORIQUE = 10;
+        private int _pageHistorique = 1;
+        private int _totalDepensesFiltrees;
         
         // ✅ Protection contre clics multiples
         private bool _enCoursAjout = false;
@@ -42,7 +47,7 @@ namespace GestionCoutureApp.Views
             CalculerPeriode("mois");
 
             _initialise = true;
-            Loaded += (s, e) => ChargerTout();
+            Loaded += async (s, e) => await ChargerToutAsync();
         }
 
         // ==================================================================
@@ -87,18 +92,41 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Chargement principal
         // ==================================================================
-        private void ChargerTout()
+        private async Task ChargerToutAsync()
         {
-            ChargerKpi();
-            AppliquerFiltreHistorique();
+            if (!_initialise) return;
+            int versionKpi = Interlocked.Increment(ref _versionKpi);
+            int versionHistorique = Interlocked.Increment(ref _versionHistorique);
+            string cat = (CmbFiltreCategorie.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Toutes";
+            string statut = (CmbFiltreStatut.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Tous";
+            DateTime debut = _debutPeriode;
+            DateTime fin = _finPeriode;
+            int page = _pageHistorique;
+
+            try
+            {
+                var statsTask = Task.Run(() => _depenseService.ObtenirStats(debut, fin));
+                var listeTask = Task.Run(() => _depenseService.FiltrerPage(
+                    debut, fin,
+                    page, TAILLE_PAGE_HISTORIQUE,
+                    cat == "Toutes" ? null : cat,
+                    statut == "Tous" ? null : statut));
+                await Task.WhenAll(statsTask, listeTask);
+                if (!IsLoaded) return;
+                if (versionKpi == _versionKpi) AfficherKpi(statsTask.Result);
+                if (versionHistorique == _versionHistorique) AfficherHistorique(listeTask.Result);
+            }
+            catch (Exception ex)
+            {
+                TxtMessage.Text = "Erreur de chargement : " + ex.Message;
+                TxtMessage.Foreground = Brushes.Red;
+            }
         }
 
-        private void ChargerKpi()
+        private void AfficherKpi(StatsFinancieres stats)
         {
             try
             {
-                var stats = _depenseService.ObtenirStats(_debutPeriode, _finPeriode);
-
                 // CA encaissé TOTAL (couture + matériaux remboursés) — base du waterfall
                 // brut → net, identique au BilanNet de la Trésorerie. La part « couture
                 // pure (hors matériaux) » reste consultable dans la ligne de détail.
@@ -120,6 +148,8 @@ namespace GestionCoutureApp.Views
 
                 // Détail ligne sous les cartes
                 TxtDetailCommissions.Text = stats.TotalCommissions.ToString("N0") + " FCFA";
+                if (stats.TotalCommissions == 0 && stats.DerniereCommissionHorsPeriode.HasValue)
+                    TxtDetailCommissions.Text += $" — dernière validée le {stats.DerniereCommissionHorsPeriode.Value:dd/MM/yyyy}, hors période";
                 TxtDetailMateriaux.Text   = stats.TotalMateriaux.ToString("N0")   + " FCFA";
                 TxtDetailDepenses.Text    = stats.TotalDepenses.ToString("N0")    + " FCFA";
                 TxtDetailSalaire.Text     = stats.SalaireSecretaire.ToString("N0") + " FCFA";
@@ -134,28 +164,66 @@ namespace GestionCoutureApp.Views
         private void AppliquerFiltreHistorique()
         {
             if (!_initialise) return;
+            _ = ChargerHistoriqueFiltreAsync();
+        }
+
+        private async Task ChargerHistoriqueFiltreAsync()
+        {
+            int version = Interlocked.Increment(ref _versionHistorique);
+            string cat = (CmbFiltreCategorie.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Toutes";
+            string statut = (CmbFiltreStatut.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Tous";
+            DateTime debut = _debutPeriode;
+            DateTime fin = _finPeriode;
+            int page = _pageHistorique;
             try
             {
-                string cat    = (CmbFiltreCategorie.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Toutes";
-                string statut = (CmbFiltreStatut.SelectedItem    as ComboBoxItem)?.Tag?.ToString() ?? "Tous";
-
-                var liste = _depenseService.Filtrer(_debutPeriode, _finPeriode,
+            var liste = await Task.Run(() => _depenseService.FiltrerPage(debut, fin,
+                page, TAILLE_PAGE_HISTORIQUE,
                     cat == "Toutes" ? null : cat,
-                    statut == "Tous" ? null : statut);
-
-                GridDepenses.ItemsSource = null;
-                GridDepenses.ItemsSource = liste;
-
-                decimal totalFiltre = liste.Where(d => !d.EstAnnulee && d.StatutValidation == "Validee")
-                                           .Sum(d => d.Montant);
-                TxtTotalFiltre.Text = totalFiltre.ToString("N0") + " FCFA";
-                TxtNbFiltre.Text    = $"  — {liste.Count} dépense(s)";
+                    statut == "Tous" ? null : statut));
+                if (version != _versionHistorique || !IsLoaded) return;
+                AfficherHistorique(liste);
             }
             catch (Exception ex)
             {
                 TxtMessage.Text       = "Erreur : " + ex.Message;
                 TxtMessage.Foreground = Brushes.Red;
             }
+        }
+
+        private void AfficherHistorique(DepensePageResult page)
+        {
+            GridDepenses.ItemsSource = null;
+            GridDepenses.ItemsSource = page.Depenses;
+            _totalDepensesFiltrees = page.Total;
+            decimal totalFiltre = page.Depenses.Where(d => !d.EstAnnulee && d.StatutValidation == "Validee")
+                                       .Sum(d => d.Montant);
+            TxtTotalFiltre.Text = totalFiltre.ToString("N0") + " FCFA";
+            int nbPages = Math.Max(1, (int)Math.Ceiling(page.Total / (double)TAILLE_PAGE_HISTORIQUE));
+            TxtNbFiltre.Text = $"  — {page.Depenses.Count} affichée(s) / {page.Total} dépense(s)";
+            TxtPageDepenses.Text = $"Page {_pageHistorique} / {nbPages}";
+            BtnPageDepensesPrecedente.IsEnabled = _pageHistorique > 1;
+            BtnPageDepensesSuivante.IsEnabled = _pageHistorique < nbPages;
+        }
+
+        private async void BtnPageDepensesPrecedente_Click(object sender, RoutedEventArgs e)
+        {
+            if (_pageHistorique <= 1) return;
+            _pageHistorique--;
+            await ChargerHistoriqueFiltreAsync();
+        }
+
+        private async void BtnPageDepensesSuivante_Click(object sender, RoutedEventArgs e)
+        {
+            int nbPages = Math.Max(1, (int)Math.Ceiling(_totalDepensesFiltrees / (double)TAILLE_PAGE_HISTORIQUE));
+            if (_pageHistorique >= nbPages) return;
+            _pageHistorique++;
+            await ChargerHistoriqueFiltreAsync();
+        }
+
+        private async void ChargerTout()
+        {
+            await ChargerToutAsync();
         }
 
         // ==================================================================
@@ -167,6 +235,7 @@ namespace GestionCoutureApp.Views
             string tag = (CmbPeriode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "mois";
             PanelDateCustom.Visibility = tag == "custom" ? Visibility.Visible : Visibility.Collapsed;
             CalculerPeriode(tag);
+            _pageHistorique = 1;
             ChargerTout();
         }
 
@@ -174,12 +243,14 @@ namespace GestionCoutureApp.Views
         {
             if (!_initialise) return;
             CalculerPeriode("custom");
+            _pageHistorique = 1;
             ChargerTout();
         }
 
         private void FiltreChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!_initialise) return;
+            _pageHistorique = 1;
             AppliquerFiltreHistorique();
         }
 
@@ -343,12 +414,17 @@ namespace GestionCoutureApp.Views
         // ==================================================================
         // Export CSV
         // ==================================================================
-        private void BtnExportCsv_Click(object sender, RoutedEventArgs e)
+        private async void BtnExportCsv_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var items = GridDepenses.ItemsSource as IEnumerable<Depense>;
-                if (items == null || !items.Any())
+                string cat = (CmbFiltreCategorie.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Toutes";
+                string statut = (CmbFiltreStatut.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Tous";
+                var items = await Task.Run(() => _depenseService.Filtrer(
+                    _debutPeriode, _finPeriode,
+                    cat == "Toutes" ? null : cat,
+                    statut == "Tous" ? null : statut));
+                if (items.Count == 0)
                 { MessageBox.Show("Aucune donnée à exporter.", "Export",
                       MessageBoxButton.OK, MessageBoxImage.Information); return; }
 

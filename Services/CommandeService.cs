@@ -1790,6 +1790,27 @@ namespace GestionCoutureApp.Services
             }
             context.SaveChanges();
 
+            // Les matériaux sont rattachés à la pièce : les recopier aussi,
+            // avec de nouvelles lignes indépendantes et la traçabilité de
+            // l'opérateur qui effectue la duplication.
+            var materiauxSource = context.MaterielsSupplements
+                .Where(m => m.IdPieceCommande == idPieceCommandeSource)
+                .ToList();
+            foreach (var materiel in materiauxSource)
+            {
+                context.MaterielsSupplements.Add(new MaterielSupplement
+                {
+                    IdPieceCommande = nouvellePiece.IdPieceCommande,
+                    IdCommande = source.IdCommande,
+                    Designation = materiel.Designation,
+                    Quantite = materiel.Quantite,
+                    PrixUnitaire = materiel.PrixUnitaire,
+                    IdOperateur = operateur.IdEmploye,
+                    NomOperateur = nomOperateur.Trim()
+                });
+            }
+            context.SaveChanges();
+
             Auditer(operateur, nomOperateur, ActionsAntiFraude.PieceAjoutee, "PieceCommande",
                 nouvellePiece.IdPieceCommande, avant: null,
                 apres: new { nouvellePiece.IdCommande, nouvellePiece.TypeVetement, nouvellePiece.MontantCouture,

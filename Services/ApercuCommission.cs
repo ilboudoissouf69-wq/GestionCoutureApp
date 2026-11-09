@@ -93,6 +93,7 @@ namespace GestionCoutureApp.Services
             decimal pourcentage, bool surMontantEncaisse, int idOperateur, string nomOperateur);
 
         List<Commission> ObtenirHistorique();
+        PagedResult<Commission> ObtenirHistoriquePage(int page, int pageSize);
 
         /// <summary>Annule une commission déjà enregistrée et déverrouille les commandes.</summary>
         void Annuler(int idCommission, string motif, int idAnnulateur, string nomAnnulateur);

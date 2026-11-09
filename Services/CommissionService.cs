@@ -42,6 +42,9 @@ namespace GestionCoutureApp.Services
             // Le calcul d'aperçu est une lecture courte (pas d'accumulation de tracking
             // dans une boucle longue) : la version tracking reste acceptable.
             var query = context.PiecesCommande
+                // Plusieurs collections liées seraient jointes en un seul
+                // résultat très volumineux : séparer les requêtes évite ces doublons.
+                .AsSplitQuery()
                 .Include(p => p.MaterielSupplements)
                 .Include(p => p.Commande)
                     .ThenInclude(c => c!.Paiements)
@@ -252,7 +255,20 @@ namespace GestionCoutureApp.Services
             lock (_verrou)
             {
                 using var context = _contextFactory.CreateDbContext();
+                // Ces paramètres sont communs à toutes les lignes de l'aperçu.
+                // Les relire pour chacun des 150 couturiers multipliait inutilement
+                // les accès SQLite pendant l'enregistrement.
+                int seuilPrimeSrv = _parametresService.ObtenirSeuilPrimeNbCommandes()
+                    .ConfigureAwait(false).GetAwaiter().GetResult();
+                decimal montantPrimeSrv = _parametresService.ObtenirMontantPrimeQualite()
+                    .ConfigureAwait(false).GetAwaiter().GetResult();
                 using var transaction = context.Database.BeginTransaction();
+                var retoursNonResolus = context.Retours
+                    .AsNoTracking()
+                    .Where(r => !r.EstAnnule && (r.Statut == "Signale" || r.Statut == "En reprise"))
+                    .Select(r => r.IdPieceCommande)
+                    .ToHashSet();
+                var commissionsEnAttente = new List<(Commission Commission, List<PieceCommande> Pieces)>();
 
                 // Vérifie qu'aucune pièce n'a été verrouillée entre le calcul de l'aperçu
                 // et l'enregistrement (race condition possible dans un atelier multi-poste futur).
@@ -312,12 +328,6 @@ namespace GestionCoutureApp.Services
 
                     // Phase 2 : vérification que chaque pièce appartient bien à cet employé
                     // et que les conditions d'éligibilité sont toujours remplies.
-                    var retoursNonResolus = context.Retours
-                        .Where(r => !r.EstAnnule &&
-                                    (r.Statut == "Signale" || r.Statut == "En reprise"))
-                        .Select(r => r.IdPieceCommande)
-                        .ToHashSet();
-
                     var piecesInvalides = pieces.Where(p =>
                         // Pièce n'appartient pas au bon couturier
                         p.IdCouturier != ligne.IdEmploye ||
@@ -395,12 +405,6 @@ namespace GestionCoutureApp.Services
                     commission.MontantCommission =
                         Math.Round(commission.BaseMontant * (pourcentage / 100m), 0, MidpointRounding.AwayFromZero);
 
-                    // Phase 1.2a : Recalculer PrimeQualite côté serveur (ne pas reprendre de l'aperçu).
-                    // L'aperçu est un instantané qui peut être devenu obsolète entre le calcul et l'enregistrement.
-                    // On relit les paramètres de seuil/montant depuis la base pour garantir la fraîcheur.
-                    int seuilPrimeSrv = _parametresService.ObtenirSeuilPrimeNbCommandes().ConfigureAwait(false).GetAwaiter().GetResult();
-                    decimal montantPrimeSrv = _parametresService.ObtenirMontantPrimeQualite().ConfigureAwait(false).GetAwaiter().GetResult();
-
                     // Phase 1.2b : compter les retours uniquement sur la période ET pour les pièces de la période
                     var idsPiecesLigne = pieces.Select(p => p.IdPieceCommande).ToHashSet();
                     int nbRetoursSrv = context.Retours
@@ -415,12 +419,7 @@ namespace GestionCoutureApp.Services
                         : 0m;
 
                     context.Commissions.Add(commission);
-                    context.SaveChanges();
-
-                    foreach (var piece in pieces)
-                        piece.IdCommission = commission.IdCommission;
-
-                    context.SaveChanges();
+                    commissionsEnAttente.Add((commission, pieces));
 
                     _logger.LogInformation(
                         "Commission enregistrée — {Nom} — {NbPieces} pièce(s) — {Montant:N0} FCFA — opérateur {Op}",
@@ -428,6 +427,14 @@ namespace GestionCoutureApp.Services
                         commission.MontantCommission, nomOperateur);
                 }
 
+                // Deux écritures groupées remplacent deux écritures par couturier :
+                // d'abord les commissions pour obtenir leurs IDs, puis le verrouillage
+                // des pièces. Le tout reste atomique dans la transaction.
+                context.SaveChanges();
+                foreach (var enAttente in commissionsEnAttente)
+                    foreach (var piece in enAttente.Pieces)
+                        piece.IdCommission = enAttente.Commission.IdCommission;
+                context.SaveChanges();
                 transaction.Commit();
             }
 
@@ -443,6 +450,29 @@ namespace GestionCoutureApp.Services
                 .Include(c => c.Employe)
                 .OrderByDescending(c => c.DateCalcul)
                 .ToList();
+        }
+
+        public PagedResult<Commission> ObtenirHistoriquePage(int page, int pageSize)
+        {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            using var context = _contextFactory.CreateDbContext();
+            var query = context.Commissions.AsNoTracking();
+            int total = query.Count();
+            var items = query
+                .OrderByDescending(c => c.DateCalcul)
+                .ThenByDescending(c => c.IdCommission)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PagedResult<Commission>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize
+            };
         }
 
         /// <summary>

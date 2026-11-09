@@ -439,7 +439,12 @@
                                 <GradientStop Color="#1E293B" Offset="1"/>
                             </LinearGradientBrush>
                         </Border.Background>
-                        <StackPanel Orientation="Horizontal">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="TOTAL AFFICHÉ : "
                                        FontSize="12" FontWeight="Bold"
                                        Foreground="#94A3B8" VerticalAlignment="Center"/>
@@ -448,10 +453,25 @@
                                        FontSize="16" FontWeight="Bold"
                                        Foreground="White" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtNbFiltre"
-                                       Text="  — 0 dépense(s)"
+                                       Text="  — 0 affichée(s) / 0 dépense(s)"
                                        FontSize="12" Foreground="#64748B"
                                        VerticalAlignment="Center"/>
-                        </StackPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnPageDepensesPrecedente"
+                                        Content="← Précédent" MinWidth="112" Height="34"
+                                        Margin="0,0,10,0" Padding="12,0"
+                                        IsEnabled="False"
+                                        Click="BtnPageDepensesPrecedente_Click"/>
+                                <TextBlock x:Name="TxtPageDepenses" Text="Page 1 / 1"
+                                           Foreground="White" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Button x:Name="BtnPageDepensesSuivante"
+                                        Content="Suivant →" MinWidth="112" Height="34"
+                                        Padding="12,0" IsEnabled="False"
+                                        Click="BtnPageDepensesSuivante_Click"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </StackPanel>
             </Border>

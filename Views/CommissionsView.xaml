@@ -192,7 +192,7 @@
 
             <!-- Detail par couturier -->
             <Border Style="{StaticResource Card}"
-                    Margin="0,0,0,20">
+                    Margin="0,0,0,8">
                 <StackPanel>
                     <TextBlock Text="Détail par Couturier — Aperçu (rien n'est encore enregistré)"
                                FontSize="14"
@@ -201,7 +201,12 @@
                                Margin="0,0,0,10"/>
                     <DataGrid x:Name="GridCommissions"
                               Style="{StaticResource ModernGrid}"
-                              Margin="0,0,0,14">
+                              EnableRowVirtualization="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True"
+                              MouseDoubleClick="GridCommissions_MouseDoubleClick"
+                              Margin="0,0,0,8">
                         <DataGrid.Columns>
                             <!-- Couturier : prend tout l'espace -->
                             <DataGridTextColumn Header="Couturier"
@@ -412,6 +417,17 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,12">
+                        <Button x:Name="BtnPageApercuPrecedent" Content="← Précédent" Tag="-1"
+                                Click="BtnPageApercu_Click" Style="{StaticResource BtnGhost}"
+                                Height="32" Padding="10,0" Margin="0,0,8,0" IsEnabled="False"/>
+                        <TextBlock x:Name="TxtPageApercu" Text="Page 1 / 1 — 0 couturier(s)"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11"/>
+                        <Button x:Name="BtnPageApercuSuivant" Content="Suivant →" Tag="1"
+                                Click="BtnPageApercu_Click" Style="{StaticResource BtnGhost}"
+                                Height="32" Padding="10,0" IsEnabled="False"/>
+                    </StackPanel>
+
                     <Button x:Name="BtnEnregistrer"
                             Content="✅  Enregistrer et verser ces commissions (les pièces seront verrouillées)"
                             Style="{StaticResource BtnPrimary}"
@@ -431,8 +447,35 @@
                             FontWeight="Bold"
                                Foreground="{StaticResource PrimaryBrush}"
                                Margin="0,0,0,10"/>
+
+                    <!-- Annulation Boss : commandes en haut de la section pour rester visibles -->
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="160"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtMotifAnnulation"
+                                 Grid.Column="0"
+                                 Style="{StaticResource ModernTextBox}"
+                                 Tag="Motif obligatoire pour annuler une commission"/>
+                        <Button x:Name="BtnAnnulerCommission"
+                                Grid.Column="2"
+                                Content="Annuler la sélection"
+                                ToolTip="Annuler la commission sélectionnée (Boss uniquement)"
+                                Style="{StaticResource BtnDanger}"
+                                Height="36"
+                                FontSize="12"
+                                Click="BtnAnnulerCommission_Click"/>
+                    </Grid>
+
                     <DataGrid x:Name="GridHistorique"
                               Style="{StaticResource ModernGrid}"
+                              EnableRowVirtualization="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True"
+                              MouseDoubleClick="GridHistorique_MouseDoubleClick"
                               SelectionChanged="GridHistorique_SelectionChanged"
                               Margin="0,0,0,10">
                         <DataGrid.Columns>
@@ -534,24 +577,17 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="160"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtMotifAnnulation"
-                                 Grid.Column="0"
-                                 Style="{StaticResource ModernTextBox}"
-                                 Tag="Motif de l'annulation (obligatoire)"/>
-                        <Button x:Name="BtnAnnulerCommission"
-                                Grid.Column="2"
-                                Content="Annuler la sélection"
-                                Style="{StaticResource BtnDanger}"
-                                Height="36"
-                                FontSize="12"
-                                Click="BtnAnnulerCommission_Click"/>
-                    </Grid>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,10">
+                        <Button x:Name="BtnPageHistoriquePrecedent" Content="← Précédent" Tag="-1"
+                                Click="BtnPageHistorique_Click" Style="{StaticResource BtnGhost}"
+                                Height="32" Padding="10,0" Margin="0,0,8,0" IsEnabled="False"/>
+                        <TextBlock x:Name="TxtPageHistorique" Text="Page 1 / 1 — 0 commission(s)"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11"/>
+                        <Button x:Name="BtnPageHistoriqueSuivant" Content="Suivant →" Tag="1"
+                                Click="BtnPageHistorique_Click" Style="{StaticResource BtnGhost}"
+                                Height="32" Padding="10,0" IsEnabled="False"/>
+                    </StackPanel>
+
                     <TextBlock x:Name="TxtMessageHistorique"
                                FontSize="11"
                             Margin="0,6,0,0"

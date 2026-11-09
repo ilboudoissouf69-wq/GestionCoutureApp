@@ -9,17 +9,20 @@
         <!-- ── Bouton nav horizontal inactif ── -->
         <Style x:Key="NavTopBtn" TargetType="Button">
             <Setter Property="Background"     Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0,0,0,3"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush"    Value="Transparent"/>
-            <Setter Property="Foreground"     Value="#6B7280"/>
+            <Setter Property="Foreground"     Value="#475569"/>
             <Setter Property="FontSize"       Value="12"/>
-            <Setter Property="FontWeight"     Value="Normal"/>
-            <Setter Property="Padding"        Value="14,10"/>
+            <Setter Property="FontWeight"     Value="SemiBold"/>
+            <Setter Property="Padding"        Value="13,9"/>
+            <Setter Property="Margin"         Value="3,5"/>
             <Setter Property="Cursor"         Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bd"
+                                CornerRadius="8"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
@@ -30,9 +33,15 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background"
-                                        Value="#FDF5F2"/>
+                                        Value="#F8FAFC"/>
                                 <Setter Property="Foreground"
-                                        Value="{StaticResource AccentBrush}"/>
+                                        Value="#0F172A"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F1F5F9"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -43,7 +52,8 @@
         <!-- ── Bouton nav horizontal actif ── -->
         <Style x:Key="NavTopBtnActif" TargetType="Button"
                BasedOn="{StaticResource NavTopBtn}">
-            <Setter Property="BorderBrush"  Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Background"  Value="#FFF7ED"/>
+            <Setter Property="BorderBrush"  Value="#FED7AA"/>
             <Setter Property="Foreground"   Value="{StaticResource AccentBrush}"/>
             <Setter Property="FontWeight"   Value="SemiBold"/>
         </Style>
@@ -53,9 +63,9 @@
             <Setter Property="Background"       Value="White"/>
             <Setter Property="BorderBrush"      Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness"  Value="1"/>
-            <Setter Property="CornerRadius"     Value="12"/>
-            <Setter Property="Padding"          Value="24,20"/>
-            <Setter Property="Margin"           Value="0,0,0,16"/>
+            <Setter Property="CornerRadius"     Value="14"/>
+            <Setter Property="Padding"          Value="26,22"/>
+            <Setter Property="Margin"           Value="0,0,0,18"/>
         </Style>
 
     </Page.Resources>
@@ -74,7 +84,7 @@
         <Border Grid.Row="0" Background="White"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="28,20,28,16">
+                Padding="30,18,30,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -82,12 +92,17 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="⚙️" FontSize="22"
-                                   VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <Border Width="46" Height="46" CornerRadius="13"
+                                Background="#FFF7ED" BorderBrush="#FED7AA"
+                                BorderThickness="1" Margin="0,0,14,0">
+                            <TextBlock Text="⚙" FontSize="23" FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
                         <StackPanel>
                             <TextBlock x:Name="TxtPageTitre"
                                        Text="Paramètres"
-                                       FontSize="24" FontWeight="Bold"
+                                       FontSize="23" FontWeight="Bold"
                                        Foreground="{StaticResource PrimaryBrush}"/>
                             <TextBlock x:Name="TxtPageDesc"
                                        Text="Configuration système"
@@ -100,16 +115,18 @@
                 <!-- Badge langue + version -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <Border Background="#1A1A1A" CornerRadius="6"
-                            Padding="12,5" Margin="0,0,12,0">
-                        <TextBlock x:Name="TxtBadgeFR"
-                                   Text="🇫🇷 Français"
-                                   FontSize="11" Foreground="#B0A8A4"/>
+                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0"
+                            BorderThickness="1" CornerRadius="8"
+                            Padding="11,7" Margin="0,0,10,0">
+                        <TextBlock x:Name="TxtBadgeFR" Text="🇫🇷 Français"
+                                   FontSize="11" FontWeight="SemiBold" Foreground="#475569"/>
                     </Border>
-                    <TextBlock Text="v2.0 — Retouche Choco"
-                               FontSize="10"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               VerticalAlignment="Center"/>
+                    <Border Background="#FFF7ED" BorderBrush="#FED7AA"
+                            BorderThickness="1" CornerRadius="8" Padding="11,7">
+                        <TextBlock Text="ESPACE ADMINISTRATEUR"
+                                   FontSize="9" FontWeight="Bold"
+                                   Foreground="#C2410C" VerticalAlignment="Center"/>
+                    </Border>
                 </StackPanel>
             </Grid>
         </Border>
@@ -117,14 +134,14 @@
         <!-- ══ BARRE DE NAVIGATION HORIZONTALE ═══════════════════════════ -->
         <Border Grid.Row="1" Background="White"
                 BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,0,0,1">
+                BorderThickness="0,0,0,1" Padding="0,2">
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Hidden">
-                <StackPanel Orientation="Horizontal" Margin="16,0">
+                <StackPanel Orientation="Horizontal" Margin="24,0">
 
                     <!-- Groupe gestion -->
                     <TextBlock Text="GESTION"
-                               FontSize="9" FontWeight="Bold" Foreground="#CBD5E1"
+                               FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
                                VerticalAlignment="Center" Margin="8,0,4,0"/>
 
                     <Button x:Name="BtnNavComptabilite"
@@ -161,11 +178,11 @@
                     </Button>
 
                     <!-- Séparateur -->
-                    <Border Width="1" Background="#E5E7EB" Margin="8,8"/>
+                    <Border Width="1" Height="26" Background="#E2E8F0" Margin="12,8"/>
 
                     <!-- Groupe système -->
                     <TextBlock Text="SYSTÈME"
-                               FontSize="9" FontWeight="Bold" Foreground="#CBD5E1"
+                               FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
                                VerticalAlignment="Center" Margin="4,0,4,0"/>
 
                     <Button x:Name="BtnNavSauvegarde"
@@ -202,11 +219,11 @@
                     </Button>
 
                     <!-- Séparateur -->
-                    <Border Width="1" Background="#E5E7EB" Margin="8,8"/>
+                    <Border Width="1" Height="26" Background="#E2E8F0" Margin="12,8"/>
 
                     <!-- Groupe personnalisation -->
                     <TextBlock Text="PERSONNALISATION"
-                               FontSize="9" FontWeight="Bold" Foreground="#CBD5E1"
+                               FontSize="9" FontWeight="Bold" Foreground="#94A3B8"
                                VerticalAlignment="Center" Margin="4,0,4,0"/>
 
                     <Button x:Name="BtnNavApparence"
@@ -238,8 +255,8 @@
         <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
-                      Padding="28,24,28,28">
-            <StackPanel>
+                      Padding="28,24,28,32">
+            <StackPanel MaxWidth="1480" HorizontalAlignment="Center">
 
                 <!-- ════════════════════════════════════════════
                      PANNEAU 1 — COMPTABILITÉ
@@ -494,7 +511,7 @@
                                 <Border Width="4" CornerRadius="2"
                                         Background="#DC2626" Margin="0,0,12,0"/>
                                 <StackPanel>
-                                    <TextBlock Text="⏰  Alertes Retard — Message d'excuse"
+                                    <TextBlock Text="⏰  Alertes de retard et report de RDV"
                                                FontSize="14" FontWeight="SemiBold"
                                                Foreground="{StaticResource PrimaryBrush}"/>
                                     <TextBlock Text="Réservé au Boss · Déclenche les alertes « RDV en risque de retard »"
@@ -537,40 +554,6 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- Modèle du message d'excuse -->
-                            <TextBlock Text="Modèle du message d'excuse client"
-                                       Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="TxtRetardMessageModele"
-                                     Style="{StaticResource ModernTextBox}"
-                                     AcceptsReturn="True"
-                                     TextWrapping="Wrap"
-                                     MinHeight="80"
-                                     MaxHeight="120"
-                                     VerticalScrollBarVisibility="Auto"
-                                     TextChanged="TxtRetardMessageModele_TextChanged"/>
-
-                            <!-- Balises disponibles -->
-                            <Border Background="#FEF3C7" BorderBrush="#FDE68A"
-                                    BorderThickness="1" CornerRadius="6" Padding="12,8"
-                                    Margin="0,8,0,12">
-                                <StackPanel>
-                                    <TextBlock Text="📌  Balises : {client}  {numero_commande}  {type_vetement}  {nouvelle_date}  {atelier}"
-                                               FontSize="11" Foreground="#92400E"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Aperçu du message -->
-                            <TextBlock Text="Aperçu du message :"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{StaticResource PrimaryBrush}"
-                                       Margin="0,0,0,6"/>
-                            <Border Background="#F0FDF4" BorderBrush="#BBF7D0"
-                                    BorderThickness="1" CornerRadius="8" Padding="12,10">
-                                <TextBlock x:Name="TxtApercuMessageRetard"
-                                           FontSize="11" Foreground="#166534"
-                                           TextWrapping="Wrap" LineHeight="18"/>
-                            </Border>
                         </StackPanel>
                     </Border>
 
@@ -669,6 +652,48 @@
                                     <Run FontWeight="Bold">{Atelier}</Run><Run> — Nom atelier</Run>
                                 </TextBlock>
                             </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Message par défaut quand un rendez-vous est dépassé -->
+                    <Border Style="{StaticResource ParamCard}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Border Background="#FEF3C7" CornerRadius="6"
+                                        Padding="8,3" Margin="0,0,10,0">
+                                    <TextBlock Text="⚠️ RDV DÉPASSÉ" FontSize="10"
+                                               FontWeight="Bold" Foreground="#92400E"/>
+                                </Border>
+                                <TextBlock Text="Message d’excuse par défaut"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryBrush}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Ce modèle est utilisé automatiquement pour les rappels WhatsApp lorsqu’un rendez-vous est dépassé, depuis les alertes comme depuis les commandes."
+                                       FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBox x:Name="TxtRetardMessageModele"
+                                     Style="{StaticResource ModernTextBox}"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     MinHeight="80" MaxHeight="120"
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextChanged="TxtRetardMessageModele_TextChanged"/>
+                            <Border Background="#FEF3C7" BorderBrush="#FDE68A"
+                                    BorderThickness="1" CornerRadius="6" Padding="12,8"
+                                    Margin="0,8,0,12">
+                                <TextBlock Text="Balises : {client}  {numero_commande}  {type_vetement}  {nouvelle_date}  {atelier}"
+                                           FontSize="11" Foreground="#92400E"
+                                           TextWrapping="Wrap"/>
+                            </Border>
+                            <TextBlock Text="Aperçu du message :" FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource PrimaryBrush}"
+                                       Margin="0,0,0,6"/>
+                            <Border Background="#F0FDF4" BorderBrush="#BBF7D0"
+                                    BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                <TextBlock x:Name="TxtApercuMessageRetard" FontSize="11"
+                                           Foreground="#166534" TextWrapping="Wrap" LineHeight="18"/>
+                            </Border>
                         </StackPanel>
                     </Border>
 

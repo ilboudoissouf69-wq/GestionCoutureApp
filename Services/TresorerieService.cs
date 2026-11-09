@@ -74,8 +74,8 @@ namespace GestionCoutureApp.Services
 
         /// <summary>
         /// Calcule le total des commissions + primes qualité versées.
-        /// RÈGLE MÉTIER : Les commissions sont basées sur la date de CALCUL
-        /// (quand elles ont été enregistrées), pas sur la date des commandes.
+        /// RÈGLE MÉTIER : les commissions sont rattachées à leur période de travail
+        /// (DateDebutPeriode), même si la validation a lieu plus tard.
         /// </summary>
         public decimal CalculerTotalCommissions(DateTime dateDebut, DateTime dateFin)
         {
@@ -86,8 +86,8 @@ namespace GestionCoutureApp.Services
             var commissions = context.Commissions
                 .AsNoTracking()
                 .Where(c => !c.EstAnnulee
-                         && c.DateCalcul >= dateDebut.Date
-                         && c.DateCalcul < dateFin.Date.AddDays(1))
+                         && c.DateDebutPeriode >= dateDebut.Date
+                         && c.DateDebutPeriode < dateFin.Date.AddDays(1))
                 .Sum(c => (double)(c.MontantCommission + c.PrimeQualite));
             decimal total = (decimal)commissions;
 
@@ -259,8 +259,8 @@ namespace GestionCoutureApp.Services
 
             // 3. Commissions et primes (avec détail)
             var commissionsQuery = context.Commissions.AsNoTracking()
-                .Where(c => !c.EstAnnulee && c.DateCalcul >= dateDebut.Date
-                         && c.DateCalcul < dateFin.Date.AddDays(1));
+                .Where(c => !c.EstAnnulee && c.DateDebutPeriode >= dateDebut.Date
+                         && c.DateDebutPeriode < dateFin.Date.AddDays(1));
             decimal totalCommissions = (decimal)commissionsQuery.Sum(c => (double)c.MontantCommission);
             decimal totalPrimes = (decimal)commissionsQuery.Sum(c => (double)c.PrimeQualite);
 
@@ -382,9 +382,9 @@ SELECT
   WHERE DateDepense >= @debut AND DateDepense < @fin
     AND StatutValidation = 'Validee' AND EstAnnulee = 0),
  (SELECT COALESCE(SUM(CAST(MontantCommission AS REAL)), 0) FROM Commissions
-  WHERE EstAnnulee = 0 AND DateCalcul >= @debut AND DateCalcul < @fin),
+  WHERE EstAnnulee = 0 AND DateDebutPeriode >= @debut AND DateDebutPeriode < @fin),
  (SELECT COALESCE(SUM(CAST(PrimeQualite AS REAL)), 0) FROM Commissions
-  WHERE EstAnnulee = 0 AND DateCalcul >= @debut AND DateCalcul < @fin),
+  WHERE EstAnnulee = 0 AND DateDebutPeriode >= @debut AND DateDebutPeriode < @fin),
  COALESCE((SELECT SUM(MIN(paye, materiaux)) FROM resume), 0),
  COALESCE((SELECT SUM(MAX(0, paye - materiaux)) FROM resume), 0) +
  (SELECT COALESCE(SUM(CAST(p.MontantPaye AS REAL)), 0) FROM Paiements p
@@ -440,8 +440,8 @@ SELECT
 
             bool aCommissions = context.Commissions
                 .Any(c => !c.EstAnnulee
-                       && c.DateCalcul >= dateDebut.Date
-                       && c.DateCalcul < dateFin.Date.AddDays(1));
+                       && c.DateDebutPeriode >= dateDebut.Date
+                       && c.DateDebutPeriode < dateFin.Date.AddDays(1));
 
             return aPaiements || aDepenses || aCommissions;
         }

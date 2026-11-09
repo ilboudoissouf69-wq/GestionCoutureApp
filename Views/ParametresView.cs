@@ -759,10 +759,6 @@ namespace GestionCoutureApp.Views
                 { Erreur(TxtMsgMetier, "Le report doit être d'au moins 1 jour."); return; }
                 await _p.DefinirRetardReportJours(reportJ);
 
-                if (string.IsNullOrWhiteSpace(TxtRetardMessageModele.Text))
-                { Erreur(TxtMsgMetier, "Le modèle de message d'excuse ne peut pas être vide."); return; }
-                await _p.DefinirRetardMessageModele(TxtRetardMessageModele.Text.Trim());
-
                 OK(TxtMsgMetier, _langueActive == "fr" ? "✅  Enregistré." : "✅  Saved.");
             }
             catch (Exception ex) { Erreur(TxtMsgMetier, ex.Message); }
@@ -799,9 +795,12 @@ namespace GestionCoutureApp.Views
             {
                 if (string.IsNullOrWhiteSpace(TxtMsgCommandePrete.Text))
                 { Erreur(TxtMsgWhatsApp, "Message 1 obligatoire."); return; }
+                if (string.IsNullOrWhiteSpace(TxtRetardMessageModele.Text))
+                { Erreur(TxtMsgWhatsApp, "Le message d’excuse pour RDV dépassé ne peut pas être vide."); return; }
                 await _p.DefinirMsgCommandePrete(TxtMsgCommandePrete.Text.Trim());
                 await _p.DefinirMsgRappelRdv(TxtMsgRappelRdv.Text.Trim());
                 await _p.DefinirMsgRetouchePrete(TxtMsgRetouchePrete.Text.Trim());
+                await _p.DefinirRetardMessageModele(TxtRetardMessageModele.Text.Trim());
                 OK(TxtMsgWhatsApp, _langueActive == "fr" ? "✅  Messages enregistrés." : "✅  Messages saved.");
             }
             catch (Exception ex) { Erreur(TxtMsgWhatsApp, ex.Message); }
@@ -820,9 +819,12 @@ namespace GestionCoutureApp.Views
             await _p.DefinirMsgCommandePrete("");
             await _p.DefinirMsgRappelRdv("");
             await _p.DefinirMsgRetouchePrete("");
+            await _p.DefinirRetardMessageModele("");
             TxtMsgCommandePrete.Text = await _p.ObtenirMsgCommandePrete();
             TxtMsgRappelRdv.Text     = await _p.ObtenirMsgRappelRdv();
             TxtMsgRetouchePrete.Text = await _p.ObtenirMsgRetouchePrete();
+            TxtRetardMessageModele.Text = await _p.ObtenirRetardMessageModele();
+            MajApercuMessageRetard();
             OK(TxtMsgWhatsApp, _langueActive == "fr" ? "✅  Remis par défaut." : "✅  Reset to defaults.");
         }
 

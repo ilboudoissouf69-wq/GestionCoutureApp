@@ -18,6 +18,10 @@ namespace GestionCoutureApp.Views
         private int _alertesNonLues;
         private int _versionAcquittementBadge;
         private bool _actualisationBadgeEnCours;
+        // Pages de gestion conservées pendant la session : leurs filtres et
+        // sélections restent en place quand on navigue ailleurs.
+        private CommissionsView? _pageCommissions;
+        private DepensesView? _pageDepenses;
 
         // Garde la référence du bouton actuellement actif
         private Button? _boutonActif;
@@ -266,7 +270,8 @@ namespace GestionCoutureApp.Views
             if (!RoleAutorise("Boss")) return;
             try
             {
-                ContentFrame.Navigate(new CommissionsView());
+                _pageCommissions ??= new CommissionsView();
+                ContentFrame.Navigate(_pageCommissions);
                 SetBoutonActif(BtnCommissions);
             }
             catch (UnauthorizedAccessException)
@@ -376,7 +381,8 @@ namespace GestionCoutureApp.Views
             if (!RoleAutorise("Boss")) return;
             try
             {
-                ContentFrame.Navigate(new DepensesView());
+                _pageDepenses ??= new DepensesView();
+                ContentFrame.Navigate(_pageDepenses);
                 SetBoutonActif(BtnDepenses);
             }
             catch (UnauthorizedAccessException)

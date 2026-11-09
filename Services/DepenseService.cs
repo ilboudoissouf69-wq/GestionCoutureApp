@@ -33,9 +33,12 @@ namespace GestionCoutureApp.Services
                                      string? statutValidation = null)
         {
             using var context = _contextFactory.CreateDbContext();
+            DateTime debutInclus = debut.Date;
+            DateTime finExclusive = fin.Date.AddDays(1);
             var q = context.Depenses
-                .Where(d => d.DateDepense.Date >= debut.Date &&
-                            d.DateDepense.Date <= fin.Date);
+                .AsNoTracking()
+                .Where(d => d.DateDepense >= debutInclus &&
+                            d.DateDepense < finExclusive);
 
             if (!string.IsNullOrEmpty(categorie) && categorie != "Toutes")
                 q = q.Where(d => d.Categorie == categorie);
@@ -49,6 +52,39 @@ namespace GestionCoutureApp.Services
             }
 
             return q.OrderByDescending(d => d.DateDepense).ToList();
+        }
+
+        public DepensePageResult FiltrerPage(DateTime debut, DateTime fin, int page, int taillePage,
+                                               string? categorie = null,
+                                               string? statutValidation = null)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            DateTime debutInclus = debut.Date;
+            DateTime finExclusive = fin.Date.AddDays(1);
+            var q = context.Depenses
+                .AsNoTracking()
+                .Where(d => d.DateDepense >= debutInclus && d.DateDepense < finExclusive);
+
+            if (!string.IsNullOrEmpty(categorie) && categorie != "Toutes")
+                q = q.Where(d => d.Categorie == categorie);
+
+            if (!string.IsNullOrEmpty(statutValidation) && statutValidation != "Tous")
+            {
+                q = statutValidation == "Annulée"
+                    ? q.Where(d => d.EstAnnulee)
+                    : q.Where(d => !d.EstAnnulee && d.StatutValidation == statutValidation);
+            }
+
+            int taille = Math.Clamp(taillePage, 1, 100);
+            int pageSecurisee = Math.Max(page, 1);
+            int total = q.Count();
+            var depenses = q.OrderByDescending(d => d.DateDepense)
+                .ThenByDescending(d => d.IdDepense)
+                .Skip((pageSecurisee - 1) * taille)
+                .Take(taille)
+                .ToList();
+
+            return new DepensePageResult { Depenses = depenses, Total = total };
         }
 
         public void Ajouter(Depense depense)
@@ -131,22 +167,33 @@ namespace GestionCoutureApp.Services
         public StatsFinancieres ObtenirStats(DateTime debut, DateTime fin)
         {
             using var context = _contextFactory.CreateDbContext();
+            DateTime debutInclus = debut.Date;
+            DateTime finExclusive = fin.Date.AddDays(1);
 
             // CA encaissé (paiements non annulés)
-            decimal caEncaisse = context.Paiements
+            // Agréger directement dans SQLite. Charger chaque paiement avec
+            // AsEnumerable() faisait exploser le travail mémoire pour une année
+            // complète (les bases de l'atelier contiennent beaucoup de lignes).
+            decimal caEncaisse = (decimal)context.Paiements
+                .AsNoTracking()
                 .Where(p => !p.EstAnnule &&
-                            p.DatePaiement.Date >= debut.Date &&
-                            p.DatePaiement.Date <= fin.Date)
-                .AsEnumerable()
-                .Sum(p => p.MontantPaye);
+                            p.DatePaiement >= debutInclus &&
+                            p.DatePaiement < finExclusive)
+                .Sum(p => (double)p.MontantPaye);
 
             // Commissions validées (couturiers + primes)
-            decimal totalCommissions = context.Commissions
+            decimal totalCommissions = (decimal)context.Commissions
+                .AsNoTracking()
                 .Where(c => !c.EstAnnulee &&
-                            c.DateCalcul.Date >= debut.Date &&
-                            c.DateCalcul.Date <= fin.Date)
-                .AsEnumerable()
-                .Sum(c => c.MontantCommission + c.PrimeQualite);
+                            c.DateDebutPeriode >= debutInclus &&
+                            c.DateDebutPeriode < finExclusive)
+                .Sum(c => (double)(c.MontantCommission + c.PrimeQualite));
+
+            DateTime? derniereCommissionHorsPeriode = context.Commissions
+                .AsNoTracking()
+                .Where(c => !c.EstAnnulee &&
+                            (c.DateDebutPeriode < debutInclus || c.DateDebutPeriode >= finExclusive))
+                .Max(c => (DateTime?)c.DateDebutPeriode);
 
             // ── RÉPARTITION MATÉRIAUX / COUTURE via la méthode centrale ─────────────
             // Si TresorerieService est injecté on délègue directement pour éviter toute
@@ -224,13 +271,13 @@ namespace GestionCoutureApp.Services
             }
 
             // Dépenses validées
-            decimal totalDepenses = context.Depenses
+            decimal totalDepenses = (decimal)context.Depenses
+                .AsNoTracking()
                 .Where(d => !d.EstAnnulee &&
                             d.StatutValidation == "Validee" &&
-                            d.DateDepense.Date >= debut.Date &&
-                            d.DateDepense.Date <= fin.Date)
-                .AsEnumerable()
-                .Sum(d => d.Montant);
+                            d.DateDepense >= debutInclus &&
+                            d.DateDepense < finExclusive)
+                .Sum(d => (double)d.Montant);
 
             // Salaire secrétaire depuis Paramètres (proratisé)
             decimal salaireSecretaire = 0m;
@@ -248,6 +295,7 @@ namespace GestionCoutureApp.Services
             {
                 CaEncaisse             = caEncaisse,
                 TotalCommissions       = totalCommissions,
+                DerniereCommissionHorsPeriode = derniereCommissionHorsPeriode,
                 TotalMateriaux         = totalMateriaux,
                 CaEncaisseCoutureCalc  = caEncaisseCoutureCalcule,
                 TotalDepenses          = totalDepenses,

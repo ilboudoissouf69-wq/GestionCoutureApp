@@ -455,6 +455,83 @@ namespace GestionCoutureApp.Views
         // Debounce pour la recherche client (300 ms)
         private System.Windows.Threading.DispatcherTimer? _timerRechercheClient;
         private CancellationTokenSource? _ctsRechercheClient;
+        private bool _chargementClientsDropdown;
+        private int _clientsDropdownOffset;
+        private const int TAILLE_PAGE_CLIENTS_DROPDOWN = 10;
+
+        private async void CmbModalClient_DropDownOpened(object sender, EventArgs e)
+        {
+            // La liste complète n'est pas chargée avec l'écran Commandes pour
+            // garder son ouverture rapide. À la première ouverture, montrer
+            // les dix derniers clients au lieu d'un menu vide.
+            if (_chargementClientsDropdown || CmbModalClient.Items.Count > 0 ||
+                !string.IsNullOrWhiteSpace(TxtRechercheClient.Text))
+                return;
+
+            _chargementClientsDropdown = true;
+            CmbModalClient.IsDropDownOpen = false;
+            try
+            {
+                _clientsDropdownOffset = 0;
+                await ChargerPageClientsDropdownAsync(remplacer: true);
+            }
+            catch
+            {
+                // Laisser le champ de recherche utilisable si le chargement échoue.
+            }
+            finally
+            {
+                _chargementClientsDropdown = false;
+            }
+        }
+
+        private async Task ChargerPageClientsDropdownAsync(bool remplacer)
+        {
+            var factory = App.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
+            await using var ctx = await factory.CreateDbContextAsync();
+            var page = await ctx.Clients.AsNoTracking()
+                // L'ID croissant est attribué à l'enregistrement : les IDs les
+                // plus élevés correspondent aux clients ajoutés le plus récemment.
+                .OrderByDescending(c => c.IdClient)
+                .Skip(_clientsDropdownOffset)
+                .Take(TAILLE_PAGE_CLIENTS_DROPDOWN + 1)
+                .ToListAsync();
+
+            bool aDautresClients = page.Count > TAILLE_PAGE_CLIENTS_DROPDOWN;
+            var clients = page.Take(TAILLE_PAGE_CLIENTS_DROPDOWN).ToList();
+            _clientsDropdownOffset += clients.Count;
+
+            if (!string.IsNullOrWhiteSpace(TxtRechercheClient.Text)) return;
+            var liste = remplacer
+                ? new List<Client>()
+                : CmbModalClient.Items.Cast<Client>().Where(c => c.IdClient != 0).ToList();
+            liste.AddRange(clients);
+            if (aDautresClients)
+                liste.Add(new Client { IdClient = 0, Nom = "", Prenom = "Charger 10 clients suivants…" });
+
+            CmbModalClient.ItemsSource = liste;
+            CmbModalClient.SelectedIndex = -1;
+            CmbModalClient.IsDropDownOpen = liste.Count > 0;
+        }
+
+        private async void ChargerClientsSuivants()
+        {
+            if (_chargementClientsDropdown) return;
+            _chargementClientsDropdown = true;
+            CmbModalClient.IsDropDownOpen = false;
+            try
+            {
+                await ChargerPageClientsDropdownAsync(remplacer: false);
+            }
+            catch
+            {
+                // Garder la page déjà chargée si la page suivante échoue.
+            }
+            finally
+            {
+                _chargementClientsDropdown = false;
+            }
+        }
 
         private void TxtRechercheClient_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -463,6 +540,7 @@ namespace GestionCoutureApp.Views
             if (string.IsNullOrEmpty(saisie))
             {
                 _timerRechercheClient?.Stop();
+                _clientsDropdownOffset = 0;
                 CmbModalClient.ItemsSource    = new List<Client>();
                 CmbModalClient.IsDropDownOpen = false;
                 CmbModalClient.SelectedIndex  = -1;
@@ -575,6 +653,12 @@ namespace GestionCoutureApp.Views
         {
             if (CmbModalClient.SelectedItem is Client client)
             {
+                if (client.IdClient == 0)
+                {
+                    CmbModalClient.SelectedIndex = -1;
+                    ChargerClientsSuivants();
+                    return;
+                }
                 // Afficher le client sélectionné dans le bandeau de confirmation
                 MettreAJourAffichageClientSelectionne(client);
                 // NE PAS remettre la liste complète ici — ça effacerait la sélection.
@@ -1085,6 +1169,7 @@ namespace GestionCoutureApp.Views
             TxtBtnValider.Text     = "Valider la Commande";
 
             // Réinitialiser les champs de la modale
+            _clientsDropdownOffset = 0;
             CmbModalClient.ItemsSource    = new List<Client>();
             CmbModalClient.SelectedIndex  = -1;
             CmbModalClient.IsEnabled      = true;
@@ -1297,12 +1382,13 @@ namespace GestionCoutureApp.Views
                 VerticalAlignment = VerticalAlignment.Center
             };
             int num = _cartesPieces.Count + 1;
-            badgeNum.Child = new TextBlock
+            var txtBadgeNumero = new TextBlock
             {
                 Text       = $"#{num}",
                 FontSize   = 11, FontWeight = FontWeights.Bold,
                 Foreground = Brushes.White
             };
+            badgeNum.Child = txtBadgeNumero;
             Grid.SetColumn(badgeNum, 0);
             bandeauGrid.Children.Add(badgeNum);
 
@@ -1810,6 +1896,30 @@ namespace GestionCoutureApp.Views
             PanneauCartesPieces.Children.Add(enveloppe);
         }
 
+        private void AjouterCarteApres(PieceCommande? pieceExistante, Cartepiece insererApres)
+        {
+            int indexSource = _cartesPieces.IndexOf(insererApres);
+            if (indexSource < 0)
+            {
+                AjouterCarte(pieceExistante);
+                return;
+            }
+
+            // Réutiliser la même construction que le bouton « Ajouter une pièce »,
+            // puis déplacer la carte créée juste après sa pièce source.
+            AjouterCarte(pieceExistante);
+            int indexNouvelleCarte = _cartesPieces.Count - 1;
+            var nouvelleCarte = _cartesPieces[indexNouvelleCarte];
+            var conteneur = nouvelleCarte.Conteneur;
+            _cartesPieces.RemoveAt(indexNouvelleCarte);
+            PanneauCartesPieces.Children.Remove(conteneur);
+
+            int indexInsertion = indexSource + 1;
+            _cartesPieces.Insert(indexInsertion, nouvelleCarte);
+            PanneauCartesPieces.Children.Insert(indexInsertion, conteneur);
+            RenumeroterCartes();
+        }
+
         private static Button CreerBoutonIcone(string emoji, string tooltip)
         {
             return new Button
@@ -2273,10 +2383,9 @@ namespace GestionCoutureApp.Views
                 try
                 {
                     var (opIdDup, opNomDup) = OperateurConnecte();
-                    _commandeService.DupliquerPiece(carteSource.IdPieceCommande.Value, opIdDup, opNomDup, motifDup);
-                    var newPieces = _commandeService.ObtenirPiecesCommande(_commandeEnEdition!.IdCommande);
-                    var nouvellePiece = newPieces.LastOrDefault();
-                    if (nouvellePiece != null) AjouterCarte(nouvellePiece);
+                    var nouvellePiece = _commandeService.DupliquerPiece(
+                        carteSource.IdPieceCommande.Value, opIdDup, opNomDup, motifDup);
+                    AjouterCarteApres(nouvellePiece, carteSource);
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -2286,14 +2395,28 @@ namespace GestionCoutureApp.Views
             else
             {
                 // En création : dupliquer visuellement la carte
-                AjouterCarte(null);
+                AjouterCarteApres(null, carteSource);
                 // Copier les valeurs de la carte source dans la nouvelle
-                var nouv = _cartesPieces.Last();
+                int indexNouvelleCarte = _cartesPieces.IndexOf(carteSource) + 1;
+                var nouv = _cartesPieces[indexNouvelleCarte];
                 nouv.CmbType.SelectedValue    = carteSource.CmbType.SelectedValue;
                 nouv.TxtPrix.Text              = carteSource.TxtPrix.Text;
                 nouv.CmbCouturier.SelectedValue = carteSource.CmbCouturier.SelectedValue;
                 nouv.CmbDesc.Text              = carteSource.CmbDesc.Text;
                 nouv.CheminPhoto               = carteSource.CheminPhoto;
+
+                // Chaque carte garde son propre buffer : dupliquer les valeurs,
+                // sans partager les mêmes instances de matériels entre les pièces.
+                nouv.MateriauxBuffer = carteSource.MateriauxBuffer
+                    .Select(m => new MaterielSupplement
+                    {
+                        Designation = m.Designation,
+                        Quantite = m.Quantite,
+                        PrixUnitaire = m.PrixUnitaire
+                    })
+                    .ToList();
+                foreach (var materiel in nouv.MateriauxBuffer)
+                    AjouterLigneMateriau(nouv, materiel, nouv.PanelListeMateriaux, nouv.TxtTotalMatCarte);
             }
         }
 
@@ -2334,6 +2457,7 @@ namespace GestionCoutureApp.Views
 
             PanneauCartesPieces.Children.Remove(carte.Conteneur);
             _cartesPieces.Remove(carte);
+            RenumeroterCartes();
         }
 
 

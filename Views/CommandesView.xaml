@@ -886,16 +886,29 @@
                                               Style="{StaticResource ModernComboBox}"
                                               SelectedValuePath="IdClient"
                                               Margin="0,0,0,4"
+                                              ToolTip="Ouvrez la liste des clients ou recherchez un nom, un téléphone ou un numéro dans le champ ci-dessus."
+                                              DropDownOpened="CmbModalClient_DropDownOpened"
                                               SelectionChanged="CmbModalClient_SelectionChanged">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock>
+                                                <TextBlock x:Name="TxtClientOption">
                                                     <TextBlock.Text>
                                                         <MultiBinding StringFormat="{}{0} {1}">
                                                             <Binding Path="Nom"/>
                                                             <Binding Path="Prenom"/>
                                                         </MultiBinding>
                                                     </TextBlock.Text>
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IdClient}" Value="0">
+                                                                    <Setter Property="Foreground" Value="#2563EB"/>
+                                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                    <Setter Property="FontStyle" Value="Italic"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
                                                 </TextBlock>
                                             </DataTemplate>
                                         </ComboBox.ItemTemplate>

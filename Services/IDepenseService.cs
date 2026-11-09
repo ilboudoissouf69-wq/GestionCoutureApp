@@ -8,6 +8,9 @@ namespace GestionCoutureApp.Services
         List<Depense> Filtrer(DateTime debut, DateTime fin,
                               string? categorie = null,
                               string? statutValidation = null);
+        DepensePageResult FiltrerPage(DateTime debut, DateTime fin, int page, int taillePage,
+                                      string? categorie = null,
+                                      string? statutValidation = null);
         void Ajouter(Depense depense);
         /// <summary>Valider une dépense. idBoss doit être l'ID d'un employé Boss actif.</summary>
         void Valider(int idDepense, int idBoss);
@@ -20,10 +23,17 @@ namespace GestionCoutureApp.Services
         StatsFinancieres ObtenirStats(DateTime debut, DateTime fin);
     }
 
+    public sealed class DepensePageResult
+    {
+        public List<Depense> Depenses { get; init; } = new();
+        public int Total { get; init; }
+    }
+
     public class StatsFinancieres
     {
         public decimal CaEncaisse          { get; set; }  // Total paiements clients (couture + matériaux)
         public decimal TotalCommissions    { get; set; }  // Commissions couturiers
+        public DateTime? DerniereCommissionHorsPeriode { get; set; }
         public decimal TotalMateriaux      { get; set; }  // Total matériaux facturés — INFORMATIF
         public decimal TotalDepenses       { get; set; }  // Dépenses exploitation (loyer, élec, etc.)
         public decimal SalaireSecretaire   { get; set; }  // Depuis Paramètres (proratisé)

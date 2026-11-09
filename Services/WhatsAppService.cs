@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using GestionCoutureApp.Helpers;
 using GestionCoutureApp.Models;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -120,6 +121,11 @@ namespace GestionCoutureApp.Services
 
         public async Task<string> MessageRappelRdvAsync(Commande commande)
         {
+            DateTime echeanceRdv = DateRdvHelper.CalculerDateRdvEffective(
+                null, commande.DateFin, commande.HeureFin);
+            if (echeanceRdv < DateTime.Now)
+                return await MessageExcuseRdvDepasseAsync(commande, echeanceRdv);
+
             // ✅ CORRECTIF AUDIT #13 : Remplacement de .Result par await pour éviter deadlock
             string modele;
             try
@@ -144,6 +150,30 @@ namespace GestionCoutureApp.Services
                 .Replace("{Nom}", $"*{nomClient}*")
                 .Replace("{Date}", $"*{date}*")
                 .Replace("{Heure}", $"*{heure}*");
+        }
+
+        private static async Task<string> MessageExcuseRdvDepasseAsync(Commande commande, DateTime echeanceRdv)
+        {
+            var parametres = App.Services.GetRequiredService<IParametresService>();
+            string modele = await parametres.ObtenirRetardMessageModele();
+            string atelier = await parametres.ObtenirNomAtelier();
+            int joursReport = await parametres.ObtenirRetardReportJours();
+            if (joursReport < 1) joursReport = ParametresService.RetardReportJoursDefaut;
+
+            string client = $"{commande.Client?.Prenom} {commande.Client?.Nom}".Trim();
+            string vetements = commande.Pieces != null && commande.Pieces.Count > 0
+                ? string.Join(", ", commande.Pieces
+                    .Select(p => p.TypeVetement)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Distinct())
+                : "vêtement";
+
+            return modele
+                .Replace("{client}", client)
+                .Replace("{numero_commande}", commande.IdCommande.ToString())
+                .Replace("{type_vetement}", vetements)
+                .Replace("{nouvelle_date}", echeanceRdv.AddDays(joursReport).ToString("dd/MM/yyyy"))
+                .Replace("{atelier}", atelier);
         }
 
         public async Task<string> MessageContactGeneralAsync(Client client)
